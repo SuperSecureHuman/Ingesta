@@ -1,0 +1,1061 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HLS Streaming Player</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #0a0a0a;
+            --bg-surface: #141414;
+            --border-color: #2a2a2a;
+            --accent: #e5a00d;
+            --text-primary: #f0f0f0;
+            --text-muted: #888;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            overflow: hidden;
+        }
+
+        /* ===== IDLE STATE ===== */
+        .idle-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            opacity: 1;
+            transition: opacity 0.4s;
+        }
+
+        .idle-container.hidden {
+            display: none;
+        }
+
+        .idle-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 60px 80px;
+            text-align: center;
+            max-width: 500px;
+        }
+
+        .app-wordmark {
+            font-size: 14px;
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            color: var(--text-muted);
+            margin-bottom: 40px;
+            text-transform: uppercase;
+        }
+
+        .idle-card-button {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            padding: 16px 32px;
+            background: var(--bg-surface);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 16px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-bottom: 20px;
+        }
+
+        .idle-card-button:hover {
+            background: #1a1a1a;
+            border-color: var(--accent);
+        }
+
+        .idle-card-button span {
+            font-size: 18px;
+        }
+
+        .drag-hint {
+            margin-top: 20px;
+            color: var(--text-muted);
+            font-size: 14px;
+        }
+
+        /* ===== PLAYER STATE ===== */
+        .player-container {
+            display: none;
+            flex-direction: column;
+            height: 100vh;
+            background: #000;
+        }
+
+        .player-container.active {
+            display: flex;
+        }
+
+        .video-viewport {
+            flex: 1;
+            position: relative;
+            background: #000;
+            overflow: hidden;
+        }
+
+        video {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+
+        .controls-overlay {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(to top, rgba(10, 10, 10, 0.9), transparent);
+            padding: 40px 20px 20px 20px;
+            opacity: 1;
+            transition: opacity 0.3s;
+            pointer-events: auto;
+        }
+
+        .controls-overlay.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .debug-link {
+            position: fixed;
+            top: 12px;
+            right: 12px;
+            z-index: 100;
+            font-size: 12px;
+            padding: 6px 12px;
+            background: rgba(20, 20, 20, 0.8);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            color: var(--text-muted);
+            text-decoration: none;
+            transition: all 0.2s;
+        }
+
+        .debug-link:hover {
+            color: var(--accent);
+            border-color: var(--accent);
+        }
+
+        .controls-row {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 12px;
+        }
+
+        /* Seek bar */
+        .seek-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .seek-bar {
+            width: 100%;
+            height: 2px;
+            background: rgba(136, 136, 136, 0.3);
+            border-radius: 1px;
+            cursor: pointer;
+            position: relative;
+            transition: height 0.2s;
+        }
+
+        .seek-bar:hover {
+            height: 4px;
+        }
+
+        .seek-buffered {
+            position: absolute;
+            top: 0;
+            left: 0;
+            height: 100%;
+            background: rgba(136, 136, 136, 0.5);
+            border-radius: 1px;
+            pointer-events: none;
+        }
+
+        .seek-progress {
+            position: absolute;
+            top: 0;
+            left: 0;
+            height: 100%;
+            background: var(--accent);
+            border-radius: 1px;
+            pointer-events: none;
+        }
+
+        .time-display {
+            font-size: 12px;
+            color: var(--text-muted);
+            font-variant-numeric: tabular-nums;
+        }
+
+        /* Control buttons */
+        .control-btn {
+            background: none;
+            border: none;
+            color: var(--text-primary);
+            font-size: 20px;
+            cursor: pointer;
+            padding: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: color 0.2s;
+        }
+
+        .control-btn:hover {
+            color: var(--accent);
+        }
+
+        /* Quality pill & popover */
+        .quality-pill {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            background: var(--bg-surface);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            color: var(--text-primary);
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+        }
+
+        .quality-pill:hover {
+            border-color: var(--accent);
+        }
+
+        .quality-popover {
+            display: none;
+            position: absolute;
+            bottom: 100%;
+            left: 0;
+            background: var(--bg-surface);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            overflow: hidden;
+            z-index: 200;
+            min-width: 140px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+        }
+
+        .quality-popover.show {
+            display: block;
+        }
+
+        .quality-option {
+            padding: 10px 12px;
+            cursor: pointer;
+            transition: background 0.2s;
+            font-size: 12px;
+            color: var(--text-primary);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .quality-option:last-child {
+            border-bottom: none;
+        }
+
+        .quality-option:hover {
+            background: #1a1a1a;
+        }
+
+        .quality-option.selected {
+            background: var(--accent);
+            color: var(--bg-primary);
+        }
+
+        /* Volume slider */
+        .volume-slider {
+            width: 80px;
+            height: 3px;
+            background: rgba(136, 136, 136, 0.3);
+            border-radius: 2px;
+            -webkit-appearance: none;
+            appearance: none;
+            cursor: pointer;
+        }
+
+        .volume-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 10px;
+            height: 10px;
+            background: var(--accent);
+            border-radius: 50%;
+            cursor: pointer;
+        }
+
+        .volume-slider::-moz-range-thumb {
+            width: 10px;
+            height: 10px;
+            background: var(--accent);
+            border-radius: 50%;
+            cursor: pointer;
+            border: none;
+        }
+
+        /* ===== FILE BROWSER MODAL ===== */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.6);
+            z-index: 300;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-overlay.show {
+            display: flex;
+        }
+
+        .modal-content {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            width: 90%;
+            max-width: 600px;
+            max-height: 70vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .modal-header h2 {
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        .modal-close-btn {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            font-size: 24px;
+            cursor: pointer;
+            padding: 0;
+            transition: color 0.2s;
+        }
+
+        .modal-close-btn:hover {
+            color: var(--text-primary);
+        }
+
+        .breadcrumb {
+            padding: 12px 20px;
+            background: #0a0a0a;
+            border-bottom: 1px solid var(--border-color);
+            font-size: 12px;
+            color: var(--text-muted);
+            word-break: break-all;
+            font-family: monospace;
+        }
+
+        .modal-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 0;
+        }
+
+        .file-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0;
+        }
+
+        .file-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 20px;
+            border-bottom: 1px solid var(--border-color);
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .file-item:last-child {
+            border-bottom: none;
+        }
+
+        .file-item:hover {
+            background: #1a1a1a;
+        }
+
+        .file-item.disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .file-item.disabled:hover {
+            background: inherit;
+        }
+
+        .file-icon {
+            font-size: 16px;
+            min-width: 20px;
+        }
+
+        .file-name {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-size: 14px;
+        }
+
+        .modal-footer {
+            padding: 12px 20px;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            gap: 8px;
+            justify-content: flex-end;
+        }
+
+        .btn-cancel {
+            padding: 8px 16px;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            color: var(--text-primary);
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.2s;
+        }
+
+        .btn-cancel:hover {
+            border-color: var(--accent);
+        }
+
+        /* ===== UTILITIES ===== */
+        input[type="text"] {
+            padding: 8px 12px;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            color: var(--text-primary);
+            font-size: 14px;
+        }
+
+        input[type="text"]:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        input[type="text"]::placeholder {
+            color: var(--text-muted);
+        }
+
+        /* Scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg-primary);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 3px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--text-muted);
+        }
+    </style>
+</head>
+<body>
+    <!-- IDLE STATE -->
+    <div class="idle-container" id="idleContainer">
+        <div class="idle-card">
+            <div class="app-wordmark">HLS Streaming</div>
+            <button class="idle-card-button" onclick="openFileBrowser()">
+                <span>📁</span>
+                Open File
+            </button>
+            <div class="drag-hint">or drag a video file here</div>
+        </div>
+    </div>
+
+    <!-- PLAYER STATE -->
+    <div class="player-container" id="playerContainer">
+        <a class="debug-link" href="/debug" target="_blank">⚙ Debug</a>
+
+        <div class="video-viewport" id="videoViewport">
+            <video id="video"></video>
+            <div class="controls-overlay hidden" id="controlsOverlay">
+                <div class="controls-row">
+                    <div class="seek-container">
+                        <div class="seek-bar" id="seekBar">
+                            <div class="seek-buffered" id="seekBuffered"></div>
+                            <div class="seek-progress" id="seekProgress"></div>
+                        </div>
+                        <div class="time-display">
+                            <span id="currentTime">0:00</span> / <span id="totalTime">0:00</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="controls-row">
+                    <button class="control-btn" id="playPauseBtn" onclick="togglePlayPause()">▶</button>
+                    <div class="quality-pill" id="qualityPill" onclick="toggleQualityPopover()">
+                        <span id="qualityLabel">Source</span>
+                        <span>▾</span>
+                        <div class="quality-popover" id="qualityPopover"></div>
+                    </div>
+                    <button class="control-btn" id="volumeBtn" onclick="toggleVolumeMute()">🔊</button>
+                    <input type="range" class="volume-slider" id="volumeSlider" min="0" max="100" value="100" onchange="setVolume()">
+                    <button class="control-btn" id="fullscreenBtn" onclick="toggleFullscreen()">⛶</button>
+                    <button class="control-btn" id="stopBtn" onclick="stopPlayback()" style="margin-left: auto;">⏹</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- FILE BROWSER MODAL -->
+    <div class="modal-overlay" id="browserModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Open Video File</h2>
+                <button class="modal-close-btn" onclick="closeBrowser()">✕</button>
+            </div>
+            <div class="breadcrumb" id="breadcrumb">/</div>
+            <div class="modal-body">
+                <div class="file-list" id="fileList"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-cancel" onclick="closeBrowser()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest/dist/hls.min.js"></script>
+    <script>
+        // ===== UTILITY FUNCTIONS =====
+        function generateUUID() {
+            // Use crypto.randomUUID if available, fallback to v4 generation
+            if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+                try {
+                    return crypto.randomUUID();
+                } catch (e) {
+                    // Fallback if randomUUID not available
+                }
+            }
+            // Fallback v4 UUID generator
+            return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                const r = Math.random() * 16 | 0;
+                const v = c === 'x' ? r : (r & 0x3 | 0x8);
+                return v.toString(16);
+            });
+        }
+
+        // ===== STATE =====
+        let sessionId = generateUUID();
+        let hls = null;
+        let currentFilePath = null;
+        let currentQuality = "source";
+        let currentSegmentLength = 6;
+        let currentBrowserPath = "/";
+        let controlsHideTimer = null;
+        let pingInterval = null;
+        let isPlaying = false;
+
+        const VIDEO = document.getElementById('video');
+        const IDLE_CONTAINER = document.getElementById('idleContainer');
+        const PLAYER_CONTAINER = document.getElementById('playerContainer');
+        const CONTROLS_OVERLAY = document.getElementById('controlsOverlay');
+        const VIDEO_VIEWPORT = document.getElementById('videoViewport');
+
+        // ===== INITIALIZATION =====
+        function initSession() {
+            console.log('Session ID:', sessionId);
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            initSession();
+            setupDragDrop();
+            setupKeyboardShortcuts();
+            setupVideoEvents();
+            setupControlsAutoHide();
+            setupBeforeUnload();
+            setupVisibilityChange();
+        });
+
+        // ===== DRAG & DROP =====
+        function setupDragDrop() {
+            const dragZone = IDLE_CONTAINER;
+
+            dragZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                dragZone.style.background = 'rgba(229, 160, 13, 0.1)';
+            });
+
+            dragZone.addEventListener('dragleave', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                dragZone.style.background = '';
+            });
+
+            dragZone.addEventListener('drop', async (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                dragZone.style.background = '';
+
+                const files = e.dataTransfer.files;
+                if (files.length > 0) {
+                    const file = files[0];
+                    if (isVideoFile(file.name)) {
+                        // For drag-drop, we need the file path from the backend
+                        // For now, just highlight that we received a video
+                        console.log('Dropped video file:', file.name);
+                    }
+                }
+            });
+        }
+
+        function isVideoFile(name) {
+            const videoExts = ['mp4', 'mkv', 'webm', 'mov', 'avi', 'm3u8', 'ts'];
+            const ext = name.split('.').pop().toLowerCase();
+            return videoExts.includes(ext);
+        }
+
+        // ===== QUALITY MANAGEMENT =====
+        async function changeQuality(newQuality) {
+            closeQualityPopover();
+            if (newQuality === currentQuality) return;
+            currentQuality = newQuality;
+            updateQualityLabel();
+            if (!isPlaying) return;
+
+            const seekTime = VIDEO.currentTime;
+
+            // Kill current HLS and FFmpeg
+            if (hls) { hls.destroy(); hls = null; }
+            try { await fetch(`/api/stop/${sessionId}`, { method: 'POST' }); } catch(e) {}
+
+            // Restart from same position with new quality
+            await startPlayback(seekTime);
+        }
+
+        // ===== FILE BROWSER =====
+        async function openFileBrowser() {
+            try {
+                // Fetch media root from capabilities
+                const capsResp = await fetch('/api/capabilities');
+                const caps = await capsResp.json();
+                const mediaRoot = caps.media_root || '/';
+
+                currentBrowserPath = mediaRoot;
+                await loadBrowserDirectory(mediaRoot);
+            } catch (e) {
+                console.error('Failed to open file browser:', e);
+                currentBrowserPath = '/';
+                loadBrowserDirectory('/');
+            }
+            document.getElementById('browserModal').classList.add('show');
+        }
+
+        function closeBrowser() {
+            document.getElementById('browserModal').classList.remove('show');
+        }
+
+        async function loadBrowserDirectory(path) {
+            try {
+                const resp = await fetch(`/api/browse?path=${encodeURIComponent(path)}`);
+                if (!resp.ok) throw new Error('Browse failed');
+                const data = await resp.json();
+                currentBrowserPath = data.path;
+
+                document.getElementById('breadcrumb').textContent = data.path;
+
+                const fileList = document.getElementById('fileList');
+                fileList.innerHTML = '';
+
+                // Parent link
+                if (data.parent) {
+                    const item = document.createElement('div');
+                    item.className = 'file-item';
+                    item.innerHTML = '<div class="file-icon">📁</div><div class="file-name">..</div>';
+                    item.onclick = () => loadBrowserDirectory(data.parent);
+                    fileList.appendChild(item);
+                }
+
+                // Entries
+                for (const entry of data.entries) {
+                    const item = document.createElement('div');
+                    const isClickable = entry.is_dir || entry.is_video;
+                    item.className = 'file-item' + (isClickable ? '' : ' disabled');
+
+                    const icon = entry.is_dir ? '📁' : (entry.is_video ? '🎬' : '📄');
+                    item.innerHTML = `<div class="file-icon">${icon}</div><div class="file-name">${entry.name}</div>`;
+
+                    if (entry.is_dir) {
+                        item.onclick = () => loadBrowserDirectory(entry.path);
+                    } else if (entry.is_video) {
+                        item.onclick = async () => {
+                            currentFilePath = entry.path;
+                            closeBrowser();
+                            await probeAndPopulateQuality();
+                            startPlayback();
+                        };
+                    }
+
+                    fileList.appendChild(item);
+                }
+            } catch (e) {
+                alert('Error browsing: ' + e.message);
+            }
+        }
+
+        async function probeAndPopulateQuality() {
+            try {
+                const resp = await fetch(`/api/probe?path=${encodeURIComponent(currentFilePath)}`);
+                if (!resp.ok) throw new Error('Probe failed');
+                const data = await resp.json();
+
+                // Fetch available bitrate tiers from server
+                const capsResp = await fetch(`/api/capabilities`);
+                const caps = await capsResp.json();
+                const tiers = caps.bitrate_tiers || [];
+
+                // Populate quality dropdown
+                const popover = document.getElementById('qualityPopover');
+                popover.innerHTML = '';
+
+                // Source option
+                let opt = document.createElement('div');
+                opt.className = 'quality-option selected';
+                opt.textContent = `Source (${data.width}×${data.height})`;
+                opt.onclick = () => { changeQuality('source'); };
+                popover.appendChild(opt);
+
+                // Bitrate tiers
+                for (const tier of tiers) {
+                    if (tier.max_height && tier.max_height > data.height) continue;
+                    if (tier.bitrate >= data.bitrate) continue;
+
+                    opt = document.createElement('div');
+                    opt.className = 'quality-option';
+                    opt.textContent = tier.label;
+                    opt.dataset.key = tier.key;
+                    opt.onclick = () => { changeQuality(tier.key); };
+                    popover.appendChild(opt);
+                }
+            } catch (e) {
+                console.warn('Error probing:', e.message);
+            }
+        }
+
+        function updateQualityLabel() {
+            const label = currentQuality === 'source' ? 'Source' : currentQuality;
+            document.getElementById('qualityLabel').textContent = label;
+        }
+
+        // ===== QUALITY POPOVER =====
+        function toggleQualityPopover() {
+            const popover = document.getElementById('qualityPopover');
+            popover.classList.toggle('show');
+        }
+
+        function closeQualityPopover() {
+            document.getElementById('qualityPopover').classList.remove('show');
+        }
+
+        // ===== PLAYBACK =====
+        async function startPlayback(seekTime = 0) {
+            if (!currentFilePath) {
+                alert('No file selected');
+                return;
+            }
+
+            try {
+                IDLE_CONTAINER.classList.add('hidden');
+                PLAYER_CONTAINER.classList.add('active');
+
+                const playlistUrl = `/api/playlist/${sessionId}/main.m3u8?path=${encodeURIComponent(currentFilePath)}&quality=${currentQuality}&segment_length=${currentSegmentLength}`;
+
+                if (Hls.isSupported()) {
+                    hls = new Hls({
+                        debug: false,
+                        enableWorker: true,
+                        maxBufferLength: 30,
+                        maxMaxBufferLength: 60,
+                        backBufferLength: 10,
+                        maxBufferSize: 100 * 1000 * 1000,
+                    });
+
+                    hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                        VIDEO.play();
+                        if (seekTime > 0) { VIDEO.currentTime = seekTime; }
+                    });
+
+                    hls.on(Hls.Events.ERROR, (event, data) => {
+                        console.error('HLS error:', data);
+                    });
+
+                    hls.loadSource(playlistUrl);
+                    hls.attachMedia(VIDEO);
+                } else if (VIDEO.canPlayType('application/vnd.apple.mpegurl')) {
+                    VIDEO.src = playlistUrl;
+                    VIDEO.play();
+                }
+
+                startPingLoop();
+            } catch (e) {
+                alert('Error starting playback: ' + e.message);
+                stopPlayback();
+            }
+        }
+
+        function stopPlayback() {
+            if (pingInterval) clearInterval(pingInterval);
+            if (hls) hls.destroy();
+
+            VIDEO.pause();
+            VIDEO.src = '';
+
+            if (sessionId) {
+                fetch(`/api/stop/${sessionId}`, { method: 'POST' }).catch(e => console.warn(e));
+            }
+
+            currentFilePath = null;
+            isPlaying = false;
+            PLAYER_CONTAINER.classList.remove('active');
+            IDLE_CONTAINER.classList.remove('hidden');
+            updatePlayPauseButton();
+        }
+
+        // ===== VIDEO EVENTS =====
+        function setupVideoEvents() {
+            VIDEO.addEventListener('play', () => {
+                isPlaying = true;
+                updatePlayPauseButton();
+                showControls();
+            });
+
+            VIDEO.addEventListener('pause', () => {
+                isPlaying = false;
+                updatePlayPauseButton();
+                showControls();
+            });
+
+            VIDEO.addEventListener('timeupdate', () => {
+                updateTimeDisplay();
+                updateSeekBar();
+            });
+
+            VIDEO.addEventListener('loadedmetadata', () => {
+                updateTimeDisplay();
+            });
+
+            VIDEO.addEventListener('progress', () => {
+                updateBufferedRange();
+            });
+        }
+
+        function updatePlayPauseButton() {
+            const btn = document.getElementById('playPauseBtn');
+            btn.textContent = isPlaying ? '⏸' : '▶';
+        }
+
+        function togglePlayPause() {
+            if (isPlaying) {
+                VIDEO.pause();
+            } else {
+                VIDEO.play();
+            }
+        }
+
+        function updateTimeDisplay() {
+            const current = formatTime(VIDEO.currentTime);
+            const total = formatTime(VIDEO.duration);
+            document.getElementById('currentTime').textContent = current;
+            document.getElementById('totalTime').textContent = total;
+        }
+
+        function formatTime(seconds) {
+            if (!seconds || isNaN(seconds)) return '0:00';
+            const h = Math.floor(seconds / 3600);
+            const m = Math.floor((seconds % 3600) / 60);
+            const s = Math.floor(seconds % 60);
+            if (h > 0) {
+                return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+            }
+            return `${m}:${String(s).padStart(2, '0')}`;
+        }
+
+        function updateSeekBar() {
+            const seekBar = document.getElementById('seekBar');
+            const progress = document.getElementById('seekProgress');
+            if (VIDEO.duration) {
+                const pct = (VIDEO.currentTime / VIDEO.duration) * 100;
+                progress.style.width = pct + '%';
+            }
+        }
+
+        function updateBufferedRange() {
+            const buffered = document.getElementById('seekBuffered');
+            const seekBar = document.getElementById('seekBar');
+            if (VIDEO.buffered.length > 0) {
+                const end = VIDEO.buffered.end(VIDEO.buffered.length - 1);
+                const pct = (end / VIDEO.duration) * 100;
+                buffered.style.width = pct + '%';
+            }
+        }
+
+        // ===== SEEK BAR INTERACTION =====
+        document.addEventListener('DOMContentLoaded', () => {
+            const seekBar = document.getElementById('seekBar');
+            seekBar.addEventListener('click', (e) => {
+                if (!VIDEO.duration) return;
+                const rect = seekBar.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const pct = x / rect.width;
+                VIDEO.currentTime = pct * VIDEO.duration;
+            });
+        });
+
+        // ===== VOLUME =====
+        function setVolume() {
+            const slider = document.getElementById('volumeSlider');
+            VIDEO.volume = parseInt(slider.value) / 100;
+        }
+
+        function toggleVolumeMute() {
+            const slider = document.getElementById('volumeSlider');
+            if (VIDEO.volume > 0) {
+                VIDEO.volume = 0;
+                slider.value = 0;
+            } else {
+                VIDEO.volume = 1;
+                slider.value = 100;
+            }
+        }
+
+        // ===== FULLSCREEN =====
+        function toggleFullscreen() {
+            if (!document.fullscreenElement) {
+                VIDEO_VIEWPORT.requestFullscreen().catch(err => console.error(err));
+            } else {
+                document.exitFullscreen();
+            }
+        }
+
+        // ===== CONTROLS AUTO-HIDE =====
+        function setupControlsAutoHide() {
+            VIDEO_VIEWPORT.addEventListener('mousemove', () => {
+                showControls();
+            });
+
+            VIDEO_VIEWPORT.addEventListener('mouseleave', () => {
+                if (isPlaying) {
+                    scheduleControlsHide();
+                }
+            });
+
+            VIDEO_VIEWPORT.addEventListener('mouseenter', () => {
+                if (controlsHideTimer) clearTimeout(controlsHideTimer);
+            });
+        }
+
+        function showControls() {
+            CONTROLS_OVERLAY.classList.remove('hidden');
+            if (controlsHideTimer) clearTimeout(controlsHideTimer);
+            if (isPlaying) {
+                scheduleControlsHide();
+            }
+        }
+
+        function scheduleControlsHide() {
+            controlsHideTimer = setTimeout(() => {
+                if (isPlaying && !document.querySelector('.quality-popover.show')) {
+                    CONTROLS_OVERLAY.classList.add('hidden');
+                }
+            }, 3000);
+        }
+
+        // ===== PING LOOP =====
+        function startPingLoop() {
+            if (pingInterval) clearInterval(pingInterval);
+            pingInterval = setInterval(() => {
+                fetch(`/api/ping/${sessionId}`, { method: 'POST' }).catch(e => console.warn(e));
+            }, 10000);
+        }
+
+        // ===== KEYBOARD SHORTCUTS =====
+        function setupKeyboardShortcuts() {
+            document.addEventListener('keydown', (e) => {
+                if (e.target.tagName === 'INPUT') return;
+
+                switch (e.key.toLowerCase()) {
+                    case ' ':
+                        e.preventDefault();
+                        if (currentFilePath) togglePlayPause();
+                        break;
+                    case 'f':
+                        e.preventDefault();
+                        if (currentFilePath) toggleFullscreen();
+                        break;
+                    case 'm':
+                        e.preventDefault();
+                        if (currentFilePath) toggleVolumeMute();
+                        break;
+                    case 'arrowleft':
+                        if (currentFilePath) VIDEO.currentTime = Math.max(0, VIDEO.currentTime - 10);
+                        break;
+                    case 'arrowright':
+                        if (currentFilePath) VIDEO.currentTime = Math.min(VIDEO.duration, VIDEO.currentTime + 10);
+                        break;
+                }
+            });
+        }
+
+        // ===== LIFECYCLE =====
+        function setupBeforeUnload() {
+            window.addEventListener('beforeunload', () => {
+                if (sessionId) {
+                    navigator.sendBeacon(`/api/stop/${sessionId}`, '');
+                }
+            });
+        }
+
+        function setupVisibilityChange() {
+            // Stream runs in background — only stopped on page unload (beforeunload/sendBeacon)
+            // Do NOT call stopPlayback on tab switch — FFmpeg keeps producing segments
+        }
+    </script>
+</body>
+</html>
