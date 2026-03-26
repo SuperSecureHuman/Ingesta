@@ -1,6 +1,7 @@
 """
 FastAPI HLS POC server with on-demand transcoding and dynamic seeking.
 """
+
 import asyncio
 import json
 import os
@@ -11,7 +12,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import quote, unquote
 
-from fastapi import FastAPI, Query, HTTPException, BackgroundTasks
+from fastapi import FastAPI, Query, HTTPException, BackgroundTasks, Request
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -30,8 +31,8 @@ from transcoder import (
 MEDIA_ROOT = Path(os.getenv("MEDIA_ROOT", "/")).resolve()
 MAX_CONCURRENT = int(os.getenv("MAX_CONCURRENT_STREAMS", "10"))
 SESSION_RE = re.compile(
-    r'^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
-    re.IGNORECASE
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+    re.IGNORECASE,
 )
 
 
@@ -132,15 +133,27 @@ async def browse(path: str = Query("/")):
 
         entries = []
         for entry in sorted(p.iterdir()):
-            entries.append({
-                "name": entry.name,
-                "path": str(entry),
-                "is_dir": entry.is_dir(),
-                "is_video": entry.suffix.lower() in {
-                    ".mp4", ".mkv", ".avi", ".mov", ".m4v", ".ts",
-                    ".wmv", ".flv", ".webm", ".mpeg", ".mpg"
-                },
-            })
+            entries.append(
+                {
+                    "name": entry.name,
+                    "path": str(entry),
+                    "is_dir": entry.is_dir(),
+                    "is_video": entry.suffix.lower()
+                    in {
+                        ".mp4",
+                        ".mkv",
+                        ".avi",
+                        ".mov",
+                        ".m4v",
+                        ".ts",
+                        ".wmv",
+                        ".flv",
+                        ".webm",
+                        ".mpeg",
+                        ".mpg",
+                    },
+                }
+            )
 
         return {
             "path": str(p),
@@ -161,8 +174,10 @@ async def bitrate_tiers(bitrate: int = Query(None), height: int = Query(None)):
     tiers = []
     for tier in BITRATE_TIERS:
         # Check if tier is below source bitrate and height
-        bitrate_ok = (bitrate is None or tier["bitrate"] < bitrate)
-        height_ok = (height is None or tier["max_height"] is None or tier["max_height"] <= height)
+        bitrate_ok = bitrate is None or tier["bitrate"] < bitrate
+        height_ok = (
+            height is None or tier["max_height"] is None or tier["max_height"] <= height
+        )
         if bitrate_ok and height_ok:
             tiers.append(tier)
     return {"tiers": tiers}
@@ -192,9 +207,7 @@ async def get_playlist(
         info = await probe_media(path)
 
         # Compute segments
-        segments = compute_equal_length_segments(
-            info.duration_ticks, segment_length
-        )
+        segments = compute_equal_length_segments(info.duration_ticks, segment_length)
 
         # Build playlist with per-segment runtimeTicks
         playlist_text = build_vod_playlist(
@@ -315,13 +328,15 @@ async def get_segment(
 
                 # Emit seek event if applicable
                 if current_index is not None:
-                    await manager.broadcast_event({
-                        "type": "seek",
-                        "stream_id": stream_id,
-                        "from_segment": current_index,
-                        "to_segment": segment_id,
-                        "seek_time_sec": seek_time_sec,
-                    })
+                    await manager.broadcast_event(
+                        {
+                            "type": "seek",
+                            "stream_id": stream_id,
+                            "from_segment": current_index,
+                            "to_segment": segment_id,
+                            "seek_time_sec": seek_time_sec,
+                        }
+                    )
             else:
                 # Continue with existing transcode
                 pass
@@ -332,15 +347,19 @@ async def get_segment(
         # OUTSIDE LOCK: Poll for segment readiness with proper cleanup
         try:
             if not await manager.wait_for_segment(job, segment_path, next_segment_path):
-                raise HTTPException(status_code=504, detail="Segment generation timeout")
+                raise HTTPException(
+                    status_code=504, detail="Segment generation timeout"
+                )
 
             # Emit served event
-            await manager.broadcast_event({
-                "type": "served",
-                "stream_id": stream_id,
-                "segment_id": segment_id,
-                "from_cache": False,
-            })
+            await manager.broadcast_event(
+                {
+                    "type": "served",
+                    "stream_id": stream_id,
+                    "segment_id": segment_id,
+                    "from_cache": False,
+                }
+            )
 
             return FileResponse(segment_path, media_type="video/mp2t")
         finally:
@@ -356,14 +375,17 @@ async def get_segment(
         raise
     except Exception as e:
         import traceback
+
         err_msg = f"{type(e).__name__}: {str(e)}"
         print(f"ERROR in get_segment: {err_msg}")
         traceback.print_exc()
-        await manager.broadcast_event({
-            "type": "error",
-            "stream_id": stream_id,
-            "message": err_msg,
-        })
+        await manager.broadcast_event(
+            {
+                "type": "error",
+                "stream_id": stream_id,
+                "message": err_msg,
+            }
+        )
         raise HTTPException(status_code=500, detail=err_msg)
 
 
@@ -402,23 +424,43 @@ async def capabilities():
     return {
         "media_root": str(MEDIA_ROOT),
         "hardware": app.state.hardware,
-        "bitrate_tiers": BITRATE_TIERS
+        "bitrate_tiers": BITRATE_TIERS,
     }
 
 
 @app.get("/api/debug/events")
-async def debug_events():
-    """SSE stream for debug panel."""
+async def debug_events(request: Request):
+    """SSE stream for debug panel with heartbeat and event replay."""
+    last_id = request.headers.get("last-event-id")
+
     async def event_generator():
+        # Replay buffered events if reconnecting
+        buffered = list(manager._event_buffer)
+        start_idx = 0
+        if last_id and last_id.isdigit():
+            for i, ev in enumerate(buffered):
+                if str(ev.get("_id", "")) == last_id:
+                    start_idx = i + 1
+                    break
+        for ev in buffered[start_idx:]:
+            yield f"id: {ev.get('_id', '')}\ndata: {json.dumps(ev)}\n\n"
+
         q = manager.subscribe()
         try:
             while True:
-                event = await asyncio.wait_for(q.get(), timeout=60.0)
-                yield f"data: {json.dumps(event)}\n\n"
+                try:
+                    event = await asyncio.wait_for(q.get(), timeout=15.0)
+                    yield f"id: {event.get('_id', '')}\ndata: {json.dumps(event)}\n\n"
+                except asyncio.TimeoutError:
+                    yield ": heartbeat\n\n"
         finally:
             manager.unsubscribe(q)
 
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.get("/api/debug/state")
@@ -443,4 +485,5 @@ async def debug_state():
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8000)

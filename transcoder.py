@@ -1,11 +1,13 @@
 """
 Transcoder: FFmpeg process management, on-demand spawning, seeking
 """
+
 import asyncio
 import hashlib
 import json
 import re
 import time
+from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -29,13 +31,19 @@ BITRATE_TIERS = [
     {"label": "1 Mbps", "key": "1M", "bitrate": 1_000_000, "max_height": 360},
 ]
 
+
 def get_bitrate_preset(quality: str) -> dict:
     """Get bitrate tier by key, or source."""
     if quality == "source":
         return {"vcodec": "copy", "acodec": "copy", "bitrate": None, "max_height": None}
     for tier in BITRATE_TIERS:
         if tier["key"] == quality:
-            return {"vcodec": "libx264", "acodec": "aac", "bitrate": tier["bitrate"], "max_height": tier["max_height"]}
+            return {
+                "vcodec": "libx264",
+                "acodec": "aac",
+                "bitrate": tier["bitrate"],
+                "max_height": tier["max_height"],
+            }
     raise ValueError(f"Unknown quality: {quality}")
 
 
@@ -70,9 +78,7 @@ def make_stream_id(path: str, quality: str, segment_length: int) -> str:
     return hashlib.sha256(key.encode()).hexdigest()[:16]
 
 
-def get_current_transcode_index(
-    work_dir: Path, stream_id: str
-) -> Optional[int]:
+def get_current_transcode_index(work_dir: Path, stream_id: str) -> Optional[int]:
     """Find highest segment index on disk."""
     if not work_dir.exists():
         return None
@@ -107,12 +113,13 @@ async def probe_hardware() -> dict:
     try:
         # Probe hwaccels
         proc = await asyncio.create_subprocess_exec(
-            "ffmpeg", "-hwaccels",
+            "ffmpeg",
+            "-hwaccels",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.DEVNULL,
         )
         stdout, _ = await proc.communicate()
-        output = stdout.decode('utf-8', errors='ignore')
+        output = stdout.decode("utf-8", errors="ignore")
 
         if "videotoolbox" in output:
             result["videotoolbox"] = True
@@ -125,12 +132,13 @@ async def probe_hardware() -> dict:
 
         # Probe encoders for nvenc variants
         proc = await asyncio.create_subprocess_exec(
-            "ffmpeg", "-encoders",
+            "ffmpeg",
+            "-encoders",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.DEVNULL,
         )
         stdout, _ = await proc.communicate()
-        output = stdout.decode('utf-8', errors='ignore')
+        output = stdout.decode("utf-8", errors="ignore")
 
         if "hevc_nvenc" in output or "h264_nvenc" in output:
             result["nvenc"] = True
@@ -148,6 +156,8 @@ class TranscodeManager:
         self._jobs: dict[str, TranscodeJob] = {}
         self._locks: dict[str, asyncio.Lock] = {}
         self._subscribers: set[asyncio.Queue] = set()
+        self._event_buffer: deque = deque(maxlen=500)
+        self._event_counter: int = 0
 
     def get_lock(self, stream_id: str) -> asyncio.Lock:
         """Get or create per-stream lock."""
@@ -157,6 +167,10 @@ class TranscodeManager:
 
     async def broadcast_event(self, event: dict) -> None:
         """Broadcast SSE event to all connected subscribers."""
+        self._event_counter += 1
+        event["_id"] = self._event_counter
+        self._event_buffer.append(event)
+
         dead = set()
         for q in self._subscribers:
             try:
@@ -206,55 +220,83 @@ class TranscodeManager:
         # Build FFmpeg command
         cmd = [
             "ffmpeg",
-            "-ss", str(seek_time_seconds),
-            "-i", job.source_path,
-            "-map_metadata", "-1",
-            "-map_chapters", "-1",
-            "-threads", "0",
+            "-ss",
+            str(seek_time_seconds),
+            "-i",
+            job.source_path,
+            "-map_metadata",
+            "-1",
+            "-map_chapters",
+            "-1",
+            "-threads",
+            "0",
         ]
 
         # Video codec
         if vcodec == "copy":
             cmd.extend(["-codec:v:0", "copy", "-start_at_zero"])
         else:
-            cmd.extend([
-                "-codec:v:0", vcodec,
-                "-preset", "veryfast",
-                "-crf", "23",
-            ])
+            cmd.extend(
+                [
+                    "-codec:v:0",
+                    vcodec,
+                    "-preset",
+                    "veryfast",
+                    "-crf",
+                    "23",
+                ]
+            )
             if bitrate:
-                cmd.extend([
-                    "-maxrate", str(bitrate),
-                    "-bufsize", str(bitrate * 2),
-                ])
+                cmd.extend(
+                    [
+                        "-maxrate",
+                        str(bitrate),
+                        "-bufsize",
+                        str(bitrate * 2),
+                    ]
+                )
             # Build video filter chain (scale only if max_height)
             if max_height:
                 cmd.extend(["-vf", f"scale=-2:'min(ih,{max_height})'"])
             # Force keyframes at segment boundaries
-            cmd.extend([
-                "-force_key_frames:v:0",
-                f"expr:gte(t,n_forced*{job.segment_length})",
-            ])
+            cmd.extend(
+                [
+                    "-force_key_frames:v:0",
+                    f"expr:gte(t,n_forced*{job.segment_length})",
+                ]
+            )
 
         # Audio codec
         cmd.extend(["-codec:a:0", acodec, "-b:a", "128k", "-ac", "2"])
 
         # HLS muxer
-        cmd.extend([
-            "-max_muxing_queue_size", "128",
-            "-f", "hls",
-            "-max_delay", "5000000",
-            "-hls_time", str(job.segment_length),
-            "-hls_segment_type", "mpegts",
-            "-start_number", str(segment_id),
-            "-hls_segment_filename", f"{work_dir}/{job.stream_id}%d.ts",
-            "-hls_playlist_type", "vod",
-            "-hls_list_size", "0",
-            "-copyts",
-            "-avoid_negative_ts", "disabled",
-            "-y",
-            f"{work_dir}/{job.stream_id}.m3u8",
-        ])
+        cmd.extend(
+            [
+                "-max_muxing_queue_size",
+                "128",
+                "-f",
+                "hls",
+                "-max_delay",
+                "5000000",
+                "-hls_time",
+                str(job.segment_length),
+                "-hls_segment_type",
+                "mpegts",
+                "-start_number",
+                str(segment_id),
+                "-hls_segment_filename",
+                f"{work_dir}/{job.stream_id}%d.ts",
+                "-hls_playlist_type",
+                "vod",
+                "-hls_list_size",
+                "0",
+                "-copyts",
+                "-avoid_negative_ts",
+                "disabled",
+                "-y",
+                f"{work_dir}/{job.stream_id}.m3u8",
+            ]
+        )
 
         try:
             # Color by seek status: cyan for mid-stream restart, yellow for initial
@@ -274,7 +316,9 @@ class TranscodeManager:
             job.last_request_time = time.monotonic()
 
             # Print actual PID after process creation
-            print(f"{color}[SPAWN] FFmpeg PID {job.pid} | quality={job.quality} | seek={seek_time_seconds:.1f}s{RESET}")
+            print(
+                f"{color}[SPAWN] FFmpeg PID {job.pid} | quality={job.quality} | seek={seek_time_seconds:.1f}s{RESET}"
+            )
             print(f"  cmd: {' '.join(cmd)}")
             job.active_requests = 0
 
@@ -282,23 +326,27 @@ class TranscodeManager:
             job.drain_task = asyncio.create_task(self._drain_stderr(job))
 
             # Emit spawn event
-            await self.broadcast_event({
-                "type": "spawn",
-                "stream_id": job.stream_id,
-                "pid": job.pid,
-                "quality": job.quality,
-                "start_segment": segment_id,
-                "start_time_sec": seek_time_seconds,
-            })
+            await self.broadcast_event(
+                {
+                    "type": "spawn",
+                    "stream_id": job.stream_id,
+                    "pid": job.pid,
+                    "quality": job.quality,
+                    "start_segment": segment_id,
+                    "start_time_sec": seek_time_seconds,
+                }
+            )
 
             return True
         except Exception as e:
             print(f"[SPAWN] ERROR: {type(e).__name__}: {e}")
-            await self.broadcast_event({
-                "type": "error",
-                "stream_id": job.stream_id,
-                "message": f"FFmpeg spawn failed: {e}",
-            })
+            await self.broadcast_event(
+                {
+                    "type": "error",
+                    "stream_id": job.stream_id,
+                    "message": f"FFmpeg spawn failed: {e}",
+                }
+            )
             return False
 
     async def _drain_stderr(self, job: TranscodeJob) -> None:
@@ -312,12 +360,12 @@ class TranscodeManager:
                     job.exit_code = job.process.returncode
                     break
 
-                decoded = line.decode('utf-8', errors='ignore').strip()
+                decoded = line.decode("utf-8", errors="ignore").strip()
                 if decoded:
                     print(f"[FFmpeg {job.pid}] {decoded}")
 
                     # Parse time=HH:MM:SS.ms to extract transcode progress
-                    match = re.search(r'time=(\d{2}):(\d{2}):(\d{2}\.\d+)', decoded)
+                    match = re.search(r"time=(\d{2}):(\d{2}):(\d{2}\.\d+)", decoded)
                     if match:
                         hours = int(match.group(1))
                         minutes = int(match.group(2))
@@ -360,12 +408,14 @@ class TranscodeManager:
             job.exit_code = job.process.returncode
 
             # Emit killed event
-            await self.broadcast_event({
-                "type": "killed",
-                "stream_id": job.stream_id,
-                "pid": job.pid,
-                "reason": reason,
-            })
+            await self.broadcast_event(
+                {
+                    "type": "killed",
+                    "stream_id": job.stream_id,
+                    "pid": job.pid,
+                    "reason": reason,
+                }
+            )
 
     async def wait_for_segment(
         self,
@@ -415,9 +465,7 @@ class TranscodeManager:
 
         if job.active_requests <= 0:
             # Arm 60s kill timer
-            job.kill_task = asyncio.create_task(
-                self._keep_alive_timer(job)
-            )
+            job.kill_task = asyncio.create_task(self._keep_alive_timer(job))
 
     async def _keep_alive_timer(self, job: TranscodeJob, timeout: float = 60.0) -> None:
         """Keep-alive timer. Kill if no new requests after timeout seconds."""
