@@ -26,7 +26,9 @@ from transcoder import (
     get_bitrate_preset,
     TICKS_PER_SECOND,
     probe_hardware,
+    select_encoder,
 )
+from thumbs import get_or_generate_thumb
 
 MEDIA_ROOT = Path(os.getenv("MEDIA_ROOT", "/")).resolve()
 MAX_CONCURRENT = int(os.getenv("MAX_CONCURRENT_STREAMS", "10"))
@@ -67,6 +69,19 @@ async def cleanup_loop():
             await manager.cleanup_segments(job, keep_seconds=120)
 
 
+async def cleanup_old_workdirs():
+    """Clean up work directories older than 1 hour."""
+    while True:
+        await asyncio.sleep(300)  # every 5 minutes
+        cutoff = time.time() - 3600  # 1 hour old
+        try:
+            for d in Path("/tmp/hls_srv").iterdir():
+                if d.is_dir() and d.stat().st_mtime < cutoff:
+                    shutil.rmtree(d, ignore_errors=True)
+        except FileNotFoundError:
+            pass
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Handle startup and shutdown events."""
@@ -74,12 +89,19 @@ async def lifespan(app: FastAPI):
     shutil.rmtree("/tmp/hls_srv", ignore_errors=True)
     hw = await probe_hardware()
     app.state.hardware = hw
+
+    # Select best available encoder
+    manager.encoder = select_encoder(hw)
+    print(f"[startup] Selected encoder: {manager.encoder}")
+
     cleanup_task = asyncio.create_task(cleanup_loop())
+    workdir_cleanup_task = asyncio.create_task(cleanup_old_workdirs())
 
     yield
 
     # Shutdown
     cleanup_task.cancel()
+    workdir_cleanup_task.cancel()
     for job in list(manager.get_all_jobs()):
         await manager.kill_ffmpeg(job, reason="server_shutdown")
 
@@ -240,6 +262,11 @@ async def get_segment(
         validate_session_id(stream_id)
         path = unquote(path)
         validate_path(path)
+
+        # Concurrent stream guard (max 10 active FFmpeg processes)
+        active_count = sum(1 for j in manager.get_all_jobs() if not j.has_exited)
+        if active_count >= 10:
+            raise HTTPException(status_code=503, detail="Too many active streams")
 
         # Validate quality
         if quality != "source":
@@ -426,6 +453,55 @@ async def capabilities():
         "hardware": app.state.hardware,
         "bitrate_tiers": BITRATE_TIERS,
     }
+
+
+@app.get("/api/thumb")
+async def get_thumb(path: str = Query(...), t: float = Query(0), w: int = Query(320)):
+    """Get or generate thumbnail at time offset t (seconds), width w."""
+    try:
+        path = unquote(path)
+        validate_path(path)
+
+        thumb_path = await get_or_generate_thumb(path, t, w)
+        if not thumb_path:
+            raise HTTPException(status_code=500, detail="Failed to extract thumbnail")
+
+        return FileResponse(
+            thumb_path,
+            media_type="image/jpeg",
+            headers={"Cache-Control": "max-age=86400"},  # 1 day
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/api/poster")
+async def get_poster(path: str = Query(...)):
+    """Get poster frame at 10% into video (or 10s min), width 640."""
+    try:
+        path = unquote(path)
+        validate_path(path)
+
+        # Probe duration
+        info = await probe_media(path)
+        duration_sec = info.duration_ticks / TICKS_PER_SECOND
+        offset_sec = min(max(duration_sec * 0.1, 10), duration_sec - 1)
+
+        thumb_path = await get_or_generate_thumb(path, offset_sec, 640)
+        if not thumb_path:
+            raise HTTPException(status_code=500, detail="Failed to extract poster")
+
+        return FileResponse(
+            thumb_path,
+            media_type="image/jpeg",
+            headers={"Cache-Control": "max-age=86400"},  # 1 day
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @app.get("/api/debug/events")

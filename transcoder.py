@@ -102,12 +102,16 @@ def get_current_transcode_index(work_dir: Path, stream_id: str) -> Optional[int]
 
 
 async def probe_hardware() -> dict:
-    """Probe available hardware acceleration: videotoolbox, nvenc, qsv, vaapi."""
+    """Probe available hardware acceleration and specific encoders."""
     result = {
         "videotoolbox": False,
         "nvenc": False,
         "qsv": False,
         "vaapi": False,
+        "h264_videotoolbox": False,
+        "h264_nvenc": False,
+        "h264_qsv": False,
+        "h264_vaapi": False,
     }
 
     try:
@@ -130,7 +134,7 @@ async def probe_hardware() -> dict:
         if "vaapi" in output:
             result["vaapi"] = True
 
-        # Probe encoders for nvenc variants
+        # Probe encoders for specific H.264 support
         proc = await asyncio.create_subprocess_exec(
             "ffmpeg",
             "-encoders",
@@ -140,13 +144,72 @@ async def probe_hardware() -> dict:
         stdout, _ = await proc.communicate()
         output = stdout.decode("utf-8", errors="ignore")
 
-        if "hevc_nvenc" in output or "h264_nvenc" in output:
-            result["nvenc"] = True
+        if "h264_videotoolbox" in output:
+            result["h264_videotoolbox"] = True
+        if "h264_nvenc" in output or "hevc_nvenc" in output:
+            result["h264_nvenc"] = True
+        if "h264_qsv" in output:
+            result["h264_qsv"] = True
+        if "h264_vaapi" in output:
+            result["h264_vaapi"] = True
 
     except Exception as e:
         print(f"[probe_hardware] Warning: {e}")
 
     return result
+
+
+def select_encoder(hardware: dict) -> str:
+    """Pick best available H.264 encoder, falling back to libx264."""
+    priority = ["h264_videotoolbox", "h264_nvenc", "h264_qsv", "h264_vaapi"]
+    for enc in priority:
+        if hardware.get(enc):
+            return enc
+    return "libx264"
+
+
+def _build_hwaccel_input_args(encoder: str) -> list[str]:
+    """Build input-side hwaccel flags for hw-accelerated decoding."""
+    if encoder == "h264_videotoolbox":
+        return ["-hwaccel", "videotoolbox", "-hwaccel_output_format", "videotoolbox_vld"]
+    elif encoder == "h264_nvenc":
+        return ["-hwaccel", "cuda", "-hwaccel_output_format", "cuda", "-threads", "1"]
+    elif encoder == "h264_qsv":
+        return ["-hwaccel", "qsv", "-hwaccel_output_format", "qsv"]
+    elif encoder == "h264_vaapi":
+        return ["-hwaccel", "vaapi", "-hwaccel_output_format", "vaapi"]
+    return []
+
+
+def _build_video_codec_args(encoder: str, bitrate: int | None, max_height: int | None) -> list[str]:
+    """Build video codec args per encoder (bitrate control, preset, etc)."""
+    args = ["-codec:v:0", encoder]
+
+    if encoder == "libx264":
+        args += ["-preset", "veryfast", "-crf", "23"]
+        if bitrate:
+            args += ["-maxrate", str(bitrate), "-bufsize", str(bitrate * 2)]
+
+    elif encoder == "h264_videotoolbox":
+        args += ["-prio_speed", "1"]  # fast mode
+        if bitrate:
+            args += ["-b:v", str(bitrate), "-qmin", "-1", "-qmax", "-1"]
+        # No -maxrate/-bufsize: causes encoder hangs on VideoToolbox
+
+    elif encoder == "h264_nvenc":
+        args += ["-preset", "p1"]  # fastest NVENC preset
+        if bitrate:
+            args += ["-maxrate", str(bitrate), "-bufsize", str(bitrate * 2)]
+
+    elif encoder in ("h264_qsv", "h264_vaapi"):
+        args += ["-preset", "veryfast"]
+        if bitrate:
+            args += ["-b:v", str(bitrate), "-maxrate", str(bitrate), "-bufsize", str(bitrate * 2)]
+
+    if max_height:
+        args += ["-vf", f"scale=-2:'min(ih,{max_height})'"]
+
+    return args
 
 
 class TranscodeManager:
@@ -158,6 +221,7 @@ class TranscodeManager:
         self._subscribers: set[asyncio.Queue] = set()
         self._event_buffer: deque = deque(maxlen=500)
         self._event_counter: int = 0
+        self.encoder: str = "libx264"  # selected at startup after probe_hardware()
 
     def get_lock(self, stream_id: str) -> asyncio.Lock:
         """Get or create per-stream lock."""
@@ -218,53 +282,35 @@ class TranscodeManager:
         max_height = preset["max_height"]
 
         # Build FFmpeg command
-        cmd = [
-            "ffmpeg",
-            "-ss",
-            str(seek_time_seconds),
-            "-i",
-            job.source_path,
-            "-map_metadata",
-            "-1",
-            "-map_chapters",
-            "-1",
-            "-threads",
-            "0",
-        ]
+        cmd = ["ffmpeg"]
 
-        # Video codec
+        # Add hwaccel input args ONLY when using copy codec (no filters needed)
+        # If we have filters like scale, hwaccel input creates videotoolbox_vld format
+        # which doesn't support standard filters. Decode in software, encode in hw.
+        if vcodec == "copy":
+            cmd.extend(_build_hwaccel_input_args(self.encoder))
+
+        cmd.extend([
+            "-ss", str(seek_time_seconds),
+            "-i", job.source_path,
+            "-map_metadata", "-1",
+            "-map_chapters", "-1",
+            "-threads", "0",
+        ])
+
+        # Video codec: use encoder-specific args (bitrate control, preset, etc)
         if vcodec == "copy":
             cmd.extend(["-codec:v:0", "copy", "-start_at_zero"])
         else:
-            cmd.extend(
-                [
-                    "-codec:v:0",
-                    vcodec,
-                    "-preset",
-                    "veryfast",
-                    "-crf",
-                    "23",
-                ]
-            )
-            if bitrate:
-                cmd.extend(
-                    [
-                        "-maxrate",
-                        str(bitrate),
-                        "-bufsize",
-                        str(bitrate * 2),
-                    ]
-                )
-            # Build video filter chain (scale only if max_height)
-            if max_height:
-                cmd.extend(["-vf", f"scale=-2:'min(ih,{max_height})'"])
+            # Use encoder-aware codec builder (respects hw-specific bitrate control)
+            codec_args = _build_video_codec_args(self.encoder, bitrate, max_height)
+            cmd.extend(codec_args)
+
             # Force keyframes at segment boundaries
-            cmd.extend(
-                [
-                    "-force_key_frames:v:0",
-                    f"expr:gte(t,n_forced*{job.segment_length})",
-                ]
-            )
+            cmd.extend([
+                "-force_key_frames:v:0",
+                f"expr:gte(t,n_forced*{job.segment_length})",
+            ])
 
         # Audio codec
         cmd.extend(["-codec:a:0", acodec, "-b:a", "128k", "-ac", "2"])
