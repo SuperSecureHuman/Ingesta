@@ -7,21 +7,15 @@ import os
 from pathlib import Path
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Header
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from config import settings
 import db.crud as crud
+from routes.deps import require_auth
 
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
-
-
-def require_admin_key(x_admin_key: Optional[str] = Header(None)) -> str:
-    """Dependency to validate ADMIN_API_KEY header."""
-    if not x_admin_key or x_admin_key != settings.admin_api_key:
-        raise HTTPException(status_code=401, detail="Invalid or missing ADMIN_API_KEY")
-    return x_admin_key
 
 
 class CreateProjectRequest(BaseModel):
@@ -40,7 +34,7 @@ class AddFilesRequest(BaseModel):
 @router.get("")
 async def list_projects(
     library_id: Optional[str] = None,
-    admin_key: str = Depends(require_admin_key),
+    _auth: str = Depends(require_auth),
 ):
     """List all projects, optionally filtered by library."""
     projects = await crud.get_projects(library_id=library_id)
@@ -50,7 +44,7 @@ async def list_projects(
 @router.post("")
 async def create_project(
     req: CreateProjectRequest,
-    admin_key: str = Depends(require_admin_key),
+    _auth: str = Depends(require_auth),
 ):
     """Create a new project."""
     # If library_id is provided, verify it exists
@@ -66,7 +60,7 @@ async def create_project(
 @router.get("/{project_id}")
 async def get_project(
     project_id: str,
-    admin_key: str = Depends(require_admin_key),
+    _auth: str = Depends(require_auth),
 ):
     """Get project details and file list with metadata."""
     project = await crud.get_project(project_id)
@@ -84,7 +78,7 @@ async def get_project(
 async def add_files_to_project(
     project_id: str,
     req: AddFilesRequest,
-    admin_key: str = Depends(require_admin_key),
+    _auth: str = Depends(require_auth),
 ):
     """Add files to a project (paths are marked as pending scan)."""
     project = await crud.get_project(project_id)
@@ -136,7 +130,7 @@ async def add_files_to_project(
 async def remove_files_from_project(
     project_id: str,
     req: AddFilesRequest,
-    admin_key: str = Depends(require_admin_key),
+    _auth: str = Depends(require_auth),
 ):
     """Remove files from a project."""
     project = await crud.get_project(project_id)
@@ -174,7 +168,7 @@ async def remove_files_from_project(
 @router.delete("/{project_id}")
 async def delete_project(
     project_id: str,
-    admin_key: str = Depends(require_admin_key),
+    _auth: str = Depends(require_auth),
 ):
     """Delete a project and all its files."""
     project = await crud.get_project(project_id)
@@ -183,3 +177,127 @@ async def delete_project(
 
     await crud.delete_project(project_id)
     return {"status": "deleted"}
+
+
+# Video file extensions for bulk operations
+VIDEO_EXTENSIONS = {
+    ".mp4",
+    ".mkv",
+    ".avi",
+    ".mov",
+    ".m4v",
+    ".ts",
+    ".wmv",
+    ".flv",
+    ".webm",
+    ".mpeg",
+    ".mpg",
+}
+
+
+class BulkAddFolderRequest(BaseModel):
+    """Request to add all videos from a folder to a project."""
+    folder_path: str
+
+
+class BulkAddLibraryRequest(BaseModel):
+    """Request to add all videos from a library to a project."""
+    library_id: str
+
+
+@router.post("/{project_id}/files/folder")
+async def add_folder_to_project(
+    project_id: str,
+    req: BulkAddFolderRequest,
+    _auth: str = Depends(require_auth),
+):
+    """Add all video files from a folder (recursively) to a project."""
+    project = await crud.get_project(project_id)
+    if not project:
+        raise HTTPException(404, "Project not found")
+
+    folder = Path(req.folder_path).resolve()
+    if not folder.exists():
+        raise HTTPException(400, "Folder does not exist")
+    if not folder.is_dir():
+        raise HTTPException(400, "Path is not a directory")
+
+    added = 0
+    errors = []
+
+    # Walk the folder recursively
+    for file_path in folder.rglob("*"):
+        if not file_path.is_file():
+            continue
+        if file_path.suffix.lower() not in VIDEO_EXTENSIONS:
+            continue
+
+        try:
+            stat = file_path.stat()
+            file_size = stat.st_size
+            mtime = stat.st_mtime
+
+            await crud.add_project_file(
+                project_id=project_id,
+                file_path=str(file_path),
+                file_size=file_size,
+                mtime=mtime,
+            )
+            added += 1
+        except Exception as e:
+            errors.append({"path": str(file_path), "error": str(e)})
+
+    return {
+        "added": added,
+        "errors": errors,
+    }
+
+
+@router.post("/{project_id}/files/library")
+async def add_library_to_project(
+    project_id: str,
+    req: BulkAddLibraryRequest,
+    _auth: str = Depends(require_auth),
+):
+    """Add all video files from a library (recursively) to a project."""
+    project = await crud.get_project(project_id)
+    if not project:
+        raise HTTPException(404, "Project not found")
+
+    library = await crud.get_library(req.library_id)
+    if not library:
+        raise HTTPException(404, "Library not found")
+
+    root = Path(library["root_path"]).resolve()
+    if not root.exists():
+        raise HTTPException(400, "Library root path does not exist")
+
+    added = 0
+    errors = []
+
+    # Walk the library root recursively
+    for file_path in root.rglob("*"):
+        if not file_path.is_file():
+            continue
+        if file_path.suffix.lower() not in VIDEO_EXTENSIONS:
+            continue
+
+        try:
+            stat = file_path.stat()
+            file_size = stat.st_size
+            mtime = stat.st_mtime
+
+            await crud.add_project_file(
+                project_id=project_id,
+                file_path=str(file_path),
+                file_size=file_size,
+                mtime=mtime,
+            )
+            added += 1
+        except Exception as e:
+            errors.append({"path": str(file_path), "error": str(e)})
+
+    return {
+        "added": added,
+        "errors": errors,
+    }

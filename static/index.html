@@ -3,153 +3,669 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HLS Streaming Player</title>
+    <title>HLS Media Review</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        accent: '#e5a00d'
-                    },
-                    fontFamily: {
-                        sans: ['-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto', 'sans-serif']
-                    }
-                }
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #1a1a1a;
+            color: #e0e0e0;
+        }
+
+        /* Login view */
+        #loginView {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: #0d0d0d;
+        }
+
+        .login-container {
+            width: 100%;
+            max-width: 400px;
+            padding: 40px;
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 8px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+        }
+
+        .login-header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .login-header h1 {
+            font-size: 24px;
+            margin-bottom: 10px;
+        }
+
+        .login-header p {
+            color: #999;
+            font-size: 14px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #333;
+            border-radius: 4px;
+            background: #2a2a2a;
+            color: #e0e0e0;
+            font-size: 14px;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #0066cc;
+            box-shadow: 0 0 0 3px rgba(0,102,204,0.1);
+        }
+
+        .btn {
+            padding: 10px 16px;
+            border: none;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: #0066cc;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #0052a3;
+        }
+
+        .btn-secondary {
+            background: #333;
+            color: #e0e0e0;
+        }
+
+        .btn-secondary:hover {
+            background: #444;
+        }
+
+        .btn-sm {
+            padding: 6px 12px;
+            font-size: 13px;
+        }
+
+        .btn-danger {
+            background: #cc3333;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #aa2222;
+        }
+
+        .login-error {
+            padding: 12px;
+            background: #cc3333;
+            color: white;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            font-size: 13px;
+            display: none;
+        }
+
+        .login-error.show {
+            display: block;
+        }
+
+        /* Hidden by default */
+        #idleContainer {
+            display: none;
+        }
+
+        #idleContainer.show {
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        /* Header */
+        header {
+            background: #0d0d0d;
+            border-bottom: 1px solid #333;
+            padding: 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        header h1 {
+            font-size: 20px;
+        }
+
+        .header-right {
+            display: flex;
+            gap: 16px;
+            align-items: center;
+        }
+
+        .user-info {
+            font-size: 13px;
+            color: #999;
+        }
+
+        /* Breadcrumb */
+        .breadcrumb {
+            padding: 12px 16px;
+            background: #0d0d0d;
+            border-bottom: 1px solid #333;
+            display: flex;
+            gap: 8px;
+            font-size: 13px;
+        }
+
+        .breadcrumb a,
+        .breadcrumb span {
+            cursor: pointer;
+            color: #0066cc;
+        }
+
+        .breadcrumb span {
+            color: #999;
+            cursor: default;
+        }
+
+        .breadcrumb a:hover {
+            text-decoration: underline;
+        }
+
+        /* Main content */
+        main {
+            flex: 1;
+            padding: 24px;
+            overflow-y: auto;
+        }
+
+        main h2 {
+            margin-bottom: 16px;
+            font-size: 18px;
+        }
+
+        /* Views */
+        .view {
+            display: none;
+        }
+
+        .view.active {
+            display: block;
+        }
+
+        /* Grid layouts */
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .card {
+            background: #2a2a2a;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 12px;
+            position: relative;
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+
+        .card:hover {
+            background: #333;
+            border-color: #444;
+        }
+
+        .card-image {
+            width: 100%;
+            height: 120px;
+            background: #1a1a1a;
+            border-radius: 4px;
+            margin-bottom: 12px;
+            object-fit: cover;
+        }
+
+        .card-title {
+            font-weight: 500;
+            font-size: 13px;
+            margin-bottom: 8px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .card-meta {
+            font-size: 12px;
+            color: #999;
+            line-height: 1.4;
+        }
+
+        .card-actions {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            display: none;
+            gap: 4px;
+        }
+
+        .card:hover .card-actions {
+            display: flex;
+        }
+
+        .icon-btn {
+            width: 28px;
+            height: 28px;
+            padding: 0;
+            background: rgba(0,0,0,0.6);
+            color: #e0e0e0;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+        .icon-btn:hover {
+            background: rgba(0,0,0,0.8);
+        }
+
+        /* Checkbox on cards */
+        .card-check {
+            position: absolute;
+            top: 8px;
+            left: 8px;
+            display: none;
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+        }
+
+        .card.selectable .card-check {
+            display: block;
+        }
+
+        /* Selection toolbar */
+        .selection-toolbar {
+            position: fixed;
+            bottom: 24px;
+            left: 24px;
+            right: 24px;
+            background: #0066cc;
+            color: white;
+            padding: 16px;
+            border-radius: 4px;
+            display: none;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 100;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+
+        .selection-toolbar.show {
+            display: flex;
+        }
+
+        .selection-toolbar button {
+            background: rgba(255,255,255,0.2);
+            color: white;
+            border: 1px solid rgba(255,255,255,0.3);
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+        }
+
+        .selection-toolbar button:hover {
+            background: rgba(255,255,255,0.3);
+        }
+
+        /* Library actions */
+        .library-toolbar {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        /* Section header with button */
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .section-header h3 {
+            font-size: 16px;
+        }
+
+        /* Panels (side sheets for forms) */
+        .panel {
+            position: fixed;
+            top: 0;
+            right: -400px;
+            width: 400px;
+            height: 100vh;
+            background: #2a2a2a;
+            border-left: 1px solid #333;
+            transition: right 0.3s ease;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            box-shadow: -4px 0 12px rgba(0,0,0,0.3);
+        }
+
+        .panel.open {
+            right: 0;
+        }
+
+        .panel-header {
+            padding: 16px;
+            border-bottom: 1px solid #333;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .panel-title {
+            font-size: 16px;
+            font-weight: 500;
+        }
+
+        .panel-close {
+            background: none;
+            border: none;
+            color: #e0e0e0;
+            cursor: pointer;
+            font-size: 18px;
+            padding: 0;
+            width: 24px;
+            height: 24px;
+        }
+
+        .panel-content {
+            padding: 16px;
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        .panel-footer {
+            padding: 16px;
+            border-top: 1px solid #333;
+            display: flex;
+            gap: 8px;
+        }
+
+        .panel-error {
+            padding: 12px;
+            background: #cc3333;
+            color: white;
+            border-radius: 4px;
+            margin-bottom: 16px;
+            font-size: 13px;
+            display: none;
+        }
+
+        .panel-error.show {
+            display: block;
+        }
+
+        /* Toast notifications */
+        #toast {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            background: #333;
+            color: #e0e0e0;
+            padding: 16px 20px;
+            border-radius: 4px;
+            font-size: 13px;
+            display: none;
+            z-index: 2000;
+            animation: slideIn 0.3s ease;
+        }
+
+        #toast.show {
+            display: block;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
             }
         }
-    </script>
-    <style>
-        /* Range thumb styling */
+
+        /* Player */
+        #playerContainer {
+            display: none;
+        }
+
+        /* range thumb */
         input[type=range]::-webkit-slider-thumb {
             -webkit-appearance: none;
-            width: 10px;
-            height: 10px;
+            width: 10px; height: 10px;
             background: #e5a00d;
             border-radius: 50%;
             cursor: pointer;
         }
         input[type=range]::-moz-range-thumb {
-            width: 10px;
-            height: 10px;
+            width: 10px; height: 10px;
             background: #e5a00d;
             border-radius: 50%;
             cursor: pointer;
             border: none;
         }
-        /* Seekbar hover height */
-        #seekBar:hover {
-            height: 4px;
+        #seekBar:hover { height: 4px; }
+
+        /* Confirm dialog (inline in card) */
+        .confirm-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.8);
+            border-radius: 8px;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            gap: 12px;
+            z-index: 10;
         }
-        /* Scrollbar styling */
-        ::-webkit-scrollbar {
-            width: 6px;
-            height: 6px;
+
+        .confirm-overlay.show {
+            display: flex;
         }
-        ::-webkit-scrollbar-track {
-            background: #030712;
+
+        .confirm-text {
+            font-size: 13px;
+            text-align: center;
+            color: #e0e0e0;
         }
-        ::-webkit-scrollbar-thumb {
-            background: #1f2937;
-            border-radius: 3px;
+
+        .confirm-buttons {
+            display: flex;
+            gap: 8px;
         }
-        ::-webkit-scrollbar-thumb:hover {
-            background: #6b7280;
+
+        .confirm-buttons button {
+            padding: 6px 12px;
+            font-size: 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .confirm-btn-yes {
+            background: #cc3333;
+            color: white;
+        }
+
+        .confirm-btn-no {
+            background: #333;
+            color: #e0e0e0;
+        }
+
+        /* Loading spinner */
+        .spinner {
+            width: 16px;
+            height: 16px;
+            border: 2px solid #333;
+            border-top: 2px solid #0066cc;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            display: inline-block;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .panel {
+                width: 100%;
+                right: -100%;
+            }
+
+            .grid {
+                grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            }
+
+            .selection-toolbar {
+                left: 12px;
+                right: 12px;
+                bottom: 12px;
+            }
+
+            main {
+                padding: 12px;
+            }
         }
     </style>
 </head>
-<body class="bg-gray-950 text-gray-100 font-sans overflow-hidden">
-    <!-- IDLE STATE: MULTI-VIEW INTERFACE -->
-    <div id="idleContainer" class="flex flex-col h-screen bg-gray-950">
-        <!-- Header -->
-        <header class="flex items-center justify-between px-6 py-4 border-b border-gray-800 shrink-0">
-            <span class="text-xs font-semibold tracking-widest uppercase text-gray-500">Media Library</span>
-            <div class="flex items-center gap-3">
-                <input id="searchBox" type="text" placeholder="Filter…"
-                    class="bg-gray-900 border border-gray-700 rounded-md px-3 py-1.5 text-sm
-                           text-gray-100 placeholder-gray-500 focus:outline-none focus:border-accent w-48" />
-                <a href="/debug" target="_blank"
-                    class="text-xs px-3 py-1.5 bg-gray-900 border border-gray-700 rounded
-                           text-gray-500 hover:text-accent hover:border-accent transition-colors">⚙ Debug</a>
+<body>
+    <!-- Login View -->
+    <div id="loginView">
+        <div class="login-container">
+            <div class="login-header">
+                <h1>HLS Media Review</h1>
+                <p>Sign in to your account</p>
+            </div>
+
+            <div class="login-error" id="loginError"></div>
+
+            <form onsubmit="handleLogin(event)">
+                <div class="form-group">
+                    <label for="username">Username</label>
+                    <input type="text" id="username" name="username" required autofocus>
+                </div>
+
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" name="password" required>
+                </div>
+
+                <button type="submit" class="btn btn-primary" style="width: 100%; margin-bottom: 16px;">Sign in</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Main Application -->
+    <div id="idleContainer">
+        <header>
+            <h1>HLS Media Review</h1>
+            <div class="header-right">
+                <span class="user-info" id="userDisplay"></span>
+                <button class="btn btn-secondary btn-sm" onclick="handleLogout()">Logout</button>
             </div>
         </header>
 
-        <!-- Breadcrumb -->
-        <nav id="breadcrumb" class="flex items-center gap-1 px-6 py-2 text-xs text-gray-500
-                                    font-mono border-b border-gray-800 overflow-x-auto shrink-0 whitespace-nowrap">
-        </nav>
+        <div class="breadcrumb" id="breadcrumb"></div>
 
-        <!-- Grid body -->
-        <main class="flex-1 overflow-y-auto px-6 py-6">
+        <main id="mainContent">
             <!-- Home View -->
-            <div id="homeView" class="space-y-8">
-                <!-- Libraries Section -->
-                <div>
-                    <div class="flex items-center justify-between mb-4">
-                        <h2 class="text-lg font-semibold text-gray-200">Libraries</h2>
-                        <button onclick="showCreateLibraryDialog()"
-                            class="text-xs px-2 py-1 bg-accent hover:bg-amber-500 text-gray-950 rounded font-semibold transition-colors">
-                            + New Library
-                        </button>
-                    </div>
-                    <div id="libraryGrid" class="grid gap-4" style="grid-template-columns: repeat(auto-fill, minmax(200px, 1fr))">
-                    </div>
+            <div id="homeView" class="view active">
+                <div class="section-header">
+                    <h2>Libraries</h2>
+                    <button class="btn btn-primary btn-sm" onclick="openPanelCreateLibrary()">+ New Library</button>
                 </div>
+                <div class="grid" id="libraryGrid"></div>
 
-                <!-- Projects Section -->
-                <div>
-                    <div class="flex items-center justify-between mb-4">
-                        <h2 class="text-lg font-semibold text-gray-200">Projects</h2>
-                        <button onclick="showCreateProjectDialog()"
-                            class="text-xs px-2 py-1 bg-accent hover:bg-amber-500 text-gray-950 rounded font-semibold transition-colors">
-                            + New Project
-                        </button>
-                    </div>
-                    <div id="projectGrid" class="grid gap-4" style="grid-template-columns: repeat(auto-fill, minmax(200px, 1fr))">
-                    </div>
+                <div class="section-header">
+                    <h2>Projects</h2>
+                    <button class="btn btn-primary btn-sm" onclick="openPanelCreateProject()">+ New Project</button>
                 </div>
+                <div class="grid" id="projectGrid"></div>
             </div>
 
             <!-- Library View -->
-            <div id="libraryView" style="display: none">
-                <div id="libraryFileList" class="grid gap-4" style="grid-template-columns: repeat(auto-fill, minmax(200px, 1fr))">
+            <div id="libraryView" class="view">
+                <div class="library-toolbar">
+                    <button class="btn btn-primary btn-sm" onclick="addEntireLibraryToProject()">Add Entire Library to Project</button>
                 </div>
+                <div class="grid" id="libraryFileList"></div>
             </div>
 
             <!-- Project View -->
-            <div id="projectView" style="display: none">
-                <div class="flex justify-end gap-2 mb-6">
-                    <button onclick="showCreateShareDialog()"
-                        class="text-xs px-3 py-1.5 bg-accent hover:bg-amber-500 text-gray-950 rounded font-semibold transition-colors">
-                        + Create Share
-                    </button>
-                    <button onclick="showShareLinksDialog()"
-                        class="text-xs px-3 py-1.5 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded text-gray-100 transition-colors">
-                        Share Links
-                    </button>
+            <div id="projectView" class="view">
+                <div class="library-toolbar">
+                    <button class="btn btn-primary btn-sm" onclick="openPanelCreateShare()">Create Share</button>
+                    <button class="btn btn-secondary btn-sm" onclick="openPanelShareLinks()">Share Links</button>
+                    <button class="btn btn-danger btn-sm" onclick="startDeleteProject()">Delete Project</button>
                 </div>
-                <div id="projectFileList" class="grid gap-4" style="grid-template-columns: repeat(auto-fill, minmax(200px, 1fr))">
-                </div>
-            </div>
-
-            <!-- File List (common for browser & project view) -->
-            <div id="fileList" class="grid gap-4" style="grid-template-columns: repeat(auto-fill, minmax(200px, 1fr))">
+                <div class="grid" id="projectFileList"></div>
             </div>
         </main>
     </div>
 
-    <!-- PLAYER STATE -->
+    <!-- Player -->
     <div id="playerContainer" class="flex flex-col h-screen bg-black" style="display: none">
         <div id="videoViewport" class="relative flex-1 bg-black overflow-hidden">
             <video id="video" class="w-full h-full object-contain"></video>
 
-            <!-- Home button (persistent, always visible) -->
+            <!-- Back button -->
             <button onclick="stopPlayback()"
               class="absolute top-3 left-3 z-40 flex items-center gap-1.5 px-2.5 py-1.5
                      bg-black/60 hover:bg-black/90 rounded-lg text-xs text-gray-400
                      hover:text-gray-100 backdrop-blur-sm transition-all border border-gray-700/50
                      hover:border-gray-600"
-              title="Back to library (Esc)">
+              title="Back (Esc)">
               ← Library
             </button>
 
@@ -162,8 +678,7 @@
                     <span class="text-sm font-semibold text-gray-100 font-sans">Playback Info</span>
                     <button onclick="toggleInfoPanel()" class="text-gray-500 hover:text-gray-200 transition-colors">✕</button>
                 </div>
-                <div id="playbackInfoContent" class="px-4 py-3 space-y-4 overflow-y-auto">
-                </div>
+                <div id="playbackInfoContent" class="px-4 py-3 space-y-4 overflow-y-auto"></div>
             </div>
 
             <!-- Controls Overlay -->
@@ -171,11 +686,11 @@
                 class="absolute bottom-0 left-0 right-0 opacity-0 pointer-events-none transition-opacity duration-300
                        bg-gradient-to-t from-black/90 to-transparent px-5 pt-16 pb-5">
 
-                <!-- Seekbar Row -->
+                <!-- Seekbar -->
                 <div class="flex flex-col gap-1 mb-3">
                     <div id="seekBar" class="w-full h-0.5 bg-gray-600/40 rounded cursor-pointer relative transition-all">
                         <div id="seekBuffered" class="absolute inset-y-0 left-0 bg-gray-500/50 rounded pointer-events-none"></div>
-                        <div id="seekProgress" class="absolute inset-y-0 left-0 bg-accent rounded pointer-events-none"></div>
+                        <div id="seekProgress" class="absolute inset-y-0 left-0 rounded pointer-events-none" style="background:#e5a00d"></div>
                     </div>
                     <div class="text-xs text-gray-400 tabular-nums">
                         <span id="currentTime">0:00</span>
@@ -186,19 +701,17 @@
 
                 <!-- Controls Row -->
                 <div class="flex items-center gap-4">
-                    <!-- Play/Pause -->
                     <button id="playPauseBtn" onclick="togglePlayPause()"
-                        class="text-gray-100 hover:text-accent text-xl transition-colors p-1">▶</button>
+                        class="text-gray-100 hover:text-yellow-400 text-xl transition-colors p-1">▶</button>
 
-                    <!-- Quality pill + popover -->
+                    <!-- Quality pill -->
                     <div class="relative" id="qualityPill">
                         <button onclick="toggleQualityPopover()"
                             class="flex items-center gap-1.5 px-3 py-1.5 bg-gray-900 border border-gray-700
-                                   rounded text-xs text-gray-100 hover:border-accent transition-colors cursor-pointer">
+                                   rounded text-xs text-gray-100 hover:border-yellow-500 transition-colors cursor-pointer">
                             <span id="qualityLabel">Source</span>
                             <span class="text-gray-500">▾</span>
                         </button>
-                        <!-- Popover -->
                         <div id="qualityPopover"
                             class="hidden absolute bottom-full left-0 mb-1 bg-gray-900 border border-gray-700
                                  rounded-lg overflow-hidden z-50 min-w-max shadow-2xl">
@@ -207,42 +720,148 @@
 
                     <!-- Volume -->
                     <button id="volumeBtn" onclick="toggleVolumeMute()"
-                        class="text-gray-100 hover:text-accent text-lg transition-colors p-1">🔊</button>
+                        class="text-gray-100 hover:text-yellow-400 text-lg transition-colors p-1">🔊</button>
                     <input type="range" id="volumeSlider" min="0" max="100" value="100" onchange="setVolume()"
                         class="w-20 h-0.5 cursor-pointer bg-gray-600/40 rounded appearance-none" />
 
-                    <!-- Spacer -->
                     <span class="flex-1"></span>
 
-                    <!-- Info button -->
                     <button onclick="toggleInfoPanel()"
-                        class="text-gray-400 hover:text-accent text-base transition-colors p-1"
-                        title="Playback info (I)">ⓘ</button>
+                        class="text-gray-400 hover:text-yellow-400 text-base transition-colors p-1"
+                        title="Info (I)">ⓘ</button>
 
-                    <!-- Fullscreen -->
                     <button id="fullscreenBtn" onclick="toggleFullscreen()"
-                        class="text-gray-100 hover:text-accent text-lg transition-colors p-1">⛶</button>
+                        class="text-gray-100 hover:text-yellow-400 text-lg transition-colors p-1">⛶</button>
 
-                    <!-- Stop -->
-                    <button id="stopBtn" onclick="stopPlayback()"
-                        class="text-gray-400 hover:text-accent text-lg transition-colors p-1">⏹</button>
+                    <button onclick="stopPlayback()"
+                        class="text-gray-400 hover:text-yellow-400 text-lg transition-colors p-1">⏹</button>
                 </div>
-
             </div>
+        </div>
+    </div>
+
+    <!-- Panels -->
+    <div id="panelCreateLibrary" class="panel">
+        <div class="panel-header">
+            <div class="panel-title">New Library</div>
+            <button class="panel-close" onclick="closePanels()">×</button>
+        </div>
+        <div class="panel-content">
+            <div class="panel-error"></div>
+            <div class="form-group">
+                <label for="libName">Library Name</label>
+                <input type="text" id="libName" placeholder="e.g., Drone Footage">
+            </div>
+            <div class="form-group">
+                <label for="libPath">Root Path</label>
+                <input type="text" id="libPath" placeholder="e.g., /media/footage">
+            </div>
+        </div>
+        <div class="panel-footer">
+            <button class="btn btn-secondary" onclick="closePanels()">Cancel</button>
+            <button class="btn btn-primary" style="flex:1;" onclick="submitCreateLibrary()">Create</button>
+        </div>
+    </div>
+
+    <div id="panelCreateProject" class="panel">
+        <div class="panel-header">
+            <div class="panel-title">New Project</div>
+            <button class="panel-close" onclick="closePanels()">×</button>
+        </div>
+        <div class="panel-content">
+            <div class="panel-error"></div>
+            <div class="form-group">
+                <label for="projName">Project Name</label>
+                <input type="text" id="projName" placeholder="e.g., Commercial Shoot">
+            </div>
+        </div>
+        <div class="panel-footer">
+            <button class="btn btn-secondary" onclick="closePanels()">Cancel</button>
+            <button class="btn btn-primary" style="flex:1;" onclick="submitCreateProject()">Create</button>
+        </div>
+    </div>
+
+    <div id="panelCreateShare" class="panel">
+        <div class="panel-header">
+            <div class="panel-title">Create Share Link</div>
+            <button class="panel-close" onclick="closePanels()">×</button>
+        </div>
+        <div class="panel-content">
+            <div class="panel-error"></div>
+            <div class="form-group">
+                <label for="sharePassword">Password</label>
+                <input type="password" id="sharePassword" placeholder="Share password">
+            </div>
+            <div class="form-group">
+                <label for="shareExpiry">Expires in (days, optional)</label>
+                <input type="number" id="shareExpiry" placeholder="Leave empty for no expiry" min="1">
+            </div>
+        </div>
+        <div class="panel-footer">
+            <button class="btn btn-secondary" onclick="closePanels()">Cancel</button>
+            <button class="btn btn-primary" style="flex:1;" onclick="submitCreateShare()">Create</button>
+        </div>
+    </div>
+
+    <div id="panelShareLinks" class="panel">
+        <div class="panel-header">
+            <div class="panel-title">Share Links</div>
+            <button class="panel-close" onclick="closePanels()">×</button>
+        </div>
+        <div class="panel-content" id="shareLinksList">
+            <!-- Populated dynamically -->
+        </div>
+        <div class="panel-footer">
+            <button class="btn btn-secondary" style="flex:1;" onclick="closePanels()">Close</button>
+        </div>
+    </div>
+
+    <div id="panelAddToProject" class="panel">
+        <div class="panel-header">
+            <div class="panel-title">Add to Project</div>
+            <button class="panel-close" onclick="closePanels()">×</button>
+        </div>
+        <div class="panel-content">
+            <div class="form-group">
+                <label for="targetProject">Select Project</label>
+                <select id="targetProject">
+                    <option value="">-- Choose project --</option>
+                </select>
+            </div>
+        </div>
+        <div class="panel-footer">
+            <button class="btn btn-secondary" onclick="closePanels()">Cancel</button>
+            <button class="btn btn-primary" style="flex:1;" onclick="submitAddToProject()">Add</button>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast"></div>
+
+    <!-- Selection Toolbar -->
+    <div class="selection-toolbar" id="selectionToolbar">
+        <span id="selectionCount"></span>
+        <div>
+            <button onclick="openPanelAddToProject()">Add to Project</button>
+            <button onclick="clearSelection()">Clear</button>
         </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest/dist/hls.min.js"></script>
     <script>
-        // ===== STATE =====
-        let sessionId = generateUUID();
-        let hls = null;
-        let currentFilePath = null;
-        let currentQuality = "source";
-        let currentSegmentLength = 6;
-        let currentBrowserPath = "/";
+        // Global state
+        let currentUser = null;
+        let currentView = 'home';
         let currentLibraryId = null;
         let currentProjectId = null;
+        let selectedItems = new Map();
+
+        // Player state
+        let hls = null;
+        let sessionId = null;
+        let currentFilePath = null;
+        let currentQuality = 'source';
+        let currentSegmentLength = 6;
         let controlsHideTimer = null;
         let pingInterval = null;
         let isPlaying = false;
@@ -252,26 +871,10 @@
         let capabilities = null;
         let transcodeStats = {};
         let transcodeStatsInterval = null;
-        let adminApiKey = null;
-        let currentView = 'home'; // home | library | project
 
-        const VIDEO = document.getElementById('video');
-        const IDLE_CONTAINER = document.getElementById('idleContainer');
-        const PLAYER_CONTAINER = document.getElementById('playerContainer');
-        const CONTROLS_OVERLAY = document.getElementById('controlsOverlay');
-        const VIDEO_VIEWPORT = document.getElementById('videoViewport');
-        const HOME_VIEW = document.getElementById('homeView');
-        const LIBRARY_VIEW = document.getElementById('libraryView');
-        const PROJECT_VIEW = document.getElementById('projectView');
-
-        // ===== UTILITY FUNCTIONS =====
         function generateUUID() {
             if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
-                try {
-                    return crypto.randomUUID();
-                } catch (e) {
-                    // Fallback
-                }
+                try { return crypto.randomUUID(); } catch (e) {}
             }
             return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
                 const r = Math.random() * 16 | 0;
@@ -280,165 +883,469 @@
             });
         }
 
-        function formatTime(seconds) {
-            if (!seconds || isNaN(seconds)) return '0:00';
-            const h = Math.floor(seconds / 3600);
-            const m = Math.floor((seconds % 3600) / 60);
-            const s = Math.floor(seconds % 60);
-            if (h > 0) {
-                return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-            }
-            return `${m}:${String(s).padStart(2, '0')}`;
-        }
+        sessionId = generateUUID();
 
-        // ===== INITIALIZATION =====
-        function initSession() {
-            console.log('Session ID:', sessionId);
-        }
+        // DOM refs (set after DOMContentLoaded)
+        let VIDEO, IDLE_CONTAINER, PLAYER_CONTAINER, CONTROLS_OVERLAY, VIDEO_VIEWPORT;
 
-        async function loadCapabilities() {
+        const VIDEO_EXTENSIONS = ['.mp4', '.mkv', '.avi', '.mov', '.m4v', '.ts', '.wmv', '.flv', '.webm', '.mpeg', '.mpg'];
+
+        // ============================================================================
+        // AUTH
+        // ============================================================================
+
+        async function checkAuth() {
             try {
-                const resp = await fetch('/api/capabilities');
-                capabilities = await resp.json();
+                const res = await fetch('/api/auth/me');
+                if (res.ok) {
+                    const data = await res.json();
+                    currentUser = data.username;
+                    showApp();
+                } else {
+                    showLoginView();
+                }
             } catch (e) {
-                console.warn('Failed to load capabilities:', e);
-                capabilities = { hardware: {} };
+                showLoginView();
             }
         }
 
-        window.addEventListener('DOMContentLoaded', () => {
-            loadCapabilities();
-            initSession();
-            setupDragDrop();
-            setupKeyboardShortcuts();
-            setupVideoEvents();
-            setupControlsAutoHide();
-            setupBeforeUnload();
-            setupVisibilityChange();
-            setupSearchBox();
-            initAdminKey();
-            showHomeView();
-        });
+        async function handleLogin(event) {
+            event.preventDefault();
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
 
-        // ===== VIEW MANAGEMENT =====
+            try {
+                const res = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password }),
+                });
+
+                if (!res.ok) {
+                    const err = await res.json();
+                    showLoginError(err.detail || 'Login failed');
+                    return;
+                }
+
+                const data = await res.json();
+                currentUser = data.username;
+
+                document.getElementById('username').value = '';
+                document.getElementById('password').value = '';
+                document.getElementById('loginError').classList.remove('show');
+
+                showApp();
+            } catch (e) {
+                showLoginError('Network error: ' + e.message);
+            }
+        }
+
+        async function handleLogout() {
+            await fetch('/api/auth/logout', { method: 'POST' });
+            currentUser = null;
+            showLoginView();
+        }
+
+        function showLoginView() {
+            document.getElementById('loginView').style.display = 'flex';
+            document.getElementById('idleContainer').classList.remove('show');
+            document.getElementById('playerContainer').classList.remove('show');
+            document.getElementById('username').focus();
+        }
+
+        function showApp() {
+            document.getElementById('loginView').style.display = 'none';
+            document.getElementById('idleContainer').classList.add('show');
+            document.getElementById('userDisplay').textContent = `Logged in as: ${currentUser}`;
+            showHomeView();
+        }
+
+        function showLoginError(msg) {
+            const el = document.getElementById('loginError');
+            el.textContent = msg;
+            el.classList.add('show');
+        }
+
+        // ============================================================================
+        // VIEW MANAGEMENT
+        // ============================================================================
+
+        function showView(viewName) {
+            document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+            document.getElementById(viewName + 'View').classList.add('active');
+            currentView = viewName;
+        }
+
         function showHomeView() {
-            currentView = 'home';
+            showView('home');
             currentLibraryId = null;
             currentProjectId = null;
-            HOME_VIEW.style.display = 'block';
-            LIBRARY_VIEW.style.display = 'none';
-            PROJECT_VIEW.style.display = 'none';
-            document.getElementById('fileList').style.display = 'none';
-            renderBreadcrumb('/');
+            clearSelection();
+            updateBreadcrumb('/');
             loadLibrariesAndProjects();
         }
 
         function showLibraryView(libId) {
-            currentView = 'library';
+            showView('library');
             currentLibraryId = libId;
             currentProjectId = null;
-            HOME_VIEW.style.display = 'none';
-            LIBRARY_VIEW.style.display = 'block';
-            PROJECT_VIEW.style.display = 'none';
-            document.getElementById('fileList').style.display = 'none';
-            loadLibraryFiles();
+            clearSelection();
+            enableSelectionMode();
+            updateBreadcrumb('Libraries');
+            loadLibraryFiles(libId);
         }
 
         function showProjectView(projId) {
-            currentView = 'project';
+            showView('project');
             currentProjectId = projId;
             currentLibraryId = null;
-            HOME_VIEW.style.display = 'none';
-            LIBRARY_VIEW.style.display = 'none';
-            PROJECT_VIEW.style.display = 'block';
-            document.getElementById('fileList').style.display = 'none';
-            loadProjectFiles();
+            clearSelection();
+            disableSelectionMode();
+            updateBreadcrumb('Projects');
+            loadProjectFiles(projId);
         }
+
+        function updateBreadcrumb(path) {
+            const bc = document.getElementById('breadcrumb');
+            if (path === '/') {
+                bc.innerHTML = '<a onclick="showHomeView()">Home</a>';
+            } else {
+                bc.innerHTML = `<a onclick="showHomeView()">Home</a> / <span>${path}</span>`;
+            }
+        }
+
+        // ============================================================================
+        // API HELPERS
+        // ============================================================================
+
+        function apiHeaders() {
+            return {
+                'Content-Type': 'application/json',
+            };
+        }
+
+        function showError(msg) {
+            const toast = document.getElementById('toast');
+            toast.textContent = msg;
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 3000);
+        }
+
+        function showSuccess(msg) {
+            const toast = document.getElementById('toast');
+            toast.textContent = msg;
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 3000);
+        }
+
+        function showPanelError(msg) {
+            const panel = document.querySelector('.panel.open');
+            if (panel) {
+                const err = panel.querySelector('.panel-error');
+                if (err) {
+                    err.textContent = msg;
+                    err.classList.add('show');
+                }
+            }
+        }
+
+        function closePanelError() {
+            const err = document.querySelector('.panel.open .panel-error');
+            if (err) {
+                err.classList.remove('show');
+            }
+        }
+
+        // ============================================================================
+        // PANELS
+        // ============================================================================
+
+        function closePanels() {
+            document.querySelectorAll('.panel').forEach(p => p.classList.remove('open'));
+            closePanelError();
+        }
+
+        function openPanel(panelId) {
+            closePanels();
+            closePanelError();
+            document.getElementById(panelId).classList.add('open');
+        }
+
+        function openPanelCreateLibrary() {
+            openPanel('panelCreateLibrary');
+            document.getElementById('libName').focus();
+        }
+
+        function openPanelCreateProject() {
+            openPanel('panelCreateProject');
+            document.getElementById('projName').focus();
+        }
+
+        function openPanelCreateShare() {
+            openPanel('panelCreateShare');
+            document.getElementById('sharePassword').focus();
+        }
+
+        async function openPanelShareLinks() {
+            openPanel('panelShareLinks');
+            await loadShareLinks();
+        }
+
+        function openPanelAddToProject() {
+            openPanel('panelAddToProject');
+            loadProjectsDropdown();
+        }
+
+        // ============================================================================
+        // LIBRARIES
+        // ============================================================================
 
         async function loadLibrariesAndProjects() {
             try {
-                const headers = adminApiKey ? { 'X-Admin-Key': adminApiKey } : {};
-                const libResp = await fetch('/api/libraries', { headers });
-                const projResp = await fetch('/api/projects', { headers });
+                const [libRes, projRes] = await Promise.all([
+                    fetch('/api/libraries', { headers: apiHeaders() }),
+                    fetch('/api/projects', { headers: apiHeaders() }),
+                ]);
 
-                if (!libResp.ok || !projResp.ok) throw new Error('Failed to load');
+                if (!libRes.ok || !projRes.ok) throw new Error('Failed to load');
 
-                const libData = await libResp.json();
-                const projData = await projResp.json();
+                const libData = await libRes.json();
+                const projData = await projRes.json();
 
-                renderLibraryGrid(libData.libraries);
-                renderProjectGrid(projData.projects);
+                renderLibraryGrid(libData.libraries || []);
+                renderProjectGrid(projData.projects || []);
             } catch (e) {
-                console.error('Failed to load libraries/projects:', e);
+                showError('Failed to load libraries and projects: ' + e.message);
             }
         }
 
         function renderLibraryGrid(libraries) {
             const grid = document.getElementById('libraryGrid');
             grid.innerHTML = '';
-            if (libraries.length === 0) {
-                grid.innerHTML = '<div class="col-span-full text-gray-500 text-sm">No libraries yet</div>';
-                return;
-            }
-            for (const lib of libraries) {
+
+            libraries.forEach(lib => {
                 const card = document.createElement('div');
-                card.className = 'cursor-pointer rounded-lg border border-gray-800 bg-gray-900 hover:border-accent hover:bg-gray-800 transition-all p-4';
+                card.className = 'card';
                 card.innerHTML = `
-                    <div class="text-3xl mb-2">📁</div>
-                    <h3 class="font-semibold text-gray-100 text-sm mb-1">${lib.name}</h3>
-                    <p class="text-xs text-gray-500">${lib.root_path}</p>
+                    <div style="position: relative; height: 120px; background: #1a1a1a; border-radius: 4px; margin-bottom: 12px; display: flex; align-items: center; justify-content: center; color: #666; font-size: 12px;">
+                        📁 Library
+                    </div>
+                    <div class="card-title">${escapeHtml(lib.name)}</div>
+                    <div class="card-meta">
+                        <div>Path: ${escapeHtml(lib.root_path)}</div>
+                        <div>Created: ${new Date(lib.created_at).toLocaleDateString()}</div>
+                    </div>
+                    <div class="card-actions">
+                        <button class="icon-btn" onclick="event.stopPropagation(); showLibraryView('${lib.id}')">→</button>
+                        <button class="icon-btn" onclick="event.stopPropagation(); startDeleteLibrary('${lib.id}', this)">×</button>
+                    </div>
                 `;
                 card.onclick = () => showLibraryView(lib.id);
                 grid.appendChild(card);
+            });
+
+            if (libraries.length === 0) {
+                grid.innerHTML = '<div style="grid-column: 1/-1; color: #666; padding: 20px;">No libraries yet. Create one to get started.</div>';
             }
         }
+
+        async function submitCreateLibrary() {
+            const name = document.getElementById('libName').value.trim();
+            const path = document.getElementById('libPath').value.trim();
+
+            if (!name || !path) {
+                showPanelError('Please fill in all fields');
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/libraries', {
+                    method: 'POST',
+                    headers: apiHeaders(),
+                    body: JSON.stringify({ name, root_path: path }),
+                });
+
+                if (!res.ok) {
+                    const err = await res.json();
+                    showPanelError(err.detail || 'Failed to create library');
+                    return;
+                }
+
+                document.getElementById('libName').value = '';
+                document.getElementById('libPath').value = '';
+                closePanels();
+                showSuccess('Library created');
+                loadLibrariesAndProjects();
+            } catch (e) {
+                showPanelError('Error: ' + e.message);
+            }
+        }
+
+        async function startDeleteLibrary(libId, btn) {
+            const card = btn.closest('.card');
+            const nameEl = card.querySelector('.card-title');
+            const name = nameEl.textContent;
+
+            const overlay = document.createElement('div');
+            overlay.className = 'confirm-overlay show';
+            overlay.innerHTML = `
+                <div class="confirm-text">Delete "${escapeHtml(name)}"?</div>
+                <div class="confirm-buttons">
+                    <button class="confirm-btn-yes" onclick="deleteLibrary('${libId}')">Delete</button>
+                    <button class="confirm-btn-no" onclick="this.closest('.confirm-overlay').remove()">Cancel</button>
+                </div>
+            `;
+            card.style.position = 'relative';
+            card.appendChild(overlay);
+        }
+
+        async function deleteLibrary(libId) {
+            try {
+                const res = await fetch(`/api/libraries/${libId}`, {
+                    method: 'DELETE',
+                    headers: apiHeaders(),
+                });
+
+                if (!res.ok) throw new Error('Delete failed');
+
+                showSuccess('Library deleted');
+                loadLibrariesAndProjects();
+            } catch (e) {
+                showError('Failed to delete library: ' + e.message);
+            }
+        }
+
+        // ============================================================================
+        // PROJECTS
+        // ============================================================================
 
         function renderProjectGrid(projects) {
             const grid = document.getElementById('projectGrid');
             grid.innerHTML = '';
-            if (projects.length === 0) {
-                grid.innerHTML = '<div class="col-span-full text-gray-500 text-sm">No projects yet</div>';
-                return;
-            }
-            for (const proj of projects) {
+
+            projects.forEach(proj => {
                 const card = document.createElement('div');
-                card.className = 'cursor-pointer rounded-lg border border-gray-800 bg-gray-900 hover:border-accent hover:bg-gray-800 transition-all p-4';
+                card.className = 'card';
                 card.innerHTML = `
-                    <div class="text-3xl mb-2">📽️</div>
-                    <h3 class="font-semibold text-gray-100 text-sm mb-3">${proj.name}</h3>
-                    <div class="flex gap-2">
-                        <button onclick="event.stopPropagation(); showProjectView('${proj.id}')"
-                            class="flex-1 text-xs px-2 py-1 bg-accent hover:bg-amber-500 text-gray-950 rounded font-semibold transition-colors">
-                            Browse
-                        </button>
-                        <button onclick="event.stopPropagation(); showCreateShareDialog()"
-                            class="flex-1 text-xs px-2 py-1 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded text-gray-100 transition-colors">
-                            Share
-                        </button>
+                    <div style="position: relative; height: 120px; background: #1a1a1a; border-radius: 4px; margin-bottom: 12px; display: flex; align-items: center; justify-content: center; color: #666; font-size: 12px;">
+                        🎬 Project
+                    </div>
+                    <div class="card-title">${escapeHtml(proj.name)}</div>
+                    <div class="card-meta">
+                        <div>Created: ${new Date(proj.created_at).toLocaleDateString()}</div>
+                    </div>
+                    <div class="card-actions">
+                        <button class="icon-btn" onclick="event.stopPropagation(); showProjectView('${proj.id}')">→</button>
+                        <button class="icon-btn" onclick="event.stopPropagation(); startDeleteProject2('${proj.id}', this)">×</button>
                     </div>
                 `;
+                card.onclick = () => showProjectView(proj.id);
                 grid.appendChild(card);
+            });
+
+            if (projects.length === 0) {
+                grid.innerHTML = '<div style="grid-column: 1/-1; color: #666; padding: 20px;">No projects yet. Create one to get started.</div>';
             }
         }
 
-        async function loadLibraryFiles() {
+        async function submitCreateProject() {
+            const name = document.getElementById('projName').value.trim();
+
+            if (!name) {
+                showPanelError('Please enter a project name');
+                return;
+            }
+
             try {
-                const headers = adminApiKey ? { 'X-Admin-Key': adminApiKey } : {};
+                const res = await fetch('/api/projects', {
+                    method: 'POST',
+                    headers: apiHeaders(),
+                    body: JSON.stringify({ name }),
+                });
 
-                // Get library details to find root_path
-                const libResp = await fetch(`/api/libraries`, { headers });
-                const libData = await libResp.json();
-                const library = libData.libraries.find(lib => lib.id === currentLibraryId);
+                if (!res.ok) {
+                    const err = await res.json();
+                    showPanelError(err.detail || 'Failed to create project');
+                    return;
+                }
 
-                if (!library) throw new Error('Library not found');
-
-                const resp = await fetch(`/api/libraries/${currentLibraryId}/browse?path=${encodeURIComponent(library.root_path)}`, { headers });
-                if (!resp.ok) throw new Error('Failed to load library files');
-
-                const data = await resp.json();
-                renderLibraryFileGrid(data.entries || []);
+                document.getElementById('projName').value = '';
+                closePanels();
+                showSuccess('Project created');
+                loadLibrariesAndProjects();
             } catch (e) {
-                console.error('Failed to load library files:', e);
+                showPanelError('Error: ' + e.message);
+            }
+        }
+
+        function startDeleteProject() {
+            if (!currentProjectId) return;
+            const card = document.querySelector('[data-project-id="' + currentProjectId + '"]');
+            if (card) {
+                startDeleteProject2(currentProjectId, card);
+            } else {
+                showError('Project not found');
+            }
+        }
+
+        async function startDeleteProject2(projId, btn) {
+            const card = btn.closest('.card');
+            if (!card) return;
+            const nameEl = card.querySelector('.card-title');
+            const name = nameEl ? nameEl.textContent : 'this project';
+
+            const overlay = document.createElement('div');
+            overlay.className = 'confirm-overlay show';
+            overlay.innerHTML = `
+                <div class="confirm-text">Delete "${escapeHtml(name)}"?</div>
+                <div class="confirm-buttons">
+                    <button class="confirm-btn-yes" onclick="deleteProject('${projId}')">Delete</button>
+                    <button class="confirm-btn-no" onclick="this.closest('.confirm-overlay').remove()">Cancel</button>
+                </div>
+            `;
+            card.style.position = 'relative';
+            card.appendChild(overlay);
+        }
+
+        async function deleteProject(projId) {
+            try {
+                const res = await fetch(`/api/projects/${projId}`, {
+                    method: 'DELETE',
+                    headers: apiHeaders(),
+                });
+
+                if (!res.ok) throw new Error('Delete failed');
+
+                showSuccess('Project deleted');
+                if (currentProjectId === projId) {
+                    showHomeView();
+                } else {
+                    loadLibrariesAndProjects();
+                }
+            } catch (e) {
+                showError('Failed to delete project: ' + e.message);
+            }
+        }
+
+        // ============================================================================
+        // LIBRARY FILES
+        // ============================================================================
+
+        async function loadLibraryFiles(libId) {
+            try {
+                const res = await fetch(`/api/libraries/${libId}`, { headers: apiHeaders() });
+                if (!res.ok) throw new Error('Failed to load library');
+
+                const lib = await res.json();
+
+                const encodedPath = encodeURIComponent(lib.root_path);
+                const browseRes = await fetch(`/api/libraries/${libId}/browse?path=${encodedPath}`, { headers: apiHeaders() });
+                if (!browseRes.ok) throw new Error('Failed to browse');
+
+                const browse = await browseRes.json();
+                renderLibraryFileGrid(browse.entries || []);
+            } catch (e) {
+                showError('Failed to load library files: ' + e.message);
             }
         }
 
@@ -446,434 +1353,360 @@
             const grid = document.getElementById('libraryFileList');
             grid.innerHTML = '';
 
-            const videos = entries.filter(e => e.is_video);
-            if (videos.length === 0) {
-                grid.innerHTML = '<div class="col-span-full text-gray-500 text-sm">No video files in this library</div>';
-                return;
-            }
-
-            for (const file of videos) {
-                const posterUrl = `/api/poster?path=${encodeURIComponent(file.path)}`;
-
-                const card = document.createElement('div');
-                card.className = 'group cursor-pointer rounded-lg border border-gray-800 bg-gray-900 hover:border-accent overflow-hidden transition-all';
-                card.innerHTML = `
-                    <div class="aspect-video relative bg-gray-800">
-                        <img src="${posterUrl}" alt="${file.name}" loading="lazy"
-                             class="absolute inset-0 w-full h-full object-cover"
-                             onerror="this.style.display='none'">
-                        <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                            <span class="text-4xl drop-shadow">▶</span>
+            entries.forEach(entry => {
+                if (entry.is_dir) {
+                    const card = document.createElement('div');
+                    card.className = 'card selectable';
+                    card.innerHTML = `
+                        <input type="checkbox" class="card-check" onchange="updateSelection(this)">
+                        <div style="height: 120px; background: #1a1a1a; border-radius: 4px; margin-bottom: 12px; display: flex; align-items: center; justify-content: center; color: #666;">
+                            📁
                         </div>
-                    </div>
-                    <div class="px-3 py-3">
-                        <p class="text-sm text-gray-200 truncate" title="${file.name}">${file.name}</p>
-                    </div>
-                `;
-                card.onclick = async () => {
-                    currentFilePath = file.path;
-                    await probeAndPopulateQuality();
-                    startPlayback();
-                };
-                grid.appendChild(card);
-            }
+                        <div class="card-title">${escapeHtml(entry.name)}</div>
+                        <div class="card-meta">Folder</div>
+                    `;
+                    card.dataset.id = entry.path;
+                    card.dataset.type = 'folder';
+                    grid.appendChild(card);
+                } else if (entry.is_video) {
+                    const card = document.createElement('div');
+                    card.className = 'card selectable';
+                    card.innerHTML = `
+                        <input type="checkbox" class="card-check" onchange="updateSelection(this)">
+                        <img src="/api/thumb?path=${encodeURIComponent(entry.path)}&w=200" class="card-image" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22200%22 height=%22120%22><rect fill=%22%231a1a1a%22 width=%22200%22 height=%22120%22/></svg>'">
+                        <div class="card-title">${escapeHtml(entry.name)}</div>
+                        <div class="card-meta">Video file</div>
+                    `;
+                    card.dataset.id = entry.path;
+                    card.dataset.type = 'file';
+                    card.onclick = (e) => {
+                        if (e.target.tagName !== 'INPUT') { currentFilePath = entry.path; probeAndPopulateQuality().then(() => startPlayback()); }
+                    };
+                    grid.appendChild(card);
+                }
+            });
         }
 
-        async function loadProjectFiles() {
+        // ============================================================================
+        // PROJECT FILES
+        // ============================================================================
+
+        async function loadProjectFiles(projId) {
             try {
-                const headers = adminApiKey ? { 'X-Admin-Key': adminApiKey } : {};
-                const resp = await fetch(`/api/projects/${currentProjectId}`, { headers });
-                if (!resp.ok) throw new Error('Failed to load project');
+                const res = await fetch(`/api/projects/${projId}`, { headers: apiHeaders() });
+                if (!res.ok) throw new Error('Failed to load project');
 
-                const project = await resp.json();
-                renderProjectFileGrid(project.files || []);
+                const data = await res.json();
+                const files = data.files || [];
+
+                const grid = document.getElementById('projectFileList');
+                grid.innerHTML = '';
+
+                files.forEach(file => {
+                    const card = document.createElement('div');
+                    card.className = 'card';
+                    card.style.position = 'relative';
+                    card.dataset.fileId = file.id;
+                    card.dataset.filePath = file.file_path;
+
+                    const posterUrl = `/api/thumb?path=${encodeURIComponent(file.file_path)}&w=200`;
+                    const isScanning = file.scan_status === 'pending';
+
+                    card.innerHTML = `
+                        <img src="${posterUrl}" class="card-image" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22200%22 height=%22120%22><rect fill=%22%231a1a1a%22 width=%22200%22 height=%22120%22/></svg>'">
+                        <div class="card-title">${escapeHtml(file.file_path.split('/').pop())}</div>
+                        <div class="card-meta">
+                            ${!isScanning ? `
+                                <div>${file.duration_seconds ? Math.round(file.duration_seconds / 60) + ' min' : '?'}</div>
+                                <div>${file.width}×${file.height || '?'}</div>
+                                <div>${file.bitrate ? (file.bitrate / 1000000).toFixed(1) + ' Mbps' : '?'}</div>
+                            ` : `
+                                <div><span class="spinner"></span> scanning...</div>
+                            `}
+                        </div>
+                        <div class="card-actions">
+                            <button class="icon-btn" onclick="event.stopPropagation(); startPlayback('${file.file_path.replace(/'/g, "\\'")}')">▶</button>
+                            <button class="icon-btn" onclick="event.stopPropagation(); startRemoveFile('${file.id}', '${file.file_path.replace(/'/g, "\\'")}', this)">🗑</button>
+                        </div>
+                    `;
+
+                    card.onclick = () => { currentFilePath = file.file_path; probeAndPopulateQuality().then(() => startPlayback()); };
+                    grid.appendChild(card);
+                });
+
+                if (files.length === 0) {
+                    grid.innerHTML = '<div style="grid-column: 1/-1; color: #666; padding: 20px;">No files in this project yet.</div>';
+                }
             } catch (e) {
-                console.error('Failed to load project files:', e);
+                showError('Failed to load project files: ' + e.message);
             }
         }
 
-        function renderProjectFileGrid(files) {
-            const grid = document.getElementById('projectFileList');
-            grid.innerHTML = '';
-            if (files.length === 0) {
-                grid.innerHTML = '<div class="col-span-full text-gray-500 text-sm">No files in this project</div>';
-                return;
-            }
-            for (const file of files) {
-                const posterUrl = `/api/poster?path=${encodeURIComponent(file.file_path)}`;
-                const durationStr = formatTime(file.duration_seconds || 0);
-                const resLabel = file.height >= 2160 ? '4K'
-                               : file.height >= 1440 ? '1440p'
-                               : file.height >= 1080 ? '1080p'
-                               : file.height >= 720 ? '720p'
-                               : `${file.height}p`;
-                const mbps = file.bitrate ? (file.bitrate / 1_000_000).toFixed(1) : '—';
-                const loadingSpinner = file.scan_status === 'pending'
-                    ? '<div class="absolute inset-0 flex items-center justify-center bg-black/50"><span class="animate-spin text-2xl">↻</span></div>'
-                    : '';
+        async function startRemoveFile(fileId, filePath, btn) {
+            const card = btn.closest('.card');
+            const name = filePath.split('/').pop();
 
-                const card = document.createElement('div');
-                card.className = 'group cursor-pointer rounded-lg border border-gray-800 bg-gray-900 hover:border-accent overflow-hidden transition-all';
-                card.dataset.name = file.name;
-                card.innerHTML = `
-                    <div class="aspect-video relative bg-gray-800">
-                        <img src="${posterUrl}" alt="${file.name}" loading="lazy"
-                             class="absolute inset-0 w-full h-full object-cover"
-                             onerror="this.style.display='none'">
-                        <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                            <span class="text-4xl drop-shadow">▶</span>
-                        </div>
-                        ${loadingSpinner}
-                    </div>
-                    <div class="px-3 py-3">
-                        <p class="text-sm text-gray-200 truncate mb-1" title="${file.name}">${file.name}</p>
-                        <div class="flex justify-between text-xs text-gray-500">
-                            <span>${durationStr}</span>
-                            <span>${resLabel} · ${mbps}Mbps</span>
-                        </div>
-                    </div>
-                `;
-                card.onclick = async () => {
-                    if (file.scan_status === 'pending') return;
-                    currentFilePath = file.file_path;
-                    await probeAndPopulateQuality();
-                    startPlayback();
-                };
-                grid.appendChild(card);
+            const overlay = document.createElement('div');
+            overlay.className = 'confirm-overlay show';
+            overlay.innerHTML = `
+                <div class="confirm-text">Remove "${escapeHtml(name)}"?</div>
+                <div class="confirm-buttons">
+                    <button class="confirm-btn-yes" onclick="removeFile('${fileId}', '${filePath.replace(/'/g, "\\'")}')">Remove</button>
+                    <button class="confirm-btn-no" onclick="this.closest('.confirm-overlay').remove()">Cancel</button>
+                </div>
+            `;
+            card.appendChild(overlay);
+        }
+
+        async function removeFile(fileId, filePath) {
+            try {
+                const res = await fetch(`/api/projects/${currentProjectId}/files`, {
+                    method: 'DELETE',
+                    headers: apiHeaders(),
+                    body: JSON.stringify({ paths: [filePath] }),
+                });
+
+                if (!res.ok) throw new Error('Failed to remove');
+
+                showSuccess('File removed');
+                loadProjectFiles(currentProjectId);
+            } catch (e) {
+                showError('Failed to remove file: ' + e.message);
             }
         }
 
-        function initAdminKey() {
-            const stored = localStorage.getItem('admin_api_key');
-            if (stored) {
-                adminApiKey = stored;
+        // ============================================================================
+        // SELECTION & ADD TO PROJECT
+        // ============================================================================
+
+        function enableSelectionMode() {
+            document.querySelectorAll('.card.selectable').forEach(c => c.style.cursor = 'default');
+        }
+
+        function disableSelectionMode() {
+            document.querySelectorAll('.card.selectable').forEach(c => c.style.cursor = 'pointer');
+        }
+
+        function updateSelection(checkbox) {
+            const card = checkbox.closest('.card');
+            const id = card.dataset.id;
+            const type = card.dataset.type;
+
+            if (checkbox.checked) {
+                selectedItems.set(id, { type, card });
             } else {
-                const key = prompt('Enter admin API key (from .env ADMIN_API_KEY):');
-                if (key) {
-                    localStorage.setItem('admin_api_key', key);
-                    adminApiKey = key;
-                }
+                selectedItems.delete(id);
+            }
+
+            updateSelectionUI();
+        }
+
+        function updateSelectionUI() {
+            const count = selectedItems.size;
+            const toolbar = document.getElementById('selectionToolbar');
+
+            if (count > 0) {
+                toolbar.classList.add('show');
+                document.getElementById('selectionCount').textContent = `${count} item${count !== 1 ? 's' : ''} selected`;
+            } else {
+                toolbar.classList.remove('show');
             }
         }
 
-        function showCreateLibraryDialog() {
-            const name = prompt('Library name:');
-            if (!name) return;
-            const path = prompt('Root path (e.g., /media/footage):');
-            if (!path) return;
-            createLibrary(name, path);
+        function clearSelection() {
+            selectedItems.clear();
+            document.querySelectorAll('.card-check:checked').forEach(c => c.checked = false);
+            updateSelectionUI();
         }
 
-        function showCreateProjectDialog() {
-            const name = prompt('Project name:');
-            if (!name) return;
-            createProject(name);
+        async function addEntireLibraryToProject() {
+            if (!currentLibraryId) return;
+            openPanelAddToProject();
         }
 
-        function showCreateShareDialog() {
-            if (!currentProjectId) {
-                alert('No project selected');
+        async function submitAddToProject() {
+            const projId = document.getElementById('targetProject').value;
+            if (!projId) {
+                showPanelError('Please select a project');
                 return;
             }
-            const password = prompt('Set share password:');
-            if (!password) return;
-            createShare(password);
-        }
 
-        function showShareLinksDialog() {
-            if (!currentProjectId) {
-                alert('No project selected');
-                return;
-            }
-            // TODO: Show modal with active shares and revoke buttons
-            alert('Share links dialog not yet implemented');
-        }
-
-        async function createLibrary(name, path) {
             try {
-                const headers = {
-                    'Content-Type': 'application/json',
-                    ...(adminApiKey && { 'X-Admin-Key': adminApiKey })
-                };
-                const resp = await fetch('/api/libraries', {
-                    method: 'POST',
-                    headers,
-                    body: JSON.stringify({ name, root_path: path })
+                const files = [];
+                const folders = [];
+
+                selectedItems.forEach((item, id) => {
+                    if (item.type === 'file') {
+                        files.push(id);
+                    } else if (item.type === 'folder') {
+                        folders.push(id);
+                    }
                 });
-                if (!resp.ok) throw new Error('Failed to create library');
-                showHomeView();
-            } catch (e) {
-                alert('Error: ' + e.message);
-            }
-        }
 
-        async function createProject(name) {
-            try {
-                const headers = {
-                    'Content-Type': 'application/json',
-                    ...(adminApiKey && { 'X-Admin-Key': adminApiKey })
-                };
-                const resp = await fetch('/api/projects', {
-                    method: 'POST',
-                    headers,
-                    body: JSON.stringify({ name })
-                });
-                if (!resp.ok) throw new Error('Failed to create project');
-                showHomeView();
-            } catch (e) {
-                alert('Error: ' + e.message);
-            }
-        }
+                let added = 0;
 
-        async function createShare(password) {
-            try {
-                const headers = {
-                    'Content-Type': 'application/json',
-                    ...(adminApiKey && { 'X-Admin-Key': adminApiKey })
-                };
-                const resp = await fetch(`/api/projects/${currentProjectId}/share`, {
-                    method: 'POST',
-                    headers,
-                    body: JSON.stringify({ password })
-                });
-                if (!resp.ok) throw new Error('Failed to create share');
-                const data = await resp.json();
-                const shareUrl = `${window.location.origin}/share/${data.share_id}`;
-                alert(`Share created!\n\nURL: ${shareUrl}\nPassword: ${data.password}`);
-            } catch (e) {
-                alert('Error: ' + e.message);
-            }
-        }
-
-        // ===== DRAG & DROP =====
-        function setupDragDrop() {
-            const dragZone = IDLE_CONTAINER;
-
-            dragZone.addEventListener('dragover', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                dragZone.classList.add('ring-2', 'ring-inset', 'ring-accent');
-            });
-
-            dragZone.addEventListener('dragleave', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                dragZone.classList.remove('ring-2', 'ring-inset', 'ring-accent');
-            });
-
-            dragZone.addEventListener('drop', async (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                dragZone.classList.remove('ring-2', 'ring-inset', 'ring-accent');
-
-                const files = e.dataTransfer.files;
+                // Add individual files
                 if (files.length > 0) {
-                    const file = files[0];
-                    if (isVideoFile(file.name)) {
-                        console.log('Dropped video file:', file.name);
+                    const res = await fetch(`/api/projects/${projId}/files`, {
+                        method: 'POST',
+                        headers: apiHeaders(),
+                        body: JSON.stringify({ paths: files }),
+                    });
+
+                    if (res.ok) {
+                        const result = await res.json();
+                        added += result.added;
                     }
                 }
-            });
-        }
 
-        function isVideoFile(name) {
-            const videoExts = ['mp4', 'mkv', 'webm', 'mov', 'avi', 'm3u8', 'ts'];
-            const ext = name.split('.').pop().toLowerCase();
-            return videoExts.includes(ext);
-        }
+                // Add folders
+                for (const folderPath of folders) {
+                    const res = await fetch(`/api/projects/${projId}/files/folder`, {
+                        method: 'POST',
+                        headers: apiHeaders(),
+                        body: JSON.stringify({ folder_path: folderPath }),
+                    });
 
-        // ===== SEARCH BOX =====
-        function setupSearchBox() {
-            document.getElementById('searchBox').addEventListener('input', (e) => {
-                filterFileList(e.target.value.toLowerCase());
-            });
-        }
-
-        function filterFileList(query) {
-            const cards = document.querySelectorAll('#fileList [data-name]');
-            cards.forEach(card => {
-                const name = card.dataset.name.toLowerCase();
-                const match = query.length === 0 || name.includes(query);
-                card.classList.toggle('hidden', !match);
-            });
-        }
-
-        // ===== BREADCRUMB =====
-        function renderBreadcrumb(fullPath) {
-            const crumb = document.getElementById('breadcrumb');
-            crumb.innerHTML = '';
-            const parts = fullPath.split('/').filter(Boolean);
-            const paths = parts.map((_, i) => '/' + parts.slice(0, i + 1).join('/'));
-
-            // Home link
-            const homeBtn = document.createElement('button');
-            homeBtn.textContent = 'Home';
-            homeBtn.className = 'hover:text-accent transition-colors bg-transparent border-0 text-inherit cursor-pointer font-semibold';
-            homeBtn.onclick = (e) => { e.preventDefault(); showHomeView(); };
-            crumb.appendChild(homeBtn);
-
-            if (currentView === 'library' && currentLibraryId) {
-                const sep = document.createElement('span');
-                sep.textContent = ' / ';
-                sep.className = 'text-gray-700';
-                crumb.appendChild(sep);
-
-                const libBtn = document.createElement('button');
-                libBtn.textContent = 'Library';
-                libBtn.className = 'hover:text-accent transition-colors bg-transparent border-0 text-inherit cursor-pointer';
-                libBtn.onclick = (e) => { e.preventDefault(); showHomeView(); };
-                crumb.appendChild(libBtn);
-            }
-
-            if (currentView === 'project' && currentProjectId) {
-                const sep = document.createElement('span');
-                sep.textContent = ' / ';
-                sep.className = 'text-gray-700';
-                crumb.appendChild(sep);
-
-                const projBtn = document.createElement('button');
-                projBtn.textContent = 'Project';
-                projBtn.className = 'hover:text-accent transition-colors bg-transparent border-0 text-inherit cursor-pointer';
-                projBtn.onclick = (e) => { e.preventDefault(); showProjectView(currentProjectId); };
-                crumb.appendChild(projBtn);
-            }
-
-            paths.forEach((p, i) => {
-                const sep = document.createElement('span');
-                sep.textContent = ' / ';
-                sep.className = 'text-gray-700';
-                crumb.appendChild(sep);
-
-                const btn = document.createElement('button');
-                btn.textContent = parts[i];
-                btn.className = i === paths.length - 1
-                    ? 'text-gray-200 font-medium cursor-default bg-transparent border-0 text-inherit'
-                    : 'hover:text-accent transition-colors bg-transparent border-0 text-inherit cursor-pointer';
-                if (i < paths.length - 1) {
-                    btn.onclick = (e) => { e.preventDefault(); loadBrowserDirectory(p); };
+                    if (res.ok) {
+                        const result = await res.json();
+                        added += result.added;
+                    }
                 }
-                crumb.appendChild(btn);
-            });
-        }
 
-        // ===== QUALITY MANAGEMENT =====
-        async function changeQuality(newQuality) {
-            closeQualityPopover();
-            if (newQuality === currentQuality) return;
-            currentQuality = newQuality;
-            updateQualityLabel();
-            if (!isPlaying) return;
+                // Add entire library
+                if (currentLibraryId && selectedItems.size === 0) {
+                    const res = await fetch(`/api/projects/${projId}/files/library`, {
+                        method: 'POST',
+                        headers: apiHeaders(),
+                        body: JSON.stringify({ library_id: currentLibraryId }),
+                    });
 
-            const seekTime = VIDEO.currentTime;
+                    if (res.ok) {
+                        const result = await res.json();
+                        added += result.added;
+                    }
+                }
 
-            // Kill current HLS and FFmpeg
-            if (hls) { hls.destroy(); hls = null; }
-            try { await fetch(`/api/stop/${sessionId}`, { method: 'POST' }); } catch(e) {}
-
-            // Restart from same position with new quality
-            await startPlayback(seekTime);
-        }
-
-        // ===== FILE BROWSER (legacy, for library browsing) =====
-        async function openFileBrowser() {
-            try {
-                // Fetch media root from capabilities
-                const capsResp = await fetch('/api/capabilities');
-                const caps = await capsResp.json();
-                const mediaRoot = caps.media_root || '/';
-
-                currentBrowserPath = mediaRoot;
-                await loadBrowserDirectory(mediaRoot);
+                showSuccess(`Added ${added} files to project`);
+                closePanels();
+                clearSelection();
             } catch (e) {
-                console.error('Failed to open file browser:', e);
-                currentBrowserPath = '/';
-                loadBrowserDirectory('/');
+                showPanelError('Error: ' + e.message);
             }
         }
 
-        function closeBrowser() {
-            // No-op now (browser is always visible in home view)
+        async function loadProjectsDropdown() {
+            try {
+                const res = await fetch('/api/projects', { headers: apiHeaders() });
+                if (!res.ok) return;
+
+                const data = await res.json();
+                const select = document.getElementById('targetProject');
+
+                select.innerHTML = '<option value="">-- Choose project --</option>';
+                (data.projects || []).forEach(proj => {
+                    const opt = document.createElement('option');
+                    opt.value = proj.id;
+                    opt.textContent = proj.name;
+                    select.appendChild(opt);
+                });
+            } catch (e) {}
         }
 
-        async function loadBrowserDirectory(path) {
-            const fileList = document.getElementById('fileList');
-            fileList.innerHTML = `
-                <div class="col-span-full flex items-center justify-center py-20 text-gray-600">
-                    <span class="animate-spin text-2xl mr-3">↻</span> Loading…
-                </div>`;
+        // ============================================================================
+        // SHARES
+        // ============================================================================
+
+        async function submitCreateShare() {
+            if (!currentProjectId) return;
+
+            const password = document.getElementById('sharePassword').value.trim();
+            const expiry = document.getElementById('shareExpiry').value;
+
+            if (!password) {
+                showPanelError('Please enter a password');
+                return;
+            }
 
             try {
-                document.getElementById('searchBox').value = '';  // Clear search on nav
+                const body = { password, expires_in_days: expiry ? parseInt(expiry) : null };
 
-                const resp = await fetch(`/api/browse?path=${encodeURIComponent(path)}`);
-                if (!resp.ok) throw new Error('Browse failed');
-                const data = await resp.json();
-                currentBrowserPath = data.path;
+                const res = await fetch(`/api/share/${currentProjectId}/share`, {
+                    method: 'POST',
+                    headers: apiHeaders(),
+                    body: JSON.stringify(body),
+                });
 
-                renderBreadcrumb(data.path);
+                if (!res.ok) {
+                    const err = await res.json();
+                    throw new Error(err.detail || 'Failed to create share');
+                }
 
-                fileList.innerHTML = '';
+                const data = await res.json();
 
-                // Parent link
-                if (data.parent) {
+                showSuccess(`Share created! Share ID: ${data.share_id}`);
+                document.getElementById('sharePassword').value = '';
+                document.getElementById('shareExpiry').value = '';
+                closePanels();
+
+                // Show share links panel
+                openPanelShareLinks();
+            } catch (e) {
+                showPanelError('Error: ' + e.message);
+            }
+        }
+
+        async function loadShareLinks() {
+            if (!currentProjectId) return;
+
+            try {
+                const res = await fetch(`/api/share/${currentProjectId}/shares`, { headers: apiHeaders() });
+                if (!res.ok) throw new Error('Failed to load shares');
+
+                const data = await res.json();
+                const list = document.getElementById('shareLinksList');
+                list.innerHTML = '';
+
+                (data.shares || []).forEach(share => {
                     const item = document.createElement('div');
-                    item.className = 'group cursor-pointer rounded-lg border border-gray-800 bg-gray-900 hover:border-accent hover:bg-gray-800 transition-all p-4 flex flex-col items-center gap-3';
-                    item.dataset.name = '..';
-                    item.innerHTML = '<div class="text-4xl">⬆</div><span class="text-sm text-gray-300 text-center truncate w-full">..</span>';
-                    item.onclick = () => loadBrowserDirectory(data.parent);
-                    fileList.appendChild(item);
-                }
+                    item.style.cssText = 'padding: 12px; background: #1a1a1a; border-radius: 4px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;';
+                    item.innerHTML = `
+                        <div style="font-size: 12px; color: #999;">
+                            <div>Share ID: ${share.id.substring(0, 8)}...</div>
+                            ${share.expires_at ? `<div>Expires: ${new Date(share.expires_at).toLocaleDateString()}</div>` : '<div>Never expires</div>'}
+                        </div>
+                        <button class="btn btn-danger btn-sm" onclick="revokeShare('${share.id}')">Revoke</button>
+                    `;
+                    list.appendChild(item);
+                });
 
-                // Entries
-                for (const entry of data.entries) {
-                    const isDir = entry.is_dir;
-                    const isVideo = entry.is_video;
-
-                    if (isDir) {
-                        // Directory card
-                        const item = document.createElement('div');
-                        item.className = 'group cursor-pointer rounded-lg border border-gray-800 bg-gray-900 hover:border-accent hover:bg-gray-800 transition-all p-4 flex flex-col items-center gap-3';
-                        item.dataset.name = entry.name;
-                        item.innerHTML = `
-                            <div class="text-4xl">📁</div>
-                            <span class="text-sm text-gray-300 text-center truncate w-full">${entry.name}</span>
-                        `;
-                        item.onclick = () => loadBrowserDirectory(entry.path);
-                        fileList.appendChild(item);
-                    } else if (isVideo) {
-                        // Video card (16:9 thumbnail)
-                        const posterUrl = `/api/poster?path=${encodeURIComponent(entry.path)}`;
-                        const item = document.createElement('div');
-                        item.className = 'group cursor-pointer rounded-lg border border-gray-800 bg-gray-900 hover:border-accent overflow-hidden transition-all';
-                        item.dataset.name = entry.name;
-                        item.innerHTML = `
-                            <div class="aspect-video relative bg-gray-800">
-                                <img src="${posterUrl}" alt="${entry.name}" loading="lazy"
-                                     class="absolute inset-0 w-full h-full object-cover"
-                                     onerror="this.style.display='none'">
-                                <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                    <span class="text-4xl drop-shadow">▶</span>
-                                </div>
-                            </div>
-                            <div class="px-3 py-2">
-                                <p class="text-sm text-gray-200 truncate" title="${entry.name}">${entry.name}</p>
-                            </div>
-                        `;
-                        item.onclick = async () => {
-                            currentFilePath = entry.path;
-                            await probeAndPopulateQuality();
-                            startPlayback();
-                        };
-                        fileList.appendChild(item);
-                    }
+                if ((data.shares || []).length === 0) {
+                    list.innerHTML = '<div style="color: #666; font-size: 13px;">No active shares</div>';
                 }
             } catch (e) {
-                fileList.innerHTML = `
-                    <div class="col-span-full text-center py-20 text-red-400 text-sm">
-                        Error: ${e.message}
-                    </div>`;
+                showError('Failed to load shares: ' + e.message);
             }
         }
+
+        async function revokeShare(shareId) {
+            try {
+                const res = await fetch(`/api/share/${shareId}`, {
+                    method: 'DELETE',
+                    headers: apiHeaders(),
+                });
+
+                if (!res.ok) throw new Error('Failed to revoke');
+
+                showSuccess('Share revoked');
+                loadShareLinks();
+            } catch (e) {
+                showError('Error: ' + e.message);
+            }
+        }
+
+        // ============================================================================
+        // PLAYBACK
+        // ============================================================================
 
         async function probeAndPopulateQuality() {
             try {
@@ -881,16 +1714,13 @@
                 if (!resp.ok) throw new Error('Probe failed');
                 probeData = await resp.json();
 
-                // Fetch available bitrate tiers from server
-                const capsResp = await fetch(`/api/capabilities`);
+                const capsResp = await fetch('/api/capabilities');
                 const caps = await capsResp.json();
                 const tiers = caps.bitrate_tiers || [];
 
-                // Populate quality dropdown
                 const popover = document.getElementById('qualityPopover');
                 popover.innerHTML = '';
 
-                // Source option with bitrate label
                 const mbps = (probeData.bitrate / 1_000_000).toFixed(1);
                 const resLabel = probeData.height >= 2160 ? '4K'
                                : probeData.height >= 1440 ? '1440p'
@@ -900,12 +1730,12 @@
                 sourceResLabel = resLabel;
 
                 let opt = document.createElement('div');
-                opt.className = 'px-3 py-2.5 cursor-pointer text-xs text-gray-100 border-b border-gray-800 last:border-0 hover:bg-gray-800 transition-colors bg-accent text-gray-950 hover:bg-amber-400 font-semibold';
+                opt.className = 'px-3 py-2.5 cursor-pointer text-xs text-gray-950 border-b border-gray-800 last:border-0 hover:opacity-80 transition-colors font-semibold';
+                opt.style.background = '#e5a00d';
                 opt.textContent = `Source — ${resLabel} · ${mbps} Mbps`;
-                opt.onclick = () => { changeQuality('source'); };
+                opt.onclick = () => changeQuality('source');
                 popover.appendChild(opt);
 
-                // Bitrate tiers
                 for (const tier of tiers) {
                     if (tier.max_height && tier.max_height > probeData.height) continue;
                     if (tier.bitrate >= probeData.bitrate) continue;
@@ -914,7 +1744,7 @@
                     opt.className = 'px-3 py-2.5 cursor-pointer text-xs text-gray-100 border-b border-gray-800 last:border-0 hover:bg-gray-800 transition-colors';
                     opt.textContent = tier.label;
                     opt.dataset.key = tier.key;
-                    opt.onclick = () => { changeQuality(tier.key); };
+                    opt.onclick = () => changeQuality(tier.key);
                     popover.appendChild(opt);
                 }
 
@@ -929,7 +1759,6 @@
                 currentQuality === 'source' ? sourceResLabel : currentQuality;
         }
 
-        // ===== QUALITY POPOVER =====
         function toggleQualityPopover() {
             const popover = document.getElementById('qualityPopover');
             popover.classList.toggle('hidden');
@@ -942,7 +1771,84 @@
             popover.classList.remove('block');
         }
 
-        // ===== PLAYBACK INFO PANEL =====
+        async function changeQuality(newQuality) {
+            closeQualityPopover();
+            if (newQuality === currentQuality) return;
+            currentQuality = newQuality;
+            updateQualityLabel();
+            if (!isPlaying) return;
+
+            const seekTime = VIDEO.currentTime;
+            if (hls) { hls.destroy(); hls = null; }
+            try { await fetch(`/api/stop/${sessionId}`, { method: 'POST' }); } catch(e) {}
+            await startPlayback(seekTime);
+        }
+
+        async function startPlayback(seekTime = 0) {
+            if (!currentFilePath) return;
+
+            sessionId = generateUUID();
+            IDLE_CONTAINER.classList.remove('show');
+            PLAYER_CONTAINER.style.display = 'flex';
+
+            const playlistUrl = `/api/playlist/${sessionId}/main.m3u8?path=${encodeURIComponent(currentFilePath)}&quality=${currentQuality}&segment_length=${currentSegmentLength}`;
+
+            if (hls) { hls.destroy(); hls = null; }
+
+            if (Hls.isSupported()) {
+                hls = new Hls({
+                    debug: false,
+                    enableWorker: true,
+                    maxBufferLength: 30,
+                    maxMaxBufferLength: 60,
+                    backBufferLength: 10,
+                    maxBufferSize: 100 * 1000 * 1000,
+                });
+                hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                    VIDEO.play();
+                    if (seekTime > 0) VIDEO.currentTime = seekTime;
+                });
+                hls.on(Hls.Events.ERROR, (event, data) => console.error('HLS error:', data));
+                hls.loadSource(playlistUrl);
+                hls.attachMedia(VIDEO);
+            } else if (VIDEO.canPlayType('application/vnd.apple.mpegurl')) {
+                VIDEO.src = playlistUrl;
+                VIDEO.play();
+            }
+
+            startPingLoop();
+            startTranscodeStatsPoll();
+        }
+
+        function stopPlayback() {
+            if (pingInterval) clearInterval(pingInterval);
+            if (hls) { hls.destroy(); hls = null; }
+            stopTranscodeStatsPoll();
+
+            VIDEO.pause();
+            VIDEO.src = '';
+
+            if (sessionId) {
+                fetch(`/api/stop/${sessionId}`, { method: 'POST' }).catch(e => console.warn(e));
+            }
+
+            currentFilePath = null;
+            isPlaying = false;
+            infoVisible = false;
+            PLAYER_CONTAINER.style.display = 'none';
+            IDLE_CONTAINER.classList.add('show');
+            document.getElementById('playbackInfoPanel').classList.add('hidden');
+            updatePlayPauseButton();
+
+            if (currentView === 'home') showHomeView();
+            else if (currentView === 'library') showLibraryView(currentLibraryId);
+            else if (currentView === 'project') showProjectView(currentProjectId);
+        }
+
+        // ============================================================================
+        // PLAYBACK INFO PANEL
+        // ============================================================================
+
         function toggleInfoPanel() {
             infoVisible = !infoVisible;
             const panel = document.getElementById('playbackInfoPanel');
@@ -957,10 +1863,7 @@
         }
 
         function stopTranscodeStatsPoll() {
-            if (transcodeStatsInterval) {
-                clearInterval(transcodeStatsInterval);
-                transcodeStatsInterval = null;
-            }
+            if (transcodeStatsInterval) { clearInterval(transcodeStatsInterval); transcodeStatsInterval = null; }
         }
 
         async function fetchTranscodeStats() {
@@ -968,13 +1871,8 @@
                 const resp = await fetch('/api/debug/state');
                 const data = await resp.json();
                 const active = data.jobs.find(j => !j.has_exited && j.transcode_fps > 0);
-                transcodeStats = active ? {
-                    fps: active.transcode_fps,
-                    speed: active.transcode_speed
-                } : {};
-            } catch (e) {
-                // Silent fail
-            }
+                transcodeStats = active ? { fps: active.transcode_fps, speed: active.transcode_speed } : {};
+            } catch (e) {}
         }
 
         function formatInfoSection(title, rows) {
@@ -994,11 +1892,8 @@
             if (!infoVisible) return;
             const v = VIDEO;
             const q = v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality() : {};
-
             let bufferedSec = 0;
-            if (v.buffered.length > 0) {
-                bufferedSec = (v.buffered.end(v.buffered.length - 1) - v.currentTime).toFixed(1);
-            }
+            if (v.buffered.length > 0) bufferedSec = (v.buffered.end(v.buffered.length - 1) - v.currentTime).toFixed(1);
 
             const encoderLabel = capabilities?.hardware?.h264_videotoolbox ? 'VideoToolbox'
                                : capabilities?.hardware?.h264_nvenc ? 'NVENC'
@@ -1009,14 +1904,10 @@
             const container = currentFilePath ? currentFilePath.split('.').pop().toUpperCase() : '—';
             const sourceMbps = probeData ? (probeData.bitrate / 1_000_000).toFixed(1) + ' Mbps' : '—';
             const sourceRes = probeData ? `${probeData.width}×${probeData.height}` : '—';
-
-            // Source codec info
             const srcCodec = probeData?.video_codec?.toUpperCase() || '—';
             const srcBitDepth = probeData?.bit_depth ? `${probeData.bit_depth}-bit` : '—';
             const srcAudioCodec = probeData?.audio_codec?.toUpperCase() || '—';
             const srcPixFmt = probeData?.pix_fmt || '—';
-
-            // Target codec (deterministic from quality + encoder)
             const isDirectCopy = currentQuality === 'source';
             const tgtVideoCodec = isDirectCopy ? srcCodec : 'H.264 (AVC)';
             const tgtBitDepth = isDirectCopy ? srcBitDepth : '8-bit';
@@ -1037,8 +1928,6 @@
                     ['Current time', formatTime(v.currentTime)],
                     ['Buffered ahead', `${bufferedSec}s`],
                     ['Dropped frames', q.droppedVideoFrames ?? '—'],
-                    ['Corrupted frames', q.corruptedVideoFrames ?? '—'],
-                    ['Total frames', q.totalVideoFrames ?? '—'],
                 ]),
                 formatInfoSection('Codecs', [
                     ['Source video', `${srcCodec} · ${srcBitDepth}`],
@@ -1055,130 +1944,27 @@
                     ['Duration', probeData ? formatTime(probeData.duration_seconds) : '—'],
                 ]),
             ];
-
             document.getElementById('playbackInfoContent').innerHTML = sections.join('');
         }
 
-        // ===== PLAYBACK =====
-        async function startPlayback(seekTime = 0) {
-            if (!currentFilePath) {
-                alert('No file selected');
-                return;
-            }
+        // ============================================================================
+        // VIDEO CONTROLS
+        // ============================================================================
 
-            try {
-                IDLE_CONTAINER.classList.add('hidden');
-                PLAYER_CONTAINER.style.display = 'flex';
-
-                const playlistUrl = `/api/playlist/${sessionId}/main.m3u8?path=${encodeURIComponent(currentFilePath)}&quality=${currentQuality}&segment_length=${currentSegmentLength}`;
-
-                if (Hls.isSupported()) {
-                    hls = new Hls({
-                        debug: false,
-                        enableWorker: true,
-                        maxBufferLength: 30,
-                        maxMaxBufferLength: 60,
-                        backBufferLength: 10,
-                        maxBufferSize: 100 * 1000 * 1000,
-                    });
-
-                    hls.on(Hls.Events.MANIFEST_PARSED, () => {
-                        VIDEO.play();
-                        if (seekTime > 0) { VIDEO.currentTime = seekTime; }
-                    });
-
-                    hls.on(Hls.Events.ERROR, (event, data) => {
-                        console.error('HLS error:', data);
-                    });
-
-                    hls.loadSource(playlistUrl);
-                    hls.attachMedia(VIDEO);
-                } else if (VIDEO.canPlayType('application/vnd.apple.mpegurl')) {
-                    VIDEO.src = playlistUrl;
-                    VIDEO.play();
-                }
-
-                startPingLoop();
-                startTranscodeStatsPoll();
-            } catch (e) {
-                alert('Error starting playback: ' + e.message);
-                stopPlayback();
-            }
-        }
-
-        function stopPlayback() {
-            if (pingInterval) clearInterval(pingInterval);
-            if (hls) hls.destroy();
-            stopTranscodeStatsPoll();
-
-            VIDEO.pause();
-            VIDEO.src = '';
-
-            if (sessionId) {
-                fetch(`/api/stop/${sessionId}`, { method: 'POST' }).catch(e => console.warn(e));
-            }
-
-            currentFilePath = null;
-            isPlaying = false;
-            infoVisible = false;
-            PLAYER_CONTAINER.style.display = 'none';
-            IDLE_CONTAINER.classList.remove('hidden');
-            document.getElementById('playbackInfoPanel').classList.add('hidden');
-            updatePlayPauseButton();
-
-            // Restore current view
-            if (currentView === 'home') showHomeView();
-            else if (currentView === 'library') showLibraryView(currentLibraryId);
-            else if (currentView === 'project') showProjectView(currentProjectId);
-        }
-
-        // ===== VIDEO EVENTS =====
         function setupVideoEvents() {
-            VIDEO.addEventListener('play', () => {
-                isPlaying = true;
-                updatePlayPauseButton();
-                showControls();
-            });
-
-            VIDEO.addEventListener('pause', () => {
-                isPlaying = false;
-                updatePlayPauseButton();
-                showControls();
-            });
-
-            VIDEO.addEventListener('timeupdate', () => {
-                updateTimeDisplay();
-                updateSeekBar();
-                updateInfoPanel();
-            });
-
-            VIDEO.addEventListener('loadedmetadata', () => {
-                updateTimeDisplay();
-            });
-
-            VIDEO.addEventListener('progress', () => {
-                updateBufferedRange();
-            });
+            VIDEO.addEventListener('play', () => { isPlaying = true; updatePlayPauseButton(); showControls(); });
+            VIDEO.addEventListener('pause', () => { isPlaying = false; updatePlayPauseButton(); showControls(); });
+            VIDEO.addEventListener('timeupdate', () => { updateTimeDisplay(); updateSeekBar(); updateInfoPanel(); });
+            VIDEO.addEventListener('loadedmetadata', () => { updateTimeDisplay(); });
+            VIDEO.addEventListener('progress', () => { updateBufferedRange(); });
         }
 
         function updatePlayPauseButton() {
-            const btn = document.getElementById('playPauseBtn');
-            btn.textContent = isPlaying ? '⏸' : '▶';
+            document.getElementById('playPauseBtn').textContent = isPlaying ? '⏸' : '▶';
         }
 
         function togglePlayPause() {
-            if (isPlaying) {
-                VIDEO.pause();
-            } else {
-                VIDEO.play();
-            }
-        }
-
-        function updateTimeDisplay() {
-            const current = formatTime(VIDEO.currentTime);
-            const total = formatTime(VIDEO.duration);
-            document.getElementById('currentTime').textContent = current;
-            document.getElementById('totalTime').textContent = total;
+            if (isPlaying) VIDEO.pause(); else VIDEO.play();
         }
 
         function formatTime(seconds) {
@@ -1186,93 +1972,53 @@
             const h = Math.floor(seconds / 3600);
             const m = Math.floor((seconds % 3600) / 60);
             const s = Math.floor(seconds % 60);
-            if (h > 0) {
-                return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-            }
-            return `${m}:${String(s).padStart(2, '0')}`;
+            if (h > 0) return `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+            return `${m}:${String(s).padStart(2,'0')}`;
+        }
+
+        function updateTimeDisplay() {
+            document.getElementById('currentTime').textContent = formatTime(VIDEO.currentTime);
+            document.getElementById('totalTime').textContent = formatTime(VIDEO.duration);
         }
 
         function updateSeekBar() {
-            const seekBar = document.getElementById('seekBar');
-            const progress = document.getElementById('seekProgress');
             if (VIDEO.duration) {
-                const pct = (VIDEO.currentTime / VIDEO.duration) * 100;
-                progress.style.width = pct + '%';
+                document.getElementById('seekProgress').style.width = (VIDEO.currentTime / VIDEO.duration * 100) + '%';
             }
         }
 
         function updateBufferedRange() {
-            const buffered = document.getElementById('seekBuffered');
-            const seekBar = document.getElementById('seekBar');
             if (VIDEO.buffered.length > 0) {
                 const end = VIDEO.buffered.end(VIDEO.buffered.length - 1);
-                const pct = (end / VIDEO.duration) * 100;
-                buffered.style.width = pct + '%';
+                document.getElementById('seekBuffered').style.width = (end / VIDEO.duration * 100) + '%';
             }
         }
 
-        // ===== SEEK BAR INTERACTION =====
-        document.addEventListener('DOMContentLoaded', () => {
-            const seekBar = document.getElementById('seekBar');
-            seekBar.addEventListener('click', (e) => {
-                if (!VIDEO.duration) return;
-                const rect = seekBar.getBoundingClientRect();
-                const x = e.clientX - rect.left;
-                const pct = x / rect.width;
-                VIDEO.currentTime = pct * VIDEO.duration;
-            });
-        });
-
-        // ===== VOLUME =====
         function setVolume() {
-            const slider = document.getElementById('volumeSlider');
-            VIDEO.volume = parseInt(slider.value) / 100;
+            VIDEO.volume = parseInt(document.getElementById('volumeSlider').value) / 100;
         }
 
         function toggleVolumeMute() {
             const slider = document.getElementById('volumeSlider');
-            if (VIDEO.volume > 0) {
-                VIDEO.volume = 0;
-                slider.value = 0;
-            } else {
-                VIDEO.volume = 1;
-                slider.value = 100;
-            }
+            if (VIDEO.volume > 0) { VIDEO.volume = 0; slider.value = 0; }
+            else { VIDEO.volume = 1; slider.value = 100; }
         }
 
-        // ===== FULLSCREEN =====
         function toggleFullscreen() {
-            if (!document.fullscreenElement) {
-                VIDEO_VIEWPORT.requestFullscreen().catch(err => console.error(err));
-            } else {
-                document.exitFullscreen();
-            }
+            if (!document.fullscreenElement) VIDEO_VIEWPORT.requestFullscreen().catch(err => console.error(err));
+            else document.exitFullscreen();
         }
 
-        // ===== CONTROLS AUTO-HIDE =====
         function setupControlsAutoHide() {
-            VIDEO_VIEWPORT.addEventListener('mousemove', () => {
-                showControls();
-            });
-
-            VIDEO_VIEWPORT.addEventListener('mouseleave', () => {
-                if (isPlaying) {
-                    scheduleControlsHide();
-                }
-            });
-
-            VIDEO_VIEWPORT.addEventListener('mouseenter', () => {
-                if (controlsHideTimer) clearTimeout(controlsHideTimer);
-            });
+            VIDEO_VIEWPORT.addEventListener('mousemove', () => showControls());
+            VIDEO_VIEWPORT.addEventListener('mouseleave', () => { if (isPlaying) scheduleControlsHide(); });
         }
 
         function showControls() {
             CONTROLS_OVERLAY.classList.remove('opacity-0', 'pointer-events-none');
             CONTROLS_OVERLAY.classList.add('opacity-100');
             if (controlsHideTimer) clearTimeout(controlsHideTimer);
-            if (isPlaying) {
-                scheduleControlsHide();
-            }
+            if (isPlaying) scheduleControlsHide();
         }
 
         function scheduleControlsHide() {
@@ -1284,7 +2030,6 @@
             }, 3000);
         }
 
-        // ===== PING LOOP =====
         function startPingLoop() {
             if (pingInterval) clearInterval(pingInterval);
             pingInterval = setInterval(() => {
@@ -1292,55 +2037,77 @@
             }, 10000);
         }
 
-        // ===== KEYBOARD SHORTCUTS =====
-        function setupKeyboardShortcuts() {
-            document.addEventListener('keydown', (e) => {
-                if (e.target.tagName === 'INPUT') return;
-
-                switch (e.key.toLowerCase()) {
-                    case ' ':
-                        e.preventDefault();
-                        if (currentFilePath) togglePlayPause();
-                        break;
-                    case 'f':
-                        e.preventDefault();
-                        if (currentFilePath) toggleFullscreen();
-                        break;
-                    case 'm':
-                        e.preventDefault();
-                        if (currentFilePath) toggleVolumeMute();
-                        break;
-                    case 'i':
-                        e.preventDefault();
-                        if (currentFilePath) toggleInfoPanel();
-                        break;
-                    case 'escape':
-                        e.preventDefault();
-                        if (currentFilePath) stopPlayback();
-                        break;
-                    case 'arrowleft':
-                        if (currentFilePath) VIDEO.currentTime = Math.max(0, VIDEO.currentTime - 10);
-                        break;
-                    case 'arrowright':
-                        if (currentFilePath) VIDEO.currentTime = Math.min(VIDEO.duration, VIDEO.currentTime + 10);
-                        break;
-                }
-            });
-        }
-
-        // ===== LIFECYCLE =====
         function setupBeforeUnload() {
             window.addEventListener('beforeunload', () => {
-                if (sessionId) {
-                    navigator.sendBeacon(`/api/stop/${sessionId}`, '');
+                if (sessionId) navigator.sendBeacon(`/api/stop/${sessionId}`, '');
+            });
+        }
+
+        function setupSeekBar() {
+            const seekBar = document.getElementById('seekBar');
+            seekBar.addEventListener('click', (e) => {
+                if (!VIDEO.duration) return;
+                const rect = seekBar.getBoundingClientRect();
+                VIDEO.currentTime = ((e.clientX - rect.left) / rect.width) * VIDEO.duration;
+            });
+        }
+
+        function setupPlayerKeyboardShortcuts() {
+            document.addEventListener('keydown', (e) => {
+                if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+                if (!currentFilePath) return;
+                switch (e.key.toLowerCase()) {
+                    case ' ': e.preventDefault(); togglePlayPause(); break;
+                    case 'f': e.preventDefault(); toggleFullscreen(); break;
+                    case 'm': e.preventDefault(); toggleVolumeMute(); break;
+                    case 'i': e.preventDefault(); toggleInfoPanel(); break;
+                    case 'escape': stopPlayback(); break;
+                    case 'arrowleft': VIDEO.currentTime = Math.max(0, VIDEO.currentTime - 10); break;
+                    case 'arrowright': VIDEO.currentTime = Math.min(VIDEO.duration, VIDEO.currentTime + 10); break;
                 }
             });
         }
 
-        function setupVisibilityChange() {
-            // Stream runs in background — only stopped on page unload (beforeunload/sendBeacon)
-            // Do NOT call stopPlayback on tab switch — FFmpeg keeps producing segments
+        // ============================================================================
+        // MISC
+        // ============================================================================
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
         }
+
+        // ============================================================================
+        // INIT
+        // ============================================================================
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            // Init DOM refs for player
+            VIDEO = document.getElementById('video');
+            IDLE_CONTAINER = document.getElementById('idleContainer');
+            PLAYER_CONTAINER = document.getElementById('playerContainer');
+            CONTROLS_OVERLAY = document.getElementById('controlsOverlay');
+            VIDEO_VIEWPORT = document.getElementById('videoViewport');
+
+            setupVideoEvents();
+            setupControlsAutoHide();
+            setupBeforeUnload();
+            setupSeekBar();
+            setupPlayerKeyboardShortcuts();
+
+            // Load capabilities for quality popover
+            fetch('/api/capabilities').then(r => r.json()).then(c => { capabilities = c; }).catch(() => {});
+
+            // Close panels on Escape
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && !currentFilePath) {
+                    closePanels();
+                }
+            });
+
+            await checkAuth();
+        });
     </script>
 </body>
 </html>

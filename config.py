@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     # Security
     secret_key: str = "change-me-in-production"
     admin_api_key: str = "change-me-in-production"
+    admin_username: str = "admin"
+    admin_password: str = "changeme"
 
     # Background tasks
     scanner_interval: int = 30  # seconds between background file scans

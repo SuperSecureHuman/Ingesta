@@ -405,3 +405,62 @@ async def delete_share(share_id: str) -> bool:
     db = get_db()
     await db.execute("DELETE FROM shares WHERE id = ?", (share_id,))
     return True
+
+
+# ============================================================================
+# USERS
+# ============================================================================
+
+
+async def create_user(username: str, password_hash: str) -> str:
+    """Create a new user. Returns the user ID."""
+    user_id = _new_uuid()
+    created_at = _now_iso()
+
+    db = get_db()
+    await db.execute(
+        "INSERT INTO users (id, username, password_hash, created_at) VALUES (?, ?, ?, ?)",
+        (user_id, username, password_hash, created_at),
+    )
+    return user_id
+
+
+async def get_user(user_id: str) -> Optional[Dict[str, Any]]:
+    """Get user by ID."""
+    db = get_db()
+    row = await db.fetchone(
+        "SELECT id, username, password_hash, created_at FROM users WHERE id = ?",
+        (user_id,),
+    )
+    if not row:
+        return None
+    return {
+        "id": row[0],
+        "username": row[1],
+        "password_hash": row[2],
+        "created_at": row[3],
+    }
+
+
+async def get_user_by_username(username: str) -> Optional[Dict[str, Any]]:
+    """Get user by username."""
+    db = get_db()
+    row = await db.fetchone(
+        "SELECT id, username, password_hash, created_at FROM users WHERE username = ?",
+        (username,),
+    )
+    if not row:
+        return None
+    return {
+        "id": row[0],
+        "username": row[1],
+        "password_hash": row[2],
+        "created_at": row[3],
+    }
+
+
+async def user_exists() -> bool:
+    """Check if any users exist (for bootstrap logic)."""
+    db = get_db()
+    row = await db.fetchone("SELECT COUNT(*) FROM users")
+    return row[0] > 0 if row else False

@@ -54,9 +54,18 @@ CREATE TABLE IF NOT EXISTS shares (
     FOREIGN KEY (project_id) REFERENCES projects (id)
 );
 
+-- Users: admin accounts for login
+CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    username TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
 -- Create indexes for common queries
 CREATE INDEX IF NOT EXISTS idx_projects_library_id ON projects (library_id);
 CREATE INDEX IF NOT EXISTS idx_project_files_project_id ON project_files (project_id);
 CREATE INDEX IF NOT EXISTS idx_project_files_scan_status ON project_files (scan_status);
 CREATE INDEX IF NOT EXISTS idx_shares_project_id ON shares (project_id);
 CREATE INDEX IF NOT EXISTS idx_shares_active ON shares (active);
+CREATE INDEX IF NOT EXISTS idx_users_username ON users (username);

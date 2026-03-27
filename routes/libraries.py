@@ -6,11 +6,12 @@ from pathlib import Path
 from typing import Optional
 from urllib.parse import unquote
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Header
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from config import settings
 import db.crud as crud
+from routes.deps import require_auth
 
 
 router = APIRouter(prefix="/api/libraries", tags=["libraries"])
@@ -20,13 +21,6 @@ class CreateLibraryRequest(BaseModel):
     """Request to create a library."""
     name: str
     root_path: str
-
-
-def require_admin_key(x_admin_key: Optional[str] = Header(None)) -> str:
-    """Dependency to validate ADMIN_API_KEY header."""
-    if not x_admin_key or x_admin_key != settings.admin_api_key:
-        raise HTTPException(status_code=401, detail="Invalid or missing ADMIN_API_KEY")
-    return x_admin_key
 
 
 def validate_path_in_root(path: str, root_path: str) -> Path:
@@ -47,7 +41,7 @@ def validate_path_in_root(path: str, root_path: str) -> Path:
 
 
 @router.get("")
-async def list_libraries(admin_key: str = Depends(require_admin_key)):
+async def list_libraries(_auth: str = Depends(require_auth)):
     """List all libraries."""
     libraries = await crud.get_libraries()
     return {"libraries": libraries}
@@ -56,7 +50,7 @@ async def list_libraries(admin_key: str = Depends(require_admin_key)):
 @router.post("", status_code=201)
 async def create_library(
     req: CreateLibraryRequest,
-    admin_key: str = Depends(require_admin_key),
+    _auth: str = Depends(require_auth),
 ):
     """Create a new library."""
     # Validate root_path exists and is a directory
@@ -70,10 +64,22 @@ async def create_library(
     return {"id": library_id, "name": req.name, "root_path": str(root)}
 
 
+@router.get("/{library_id}")
+async def get_library(
+    library_id: str,
+    _auth: str = Depends(require_auth),
+):
+    """Get a single library's details."""
+    library = await crud.get_library(library_id)
+    if not library:
+        raise HTTPException(404, "Library not found")
+    return library
+
+
 @router.delete("/{library_id}")
 async def delete_library(
     library_id: str,
-    admin_key: str = Depends(require_admin_key),
+    _auth: str = Depends(require_auth),
 ):
     """Delete a library."""
     library = await crud.get_library(library_id)
@@ -88,7 +94,7 @@ async def delete_library(
 async def browse_library(
     library_id: str,
     path: str = Query("/"),
-    admin_key: str = Depends(require_admin_key),
+    _auth: str = Depends(require_auth),
 ):
     """Browse files in a library (scoped to library's root_path)."""
     library = await crud.get_library(library_id)

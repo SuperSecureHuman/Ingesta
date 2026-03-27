@@ -32,7 +32,7 @@ from transcoder import (
     select_encoder,
 )
 from thumbs import get_or_generate_thumb
-from routes import libraries, projects, shares
+from routes import libraries, projects, shares, auth
 
 MEDIA_ROOT = Path(settings.media_root).resolve()
 MAX_CONCURRENT = settings.max_concurrent_streams
@@ -135,6 +135,16 @@ async def lifespan(app: FastAPI):
     print("[startup] Initializing database...")
     await db.init_db(settings.database_url)
 
+    # Bootstrap default user if none exists
+    print("[startup] Checking for default user...")
+    if not await crud.user_exists():
+        print(f"[startup] Creating default user '{settings.admin_username}'...")
+        import hashlib
+        password_hash = hashlib.sha256(settings.admin_password.encode()).hexdigest()
+        await crud.create_user(settings.admin_username, password_hash)
+        if settings.admin_password == "changeme":
+            print("[WARNING] Default user created with default password 'changeme'. Please change this in production.")
+
     print("[startup] Probing hardware...")
     shutil.rmtree("/tmp/hls_srv", ignore_errors=True)
     hw = await probe_hardware()
@@ -167,6 +177,7 @@ app = FastAPI(lifespan=lifespan)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Mount route modules
+app.include_router(auth.router)
 app.include_router(libraries.router)
 app.include_router(projects.router)
 app.include_router(shares.router)
