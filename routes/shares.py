@@ -494,15 +494,28 @@ async def share_thumb(
     path: str = Query(...),
     t: float = Query(0),
     w: int = Query(320),
-    token: dict = Depends(get_token_payload),
+    token_param: Optional[str] = Query(None, alias="token"),
+    authorization: Optional[str] = Header(None),
 ):
     """Get thumbnail for shared project file."""
-    if token["share_id"] != share_id:
+    # Resolve token from query param OR Authorization header
+    if token_param:
+        payload = verify_token(token_param)
+    elif authorization:
+        parts = authorization.split()
+        if len(parts) == 2 and parts[0].lower() == "bearer":
+            payload = verify_token(parts[1])
+        else:
+            raise HTTPException(401, "Missing or invalid authorization")
+    else:
+        raise HTTPException(401, "Missing authorization")
+
+    if payload["share_id"] != share_id:
         raise HTTPException(403, "Token mismatch")
 
     try:
         path = unquote(path)
-        await validate_file_in_project(token["project_id"], path)
+        await validate_file_in_project(payload["project_id"], path)
 
         thumb_path = await get_or_generate_thumb(path, t, w)
         if not thumb_path:

@@ -218,6 +218,18 @@
         let infoVisible = false;
         let controlsHideTimer = null;
         let transcodeStats = {};
+        let sessionId = null;
+
+        // UUID generation for stream IDs
+        function generateUUID() {
+            if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+                try { return crypto.randomUUID(); } catch(e) {}
+            }
+            return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+                const r = Math.random() * 16 | 0;
+                return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+            });
+        }
 
         const VIDEO = document.getElementById('video');
         const PASSWORD_GATE = document.getElementById('passwordGateContainer');
@@ -229,6 +241,9 @@
         // ===== INITIALIZATION =====
         window.addEventListener('DOMContentLoaded', () => {
             initShare();
+            window.addEventListener('beforeunload', () => {
+                if (sessionId) navigator.sendBeacon(`/api/stop/${sessionId}`, '');
+            });
         });
 
         async function initShare() {
@@ -287,7 +302,7 @@
                 }
 
                 const data = await resp.json();
-                jwt = data.access_token;
+                jwt = data.token;
                 sessionStorage.setItem(`share_jwt_${shareId}`, jwt);
                 document.getElementById('passwordInput').value = '';
 
@@ -313,8 +328,7 @@
                 }
 
                 const data = await resp.json();
-                projectName = data.project_name;
-                document.getElementById('projectTitle').textContent = projectName;
+                document.getElementById('projectTitle').textContent = 'Shared Footage';
                 renderFileGrid(data.files || []);
             } catch (e) {
                 console.error('Failed to load files:', e);
@@ -335,7 +349,8 @@
                 const card = document.createElement('div');
                 card.className = 'group cursor-pointer rounded-lg border border-gray-800 bg-gray-900 hover:border-accent overflow-hidden transition-all';
 
-                const posterUrl = `/api/share/${shareId}/thumb?path=${encodeURIComponent(file.file_path)}&offset=0`;
+                const fileName = file.file_path.split('/').pop();
+                const posterUrl = `/api/share/${shareId}/thumb?path=${encodeURIComponent(file.file_path)}&t=0&token=${encodeURIComponent(jwt)}`;
                 const durationStr = formatTime(file.duration_seconds || 0);
                 const resLabel = file.height >= 2160 ? '4K'
                                : file.height >= 1440 ? '1440p'
@@ -350,7 +365,7 @@
 
                 card.innerHTML = `
                     <div class="aspect-video relative bg-gray-800">
-                        <img src="${posterUrl}" alt="${file.name}" loading="lazy"
+                        <img src="${posterUrl}" alt="${fileName}" loading="lazy"
                              class="absolute inset-0 w-full h-full object-cover"
                              onerror="this.style.display='none'">
                         <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
@@ -359,7 +374,7 @@
                         ${loadingSpinner}
                     </div>
                     <div class="px-3 py-3">
-                        <p class="text-sm text-gray-200 truncate mb-1" title="${file.name}">${file.name}</p>
+                        <p class="text-sm text-gray-200 truncate mb-1" title="${fileName}">${fileName}</p>
                         <div class="flex justify-between text-xs text-gray-500">
                             <span>${durationStr}</span>
                             <span>${resLabel} · ${mbps}Mbps</span>
@@ -397,6 +412,11 @@
                 if (!resp.ok) throw new Error('Probe failed');
                 probeData = await resp.json();
 
+                // Fetch bitrate tiers from public capabilities endpoint
+                const capsResp = await fetch('/api/capabilities');
+                const caps = await capsResp.json();
+                const tiers = caps.bitrate_tiers || [];
+
                 const popover = document.getElementById('qualityPopover');
                 popover.innerHTML = '';
 
@@ -409,10 +429,23 @@
                 sourceResLabel = resLabel;
 
                 let opt = document.createElement('div');
-                opt.className = 'px-3 py-2.5 cursor-pointer text-xs text-gray-100 border-b border-gray-800 last:border-0 hover:bg-gray-800 transition-colors bg-accent text-gray-950 hover:bg-amber-400 font-semibold';
+                opt.className = 'px-3 py-2.5 cursor-pointer text-xs text-gray-950 border-b border-gray-800 last:border-0 hover:opacity-80 transition-colors font-semibold bg-accent hover:bg-amber-400';
                 opt.textContent = `Source — ${resLabel} · ${mbps} Mbps`;
                 opt.onclick = () => { changeQuality('source'); };
                 popover.appendChild(opt);
+
+                // Add transcoded quality tiers
+                for (const tier of tiers) {
+                    if (tier.max_height && tier.max_height > probeData.height) continue;
+                    if (tier.bitrate >= probeData.bitrate) continue;
+
+                    opt = document.createElement('div');
+                    opt.className = 'px-3 py-2.5 cursor-pointer text-xs text-gray-100 border-b border-gray-800 last:border-0 hover:bg-gray-800 transition-colors';
+                    opt.textContent = tier.label;
+                    opt.dataset.key = tier.key;
+                    opt.onclick = () => changeQuality(tier.key);
+                    popover.appendChild(opt);
+                }
 
                 updateQualityLabel();
             } catch (e) {
@@ -429,6 +462,7 @@
 
             const seekTime = VIDEO.currentTime;
             if (hls) { hls.destroy(); hls = null; }
+            try { await fetch(`/api/stop/${sessionId}`, { method: 'POST' }); } catch(e) {}
             await startPlayback(seekTime);
         }
 
@@ -453,13 +487,17 @@
                 FILE_GRID_VIEW.classList.add('hidden');
                 VIDEO_VIEWPORT.classList.remove('hidden');
 
-                const playlistUrl = `/api/share/${shareId}/playlist/main.m3u8?path=${encodeURIComponent(currentFilePath)}&quality=${currentQuality}&segment_length=${currentSegmentLength}`;
+                sessionId = generateUUID();
+                const playlistUrl = `/api/share/${shareId}/playlist/${sessionId}/main.m3u8?path=${encodeURIComponent(currentFilePath)}&quality=${currentQuality}&segment_length=${currentSegmentLength}`;
 
                 if (Hls.isSupported()) {
                     hls = new Hls({
                         debug: false,
                         enableWorker: true,
                         maxBufferLength: 30,
+                        xhrSetup: (xhr, url) => {
+                            xhr.setRequestHeader('Authorization', `Bearer ${jwt}`);
+                        }
                     });
 
                     hls.on(Hls.Events.MANIFEST_PARSED, () => {
@@ -469,7 +507,6 @@
 
                     hls.loadSource(playlistUrl);
                     hls.attachMedia(VIDEO);
-                    hls.setAuthToken(jwt);
                 } else if (VIDEO.canPlayType('application/vnd.apple.mpegurl')) {
                     VIDEO.src = playlistUrl;
                     VIDEO.play();
@@ -484,6 +521,10 @@
             if (hls) { hls.destroy(); hls = null; }
             VIDEO.pause();
             VIDEO.src = '';
+            if (sessionId) {
+                fetch(`/api/stop/${sessionId}`, { method: 'POST' }).catch(e => console.warn(e));
+                sessionId = null;
+            }
             currentFilePath = null;
             isPlaying = false;
             infoVisible = false;

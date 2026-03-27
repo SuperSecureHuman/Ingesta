@@ -195,6 +195,12 @@ async def debug():
     return FileResponse("static/debug.html", media_type="text/html")
 
 
+@app.get("/share/{share_id}")
+async def share_page(share_id: str):
+    """Serve the public share page."""
+    return FileResponse("static/share.html", media_type="text/html")
+
+
 @app.get("/api/probe")
 async def probe(path: str = Query(...), stream_id: str = Query(None)):
     """Probe media file for duration, resolution, and bitrate."""
