@@ -2,10 +2,12 @@
 Thumbnail extraction: frame grabbing from video files via FFmpeg.
 Mirrors Jellyfin's MediaEncoder thumbnail logic.
 """
+
 import asyncio
 import hashlib
 import os
 from pathlib import Path
+from typing import Optional
 
 THUMB_DIR = Path(os.getenv("THUMB_DIR", "/tmp/hls_thumbs"))
 
@@ -35,15 +37,24 @@ async def extract_frame(
     if fast:
         cmd.extend(["-skip_frame", "nokey"])
 
-    cmd.extend([
-        "-ss", f"{offset_sec:.3f}",
-        "-i", source_path,
-        "-vframes", "1",
-        "-vf", f"scale={width}:-2",
-        "-vsync", "-1",
-        "-f", "image2",
-        "-y", str(output_path),
-    ])
+    cmd.extend(
+        [
+            "-ss",
+            f"{offset_sec:.3f}",
+            "-i",
+            source_path,
+            "-vframes",
+            "1",
+            "-vf",
+            f"scale={width}:-2",
+            "-vsync",
+            "-1",
+            "-f",
+            "image2",
+            "-y",
+            str(output_path),
+        ]
+    )
 
     try:
         proc = await asyncio.create_subprocess_exec(
@@ -63,7 +74,9 @@ def thumb_path(source_path: str, offset_sec: float, width: int) -> Path:
     return THUMB_DIR / key[:2] / f"{key}.jpg"
 
 
-async def get_or_generate_thumb(source_path: str, offset_sec: float, width: int = 320) -> Path | None:
+async def get_or_generate_thumb(
+    source_path: str, offset_sec: float, width: int = 320
+) -> Optional[Path]:
     """
     Get cached thumbnail or generate if missing.
 

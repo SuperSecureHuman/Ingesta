@@ -66,6 +66,8 @@ class TranscodeJob:
     pid: Optional[int] = None
     transcode_position_sec: float = 0.0
     drain_task: Optional[asyncio.Task] = None
+    transcode_fps: float = 0.0
+    transcode_speed: float = 0.0
 
     def __post_init__(self):
         if self.work_dir is None:
@@ -171,7 +173,12 @@ def select_encoder(hardware: dict) -> str:
 def _build_hwaccel_input_args(encoder: str) -> list[str]:
     """Build input-side hwaccel flags for hw-accelerated decoding."""
     if encoder == "h264_videotoolbox":
-        return ["-hwaccel", "videotoolbox", "-hwaccel_output_format", "videotoolbox_vld"]
+        return [
+            "-hwaccel",
+            "videotoolbox",
+            "-hwaccel_output_format",
+            "videotoolbox_vld",
+        ]
     elif encoder == "h264_nvenc":
         return ["-hwaccel", "cuda", "-hwaccel_output_format", "cuda", "-threads", "1"]
     elif encoder == "h264_qsv":
@@ -181,7 +188,9 @@ def _build_hwaccel_input_args(encoder: str) -> list[str]:
     return []
 
 
-def _build_video_codec_args(encoder: str, bitrate: int | None, max_height: int | None) -> list[str]:
+def _build_video_codec_args(
+    encoder: str, bitrate: Optional[int], max_height: Optional[int]
+) -> list:
     """Build video codec args per encoder (bitrate control, preset, etc)."""
     args = ["-codec:v:0", encoder]
 
@@ -204,7 +213,14 @@ def _build_video_codec_args(encoder: str, bitrate: int | None, max_height: int |
     elif encoder in ("h264_qsv", "h264_vaapi"):
         args += ["-preset", "veryfast"]
         if bitrate:
-            args += ["-b:v", str(bitrate), "-maxrate", str(bitrate), "-bufsize", str(bitrate * 2)]
+            args += [
+                "-b:v",
+                str(bitrate),
+                "-maxrate",
+                str(bitrate),
+                "-bufsize",
+                str(bitrate * 2),
+            ]
 
     if max_height:
         args += ["-vf", f"scale=-2:'min(ih,{max_height})'"]
@@ -290,13 +306,20 @@ class TranscodeManager:
         if vcodec == "copy":
             cmd.extend(_build_hwaccel_input_args(self.encoder))
 
-        cmd.extend([
-            "-ss", str(seek_time_seconds),
-            "-i", job.source_path,
-            "-map_metadata", "-1",
-            "-map_chapters", "-1",
-            "-threads", "0",
-        ])
+        cmd.extend(
+            [
+                "-ss",
+                str(seek_time_seconds),
+                "-i",
+                job.source_path,
+                "-map_metadata",
+                "-1",
+                "-map_chapters",
+                "-1",
+                "-threads",
+                "0",
+            ]
+        )
 
         # Video codec: use encoder-specific args (bitrate control, preset, etc)
         if vcodec == "copy":
@@ -307,10 +330,12 @@ class TranscodeManager:
             cmd.extend(codec_args)
 
             # Force keyframes at segment boundaries
-            cmd.extend([
-                "-force_key_frames:v:0",
-                f"expr:gte(t,n_forced*{job.segment_length})",
-            ])
+            cmd.extend(
+                [
+                    "-force_key_frames:v:0",
+                    f"expr:gte(t,n_forced*{job.segment_length})",
+                ]
+            )
 
         # Audio codec
         cmd.extend(["-codec:a:0", acodec, "-b:a", "128k", "-ac", "2"])
@@ -410,14 +435,27 @@ class TranscodeManager:
                 if decoded:
                     print(f"[FFmpeg {job.pid}] {decoded}")
 
-                    # Parse time=HH:MM:SS.ms to extract transcode progress
-                    match = re.search(r"time=(\d{2}):(\d{2}):(\d{2}\.\d+)", decoded)
-                    if match:
-                        hours = int(match.group(1))
-                        minutes = int(match.group(2))
-                        seconds = float(match.group(3))
-                        total_sec = hours * 3600 + minutes * 60 + seconds
-                        job.transcode_position_sec = total_sec
+                    # Parse time= for transcode position
+                    time_match = re.search(
+                        r"time=(\d{2}):(\d{2}):(\d{2}\.\d+)", decoded
+                    )
+                    if time_match:
+                        hours = int(time_match.group(1))
+                        minutes = int(time_match.group(2))
+                        seconds = float(time_match.group(3))
+                        job.transcode_position_sec = (
+                            hours * 3600 + minutes * 60 + seconds
+                        )
+
+                    # Parse fps= (can be "fps= 47" with space or "fps=47")
+                    fps_match = re.search(r"fps=\s*(\d+\.?\d*)", decoded)
+                    if fps_match:
+                        job.transcode_fps = float(fps_match.group(1))
+
+                    # Parse speed= (e.g. "speed=1.95x")
+                    speed_match = re.search(r"speed=\s*(\d+\.?\d*)x", decoded)
+                    if speed_match:
+                        job.transcode_speed = float(speed_match.group(1))
 
         except asyncio.CancelledError:
             pass

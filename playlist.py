@@ -1,6 +1,7 @@
 """
 Playlist generation: VOD m3u8 generation and ffprobe wrapper
 """
+
 import asyncio
 import json
 import subprocess
@@ -9,6 +10,7 @@ from pathlib import Path
 
 TICKS_PER_SECOND = 10_000_000  # C# TimeSpan.TicksPerSecond
 
+
 @dataclass
 class MediaInfo:
     duration_seconds: float
@@ -16,6 +18,11 @@ class MediaInfo:
     width: int
     height: int
     bitrate: int = 0  # bps, extracted from format.bit_rate
+    video_codec: str = ""  # e.g. 'hevc', 'h264'
+    pix_fmt: str = ""  # e.g. 'yuv420p', 'yuv420p10le'
+    bit_depth: int = 8  # inferred from pix_fmt
+    audio_codec: str = ""  # e.g. 'aac', 'ac3'
+
 
 @dataclass
 class PlaylistSegment:
@@ -29,8 +36,10 @@ async def probe_media(path: str) -> MediaInfo:
     """Run ffprobe and extract duration, resolution, and bitrate."""
     proc = await asyncio.create_subprocess_exec(
         "ffprobe",
-        "-v", "quiet",
-        "-print_format", "json",
+        "-v",
+        "quiet",
+        "-print_format",
+        "json",
         "-show_format",
         "-show_streams",
         path,
@@ -46,13 +55,27 @@ async def probe_media(path: str) -> MediaInfo:
     duration = float(data["format"]["duration"])
     bitrate = int(data["format"].get("bit_rate", 0))
 
-    # Find video stream for resolution
+    # Find video stream for resolution, codec, pixel format
     width, height = 1920, 1080
+    video_codec = ""
+    pix_fmt = ""
+    bit_depth = 8
+    audio_codec = ""
+
     for stream in data.get("streams", []):
         if stream["codec_type"] == "video":
             width = stream.get("width", 1920)
             height = stream.get("height", 1080)
-            break
+            video_codec = stream.get("codec_name", "")
+            pix_fmt = stream.get("pix_fmt", "")
+            # Infer bit depth from pix_fmt (mirrors Jellyfin's ProbeResultNormalizer)
+            bit_depth = (
+                10
+                if ("10le" in pix_fmt or "10be" in pix_fmt)
+                else 12 if ("12le" in pix_fmt or "12be" in pix_fmt) else 8
+            )
+        elif stream["codec_type"] == "audio" and not audio_codec:
+            audio_codec = stream.get("codec_name", "")
 
     return MediaInfo(
         duration_seconds=duration,
@@ -60,6 +83,10 @@ async def probe_media(path: str) -> MediaInfo:
         width=width,
         height=height,
         bitrate=bitrate,
+        video_codec=video_codec,
+        pix_fmt=pix_fmt,
+        bit_depth=bit_depth,
+        audio_codec=audio_codec,
     )
 
 

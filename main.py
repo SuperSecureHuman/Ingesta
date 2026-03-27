@@ -137,6 +137,10 @@ async def probe(path: str = Query(...), stream_id: str = Query(None)):
             "width": info.width,
             "height": info.height,
             "bitrate": info.bitrate,
+            "video_codec": info.video_codec,
+            "pix_fmt": info.pix_fmt,
+            "bit_depth": info.bit_depth,
+            "audio_codec": info.audio_codec,
         }
     except HTTPException:
         raise
@@ -553,6 +557,9 @@ async def debug_state():
                 "download_position_ticks": j.download_position_ticks,
                 "has_exited": j.has_exited,
                 "active_requests": j.active_requests,
+                "transcode_fps": j.transcode_fps,
+                "transcode_speed": j.transcode_speed,
+                "transcode_position_sec": j.transcode_position_sec,
             }
             for j in manager.get_all_jobs()
         ]
