@@ -10,11 +10,13 @@ import HomeView from '@/components/views/HomeView';
 import LibraryView from '@/components/views/LibraryView';
 import ProjectView from '@/components/views/ProjectView';
 import AddToProjectPanel from '@/components/panels/AddToProjectPanel';
+import CreateSharePanel from '@/components/panels/CreateSharePanel';
+import ShareLinksPanel from '@/components/panels/ShareLinksPanel';
 
 export default function AppShell() {
-  const { currentView, currentUser, currentLibraryId } = useAppContext();
+  const { currentView, currentUser, currentLibraryId, currentProjectId } = useAppContext();
   const { logout } = useAuth();
-  const { selectedItems, updateSelection, clearSelection } = useSelection();
+  const { clearSelection } = useSelection();
   const { activePanel, closePanel, openPanel } = usePanels();
 
   const handleLogout = async () => {
@@ -31,20 +33,30 @@ export default function AppShell() {
         {currentView === 'library' && (
           <LibraryView
             onOpenPanel={openPanel}
-            selectedItems={selectedItems}
-            onUpdateSelection={updateSelection}
-            onClearSelection={clearSelection}
           />
         )}
-        {currentView === 'project' && <ProjectView />}
+        {currentView === 'project' && <ProjectView onOpenPanel={openPanel} />}
       </main>
 
       <AddToProjectPanel
         isOpen={activePanel === 'addToProject'}
         onClose={closePanel}
         onSuccess={() => clearSelection()}
-        selectedItems={selectedItems}
+        selectedItems={new Map()}
         currentLibraryId={currentLibraryId}
+      />
+
+      <CreateSharePanel
+        isOpen={activePanel === 'createShare'}
+        onClose={closePanel}
+        currentProjectId={currentProjectId}
+        onOpenShareLinks={() => openPanel('shareLinks')}
+      />
+
+      <ShareLinksPanel
+        isOpen={activePanel === 'shareLinks'}
+        onClose={closePanel}
+        currentProjectId={currentProjectId}
       />
     </div>
   );

@@ -2,28 +2,24 @@
 
 import { useEffect, useState } from 'react';
 import { apiFetch } from '@/lib/api';
-import { BrowseResult, SelectionItem } from '@/lib/types';
+import { BrowseResult, PanelName, SelectionItem } from '@/lib/types';
 import { useToast } from '@/context/ToastContext';
 import { useAppContext } from '@/context/AppContext';
+import { useSelection } from '@/hooks/useSelection';
 import Spinner from '@/components/ui/Spinner';
 import FileCard from '@/components/cards/FileCard';
 import SelectionToolbar from '@/components/ui/SelectionToolbar';
 
 interface LibraryViewProps {
-  onOpenPanel: (panelName: string) => void;
-  selectedItems: Map<string, SelectionItem>;
-  onUpdateSelection: (item: SelectionItem, selected: boolean) => void;
-  onClearSelection: () => void;
+  onOpenPanel: (panelName: PanelName) => void;
 }
 
 export default function LibraryView({
   onOpenPanel,
-  selectedItems,
-  onUpdateSelection,
-  onClearSelection,
 }: LibraryViewProps) {
   const { currentLibraryId, setCurrentView } = useAppContext();
   const { showToast } = useToast();
+  const { selectedItems, updateSelection, clearSelection } = useSelection();
   const [loading, setLoading] = useState(true);
   const [files, setFiles] = useState<BrowseResult | null>(null);
 
@@ -69,7 +65,7 @@ export default function LibraryView({
   };
 
   const handleAddEntireLibrary = () => {
-    onClearSelection();
+    clearSelection();
     onOpenPanel('addToProject');
   };
 
@@ -80,7 +76,7 @@ export default function LibraryView({
 
   const handleSelectionChange = (path: string, type: 'file' | 'folder', selected: boolean) => {
     const item: SelectionItem = { type, path };
-    onUpdateSelection(item, selected);
+    updateSelection(item, selected);
   };
 
   if (loading) {
@@ -123,7 +119,7 @@ export default function LibraryView({
       <SelectionToolbar
         count={selectedItems.size}
         onAddToProject={() => onOpenPanel('addToProject')}
-        onClear={onClearSelection}
+        onClear={clearSelection}
       />
     </div>
   );

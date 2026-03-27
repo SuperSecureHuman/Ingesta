@@ -2,16 +2,23 @@
 
 import { useEffect, useState } from 'react';
 import { apiFetch } from '@/lib/api';
-import { ProjectFile } from '@/lib/types';
+import { ProjectFile, PanelName } from '@/lib/types';
 import { useToast } from '@/context/ToastContext';
 import { useAppContext } from '@/context/AppContext';
+import ConfirmOverlay from '@/components/ui/ConfirmOverlay';
 import Spinner from '@/components/ui/Spinner';
 
-export default function ProjectView() {
+interface ProjectViewProps {
+  onOpenPanel: (panel: PanelName) => void;
+}
+
+export default function ProjectView({ onOpenPanel }: ProjectViewProps) {
   const { currentProjectId, setCurrentView } = useAppContext();
   const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
   const [files, setFiles] = useState<ProjectFile[]>([]);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (!currentProjectId) {
@@ -41,6 +48,29 @@ export default function ProjectView() {
     }
   };
 
+  const handleDeleteProject = async () => {
+    if (!currentProjectId) return;
+
+    try {
+      setDeleting(true);
+      const res = await apiFetch(`/api/projects/${currentProjectId}`, {
+        method: 'DELETE',
+      });
+
+      if (!res.ok) {
+        throw new Error('Failed to delete project');
+      }
+
+      showToast('Project deleted', 'success');
+      setCurrentView('home');
+    } catch (e) {
+      showToast(`${e}`, 'error');
+    } finally {
+      setDeleting(false);
+      setShowDeleteConfirm(false);
+    }
+  };
+
   if (loading) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', padding: '40px' }}>
@@ -52,9 +82,24 @@ export default function ProjectView() {
   return (
     <div>
       <div className="library-toolbar">
-        <button className="btn btn-primary btn-sm">Create Share</button>
-        <button className="btn btn-secondary btn-sm">Share Links</button>
-        <button className="btn btn-danger btn-sm">Delete Project</button>
+        <button
+          className="btn btn-primary btn-sm"
+          onClick={() => onOpenPanel('createShare')}
+        >
+          Create Share
+        </button>
+        <button
+          className="btn btn-secondary btn-sm"
+          onClick={() => onOpenPanel('shareLinks')}
+        >
+          Share Links
+        </button>
+        <button
+          className="btn btn-danger btn-sm"
+          onClick={() => setShowDeleteConfirm(true)}
+        >
+          Delete Project
+        </button>
       </div>
       <div className="grid">
         {files.length === 0 ? (
@@ -92,6 +137,16 @@ export default function ProjectView() {
           ))
         )}
       </div>
+
+      {showDeleteConfirm && (
+        <ConfirmOverlay
+          message="Delete this project? This action cannot be undone."
+          onConfirm={handleDeleteProject}
+          onCancel={() => setShowDeleteConfirm(false)}
+          confirmText="Delete"
+          isDanger
+        />
+      )}
     </div>
   );
 }
