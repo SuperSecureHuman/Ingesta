@@ -16,6 +16,7 @@ from jose import JWTError, jwt
 
 from config import settings
 import db.crud as crud
+from routes.deps import require_auth
 from playlist import probe_media
 from transcoder import TICKS_PER_SECOND
 from thumbs import get_or_generate_thumb
@@ -62,15 +63,8 @@ def verify_token(token: str) -> dict:
 
 
 # ============================================================================
-# SHARE CREATION (requires ADMIN_API_KEY)
+# SHARE CREATION (requires authenticated session)
 # ============================================================================
-
-
-def require_admin_key(x_admin_key: Optional[str] = Header(None)) -> str:
-    """Dependency to validate ADMIN_API_KEY header."""
-    if not x_admin_key or x_admin_key != settings.admin_api_key:
-        raise HTTPException(status_code=401, detail="Invalid or missing ADMIN_API_KEY")
-    return x_admin_key
 
 
 class CreateShareRequest(BaseModel):
@@ -84,7 +78,7 @@ class CreateShareRequest(BaseModel):
 async def create_share(
     project_id: str,
     req: CreateShareRequest,
-    admin_key: str = Depends(require_admin_key),
+    _auth: str = Depends(require_auth),
 ):
     """Create a share link for a project (returns plaintext password once)."""
     project = await crud.get_project(project_id)
@@ -114,7 +108,7 @@ async def create_share(
 @router.get("/{project_id}/shares")
 async def list_shares(
     project_id: str,
-    admin_key: str = Depends(require_admin_key),
+    _auth: str = Depends(require_auth),
 ):
     """List active shares for a project."""
     project = await crud.get_project(project_id)
@@ -146,7 +140,7 @@ async def list_shares(
 @router.delete("/{share_id}")
 async def revoke_share(
     share_id: str,
-    admin_key: str = Depends(require_admin_key),
+    _auth: str = Depends(require_auth),
 ):
     """Revoke a share (mark inactive)."""
     share = await crud.get_share(share_id)
