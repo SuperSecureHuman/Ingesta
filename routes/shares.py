@@ -17,9 +17,9 @@ from jose import JWTError, jwt
 from config import settings
 import db.crud as crud
 from routes.deps import require_auth
-from playlist import probe_media
-from transcoder import TICKS_PER_SECOND
-from thumbs import get_or_generate_thumb
+from media.playlist import probe_media
+from media.transcoder import TICKS_PER_SECOND
+from media.thumbs import get_or_generate_thumb
 
 
 router = APIRouter(prefix="/api/share", tags=["shares"])
@@ -305,8 +305,8 @@ async def share_playlist(
         await validate_file_in_project(token["project_id"], path)
 
         # Import here to avoid circular dependency
-        from transcoder import get_bitrate_preset
-        from playlist import compute_equal_length_segments, build_vod_playlist
+        from media.transcoder import get_bitrate_preset
+        from media.playlist import compute_equal_length_segments, build_vod_playlist
 
         # Validate quality
         if quality != "source":
@@ -362,7 +362,7 @@ async def share_segment(
         # Delegate to main segment endpoint with same logic
         # Import manager here to avoid circular dependency
         from main import manager
-        from transcoder import (
+        from media.transcoder import (
             TranscodeJob,
             get_current_transcode_index,
             get_bitrate_preset,
