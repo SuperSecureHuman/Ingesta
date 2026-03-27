@@ -6,7 +6,8 @@ from pathlib import Path
 from typing import Optional
 from urllib.parse import unquote
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Header
+from pydantic import BaseModel
 
 from config import settings
 import db.crud as crud
@@ -15,7 +16,13 @@ import db.crud as crud
 router = APIRouter(prefix="/api/libraries", tags=["libraries"])
 
 
-def require_admin_key(x_admin_key: Optional[str] = None) -> str:
+class CreateLibraryRequest(BaseModel):
+    """Request to create a library."""
+    name: str
+    root_path: str
+
+
+def require_admin_key(x_admin_key: Optional[str] = Header(None)) -> str:
     """Dependency to validate ADMIN_API_KEY header."""
     if not x_admin_key or x_admin_key != settings.admin_api_key:
         raise HTTPException(status_code=401, detail="Invalid or missing ADMIN_API_KEY")
@@ -46,22 +53,21 @@ async def list_libraries(admin_key: str = Depends(require_admin_key)):
     return {"libraries": libraries}
 
 
-@router.post("")
+@router.post("", status_code=201)
 async def create_library(
-    name: str = Query(...),
-    root_path: str = Query(...),
+    req: CreateLibraryRequest,
     admin_key: str = Depends(require_admin_key),
 ):
     """Create a new library."""
     # Validate root_path exists and is a directory
-    root = Path(root_path).resolve()
+    root = Path(req.root_path).resolve()
     if not root.exists():
         raise HTTPException(400, "root_path does not exist")
     if not root.is_dir():
         raise HTTPException(400, "root_path must be a directory")
 
-    library_id = await crud.create_library(name, str(root))
-    return {"id": library_id, "name": name, "root_path": str(root)}
+    library_id = await crud.create_library(req.name, str(root))
+    return {"id": library_id, "name": req.name, "root_path": str(root)}
 
 
 @router.delete("/{library_id}")

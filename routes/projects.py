@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Header
 from pydantic import BaseModel
 
 from config import settings
@@ -17,7 +17,7 @@ import db.crud as crud
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 
 
-def require_admin_key(x_admin_key: Optional[str] = None) -> str:
+def require_admin_key(x_admin_key: Optional[str] = Header(None)) -> str:
     """Dependency to validate ADMIN_API_KEY header."""
     if not x_admin_key or x_admin_key != settings.admin_api_key:
         raise HTTPException(status_code=401, detail="Invalid or missing ADMIN_API_KEY")

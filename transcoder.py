@@ -12,6 +12,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
+from config import settings
+
 TICKS_PER_SECOND = 10_000_000
 
 # ANSI color codes
@@ -52,7 +54,7 @@ class TranscodeJob:
     stream_id: str
     source_path: str
     quality: str
-    segment_length: int
+    segment_length: int = field(default_factory=lambda: settings.segment_length)
     process: Optional[asyncio.subprocess.Process] = None
     start_segment: int = 0
     start_time_sec: float = 0.0

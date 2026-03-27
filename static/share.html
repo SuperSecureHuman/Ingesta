@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shared Footage Review</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        accent: '#e5a00d'
+                    },
+                    fontFamily: {
+                        sans: ['-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto', 'sans-serif']
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Range thumb styling */
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 10px;
+            height: 10px;
+            background: #e5a00d;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+        input[type=range]::-moz-range-thumb {
+            width: 10px;
+            height: 10px;
+            background: #e5a00d;
+            border-radius: 50%;
+            cursor: pointer;
+            border: none;
+        }
+        /* Seekbar hover height */
+        #seekBar:hover {
+            height: 4px;
+        }
+        /* Scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #030712;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #1f2937;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #6b7280;
+        }
+    </style>
+</head>
+<body class="bg-gray-950 text-gray-100 font-sans overflow-hidden">
+    <!-- PASSWORD GATE VIEW -->
+    <div id="passwordGateContainer" class="flex items-center justify-center h-screen bg-gray-950 px-4">
+        <div class="w-full max-w-md">
+            <div class="bg-gray-900 border border-gray-800 rounded-xl p-8 shadow-2xl">
+                <h1 class="text-2xl font-bold text-gray-100 mb-2 text-center">Footage Review</h1>
+                <p class="text-sm text-gray-500 text-center mb-6">Enter password to access shared footage</p>
+
+                <form id="passwordForm" onsubmit="submitPassword(event)">
+                    <div class="mb-4">
+                        <input id="passwordInput" type="password" placeholder="Enter password"
+                            class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-gray-100
+                                   placeholder-gray-500 focus:outline-none focus:border-accent transition-colors">
+                    </div>
+
+                    <div id="passwordError" class="text-red-400 text-sm mb-4 hidden"></div>
+
+                    <button type="submit"
+                        class="w-full bg-accent hover:bg-amber-500 text-gray-950 font-semibold py-3 rounded-lg
+                               transition-colors">
+                        Watch
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- PLAYER VIEW -->
+    <div id="playerContainer" class="flex flex-col h-screen bg-black" style="display: none">
+        <!-- Header -->
+        <header class="flex items-center justify-between px-6 py-4 border-b border-gray-800 shrink-0 bg-gray-900">
+            <div>
+                <h1 id="projectTitle" class="text-lg font-semibold text-gray-100"></h1>
+            </div>
+            <button onclick="logout()"
+                class="text-xs px-3 py-1.5 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded
+                       text-gray-400 hover:text-gray-200 transition-colors">
+                Logout
+            </button>
+        </header>
+
+        <!-- Main content area -->
+        <div class="flex-1 overflow-hidden flex flex-col">
+            <!-- FILE GRID VIEW -->
+            <div id="fileGridView" class="flex-1 overflow-y-auto px-6 py-6">
+                <div id="fileGrid" class="grid gap-4" style="grid-template-columns: repeat(auto-fill, minmax(200px, 1fr))">
+                </div>
+            </div>
+
+            <!-- PLAYER VIEW -->
+            <div id="videoViewport" class="flex-1 bg-black overflow-hidden relative hidden">
+                <video id="video" class="w-full h-full object-contain"></video>
+
+                <!-- Back button -->
+                <button onclick="backToGrid()"
+                  class="absolute top-3 left-3 z-40 flex items-center gap-1.5 px-2.5 py-1.5
+                         bg-black/60 hover:bg-black/90 rounded-lg text-xs text-gray-400
+                         hover:text-gray-100 backdrop-blur-sm transition-all border border-gray-700/50
+                         hover:border-gray-600"
+                  title="Back to files (Esc)">
+                  ← Files
+                </button>
+
+                <!-- Playback Info Panel -->
+                <div id="playbackInfoPanel"
+                    class="absolute top-4 right-4 bottom-16 w-80 bg-black/80 backdrop-blur-sm
+                           rounded-xl border border-gray-700 overflow-y-auto z-50
+                           hidden flex-col text-xs font-mono">
+                    <div class="flex items-center justify-between px-4 py-3 border-b border-gray-700 shrink-0">
+                        <span class="text-sm font-semibold text-gray-100 font-sans">Media Info</span>
+                        <button onclick="toggleInfoPanel()" class="text-gray-500 hover:text-gray-200 transition-colors">✕</button>
+                    </div>
+                    <div id="playbackInfoContent" class="px-4 py-3 space-y-4 overflow-y-auto">
+                    </div>
+                </div>
+
+                <!-- Controls Overlay -->
+                <div id="controlsOverlay"
+                    class="absolute bottom-0 left-0 right-0 opacity-0 pointer-events-none transition-opacity duration-300
+                           bg-gradient-to-t from-black/90 to-transparent px-5 pt-16 pb-5">
+
+                    <!-- Seekbar Row -->
+                    <div class="flex flex-col gap-1 mb-3">
+                        <div id="seekBar" class="w-full h-0.5 bg-gray-600/40 rounded cursor-pointer relative transition-all">
+                            <div id="seekBuffered" class="absolute inset-y-0 left-0 bg-gray-500/50 rounded pointer-events-none"></div>
+                            <div id="seekProgress" class="absolute inset-y-0 left-0 bg-accent rounded pointer-events-none"></div>
+                        </div>
+                        <div class="text-xs text-gray-400 tabular-nums">
+                            <span id="currentTime">0:00</span>
+                            <span class="text-gray-600"> / </span>
+                            <span id="totalTime">0:00</span>
+                        </div>
+                    </div>
+
+                    <!-- Controls Row -->
+                    <div class="flex items-center gap-4">
+                        <!-- Play/Pause -->
+                        <button id="playPauseBtn" onclick="togglePlayPause()"
+                            class="text-gray-100 hover:text-accent text-xl transition-colors p-1">▶</button>
+
+                        <!-- Quality pill + popover -->
+                        <div class="relative" id="qualityPill">
+                            <button onclick="toggleQualityPopover()"
+                                class="flex items-center gap-1.5 px-3 py-1.5 bg-gray-900 border border-gray-700
+                                       rounded text-xs text-gray-100 hover:border-accent transition-colors cursor-pointer">
+                                <span id="qualityLabel">Source</span>
+                                <span class="text-gray-500">▾</span>
+                            </button>
+                            <!-- Popover -->
+                            <div id="qualityPopover"
+                                class="hidden absolute bottom-full left-0 mb-1 bg-gray-900 border border-gray-700
+                                     rounded-lg overflow-hidden z-50 min-w-max shadow-2xl">
+                            </div>
+                        </div>
+
+                        <!-- Volume -->
+                        <button id="volumeBtn" onclick="toggleVolumeMute()"
+                            class="text-gray-100 hover:text-accent text-lg transition-colors p-1">🔊</button>
+                        <input type="range" id="volumeSlider" min="0" max="100" value="100" onchange="setVolume()"
+                            class="w-20 h-0.5 cursor-pointer bg-gray-600/40 rounded appearance-none" />
+
+                        <!-- Spacer -->
+                        <span class="flex-1"></span>
+
+                        <!-- Info button -->
+                        <button onclick="toggleInfoPanel()"
+                            class="text-gray-400 hover:text-accent text-base transition-colors p-1"
+                            title="Media info (I)">ⓘ</button>
+
+                        <!-- Download -->
+                        <button onclick="downloadFile()"
+                            class="text-gray-400 hover:text-accent text-lg transition-colors p-1"
+                            title="Download original file">↓</button>
+
+                        <!-- Fullscreen -->
+                        <button id="fullscreenBtn" onclick="toggleFullscreen()"
+                            class="text-gray-100 hover:text-accent text-lg transition-colors p-1">⛶</button>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest/dist/hls.min.js"></script>
+    <script>
+        // ===== STATE =====
+        let shareId = null;
+        let jwt = null;
+        let projectName = null;
+        let currentFilePath = null;
+        let currentQuality = "source";
+        let currentSegmentLength = 6;
+        let probeData = null;
+        let sourceResLabel = 'Source';
+        let hls = null;
+        let isPlaying = false;
+        let infoVisible = false;
+        let controlsHideTimer = null;
+        let transcodeStats = {};
+
+        const VIDEO = document.getElementById('video');
+        const PASSWORD_GATE = document.getElementById('passwordGateContainer');
+        const PLAYER_CONTAINER = document.getElementById('playerContainer');
+        const FILE_GRID_VIEW = document.getElementById('fileGridView');
+        const VIDEO_VIEWPORT = document.getElementById('videoViewport');
+        const CONTROLS_OVERLAY = document.getElementById('controlsOverlay');
+
+        // ===== INITIALIZATION =====
+        window.addEventListener('DOMContentLoaded', () => {
+            initShare();
+        });
+
+        async function initShare() {
+            // Extract share_id from URL path
+            const path = window.location.pathname;
+            const match = path.match(/\/share\/([a-f0-9\-]+)/i);
+            if (!match) {
+                showError('Invalid share link');
+                return;
+            }
+            shareId = match[1];
+
+            // Check for JWT in sessionStorage
+            const stored = sessionStorage.getItem(`share_jwt_${shareId}`);
+            if (stored) {
+                jwt = stored;
+                await loadProjectAndFiles();
+            } else {
+                showPasswordGate();
+            }
+
+            setupVideoEvents();
+            setupKeyboardShortcuts();
+            setupControlsAutoHide();
+        }
+
+        function showPasswordGate() {
+            PASSWORD_GATE.style.display = 'flex';
+            PLAYER_CONTAINER.style.display = 'none';
+            document.getElementById('passwordInput').focus();
+        }
+
+        function showPlayerView() {
+            PASSWORD_GATE.style.display = 'none';
+            PLAYER_CONTAINER.style.display = 'flex';
+        }
+
+        async function submitPassword(event) {
+            event.preventDefault();
+            const password = document.getElementById('passwordInput').value;
+            const errorDiv = document.getElementById('passwordError');
+            errorDiv.classList.add('hidden');
+
+            try {
+                const resp = await fetch(`/api/share/${shareId}/auth`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password })
+                });
+
+                if (!resp.ok) {
+                    const error = await resp.json();
+                    errorDiv.textContent = error.detail || 'Invalid password';
+                    errorDiv.classList.remove('hidden');
+                    return;
+                }
+
+                const data = await resp.json();
+                jwt = data.access_token;
+                sessionStorage.setItem(`share_jwt_${shareId}`, jwt);
+                document.getElementById('passwordInput').value = '';
+
+                await loadProjectAndFiles();
+                showPlayerView();
+            } catch (e) {
+                errorDiv.textContent = 'Connection error: ' + e.message;
+                errorDiv.classList.remove('hidden');
+            }
+        }
+
+        async function loadProjectAndFiles() {
+            try {
+                const resp = await fetch(`/api/share/${shareId}/files`, {
+                    headers: { 'Authorization': `Bearer ${jwt}` }
+                });
+
+                if (!resp.ok) {
+                    if (resp.status === 401) {
+                        logout();
+                    }
+                    throw new Error('Failed to load files');
+                }
+
+                const data = await resp.json();
+                projectName = data.project_name;
+                document.getElementById('projectTitle').textContent = projectName;
+                renderFileGrid(data.files || []);
+            } catch (e) {
+                console.error('Failed to load files:', e);
+                showError('Error loading shared files');
+            }
+        }
+
+        function renderFileGrid(files) {
+            const grid = document.getElementById('fileGrid');
+            grid.innerHTML = '';
+
+            if (files.length === 0) {
+                grid.innerHTML = '<div class="col-span-full text-center py-20 text-gray-500">No files in this share</div>';
+                return;
+            }
+
+            for (const file of files) {
+                const card = document.createElement('div');
+                card.className = 'group cursor-pointer rounded-lg border border-gray-800 bg-gray-900 hover:border-accent overflow-hidden transition-all';
+
+                const posterUrl = `/api/share/${shareId}/thumb?path=${encodeURIComponent(file.file_path)}&offset=0`;
+                const durationStr = formatTime(file.duration_seconds || 0);
+                const resLabel = file.height >= 2160 ? '4K'
+                               : file.height >= 1440 ? '1440p'
+                               : file.height >= 1080 ? '1080p'
+                               : file.height >= 720 ? '720p'
+                               : `${file.height}p`;
+
+                const mbps = file.bitrate ? (file.bitrate / 1_000_000).toFixed(1) : '—';
+                const loadingSpinner = file.scan_status === 'pending'
+                    ? '<div class="absolute inset-0 flex items-center justify-center bg-black/50"><span class="animate-spin text-2xl">↻</span></div>'
+                    : '';
+
+                card.innerHTML = `
+                    <div class="aspect-video relative bg-gray-800">
+                        <img src="${posterUrl}" alt="${file.name}" loading="lazy"
+                             class="absolute inset-0 w-full h-full object-cover"
+                             onerror="this.style.display='none'">
+                        <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                            <span class="text-4xl drop-shadow">▶</span>
+                        </div>
+                        ${loadingSpinner}
+                    </div>
+                    <div class="px-3 py-3">
+                        <p class="text-sm text-gray-200 truncate mb-1" title="${file.name}">${file.name}</p>
+                        <div class="flex justify-between text-xs text-gray-500">
+                            <span>${durationStr}</span>
+                            <span>${resLabel} · ${mbps}Mbps</span>
+                        </div>
+                    </div>
+                `;
+
+                card.onclick = async () => {
+                    if (file.scan_status === 'pending') return;
+                    currentFilePath = file.file_path;
+                    await probeAndPopulateQuality();
+                    startPlayback();
+                };
+
+                grid.appendChild(card);
+            }
+        }
+
+        function formatTime(seconds) {
+            if (!seconds || isNaN(seconds)) return '0:00';
+            const h = Math.floor(seconds / 3600);
+            const m = Math.floor((seconds % 3600) / 60);
+            const s = Math.floor(seconds % 60);
+            if (h > 0) {
+                return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+            }
+            return `${m}:${String(s).padStart(2, '0')}`;
+        }
+
+        async function probeAndPopulateQuality() {
+            try {
+                const resp = await fetch(`/api/share/${shareId}/probe?path=${encodeURIComponent(currentFilePath)}`, {
+                    headers: { 'Authorization': `Bearer ${jwt}` }
+                });
+                if (!resp.ok) throw new Error('Probe failed');
+                probeData = await resp.json();
+
+                const popover = document.getElementById('qualityPopover');
+                popover.innerHTML = '';
+
+                const mbps = (probeData.bitrate / 1_000_000).toFixed(1);
+                const resLabel = probeData.height >= 2160 ? '4K'
+                               : probeData.height >= 1440 ? '1440p'
+                               : probeData.height >= 1080 ? '1080p'
+                               : probeData.height >= 720 ? '720p'
+                               : `${probeData.height}p`;
+                sourceResLabel = resLabel;
+
+                let opt = document.createElement('div');
+                opt.className = 'px-3 py-2.5 cursor-pointer text-xs text-gray-100 border-b border-gray-800 last:border-0 hover:bg-gray-800 transition-colors bg-accent text-gray-950 hover:bg-amber-400 font-semibold';
+                opt.textContent = `Source — ${resLabel} · ${mbps} Mbps`;
+                opt.onclick = () => { changeQuality('source'); };
+                popover.appendChild(opt);
+
+                updateQualityLabel();
+            } catch (e) {
+                console.warn('Error probing:', e.message);
+            }
+        }
+
+        async function changeQuality(newQuality) {
+            closeQualityPopover();
+            if (newQuality === currentQuality) return;
+            currentQuality = newQuality;
+            updateQualityLabel();
+            if (!isPlaying) return;
+
+            const seekTime = VIDEO.currentTime;
+            if (hls) { hls.destroy(); hls = null; }
+            await startPlayback(seekTime);
+        }
+
+        function updateQualityLabel() {
+            document.getElementById('qualityLabel').textContent =
+                currentQuality === 'source' ? sourceResLabel : currentQuality;
+        }
+
+        function toggleQualityPopover() {
+            const popover = document.getElementById('qualityPopover');
+            popover.classList.toggle('hidden');
+        }
+
+        function closeQualityPopover() {
+            document.getElementById('qualityPopover').classList.add('hidden');
+        }
+
+        async function startPlayback(seekTime = 0) {
+            if (!currentFilePath) return;
+
+            try {
+                FILE_GRID_VIEW.classList.add('hidden');
+                VIDEO_VIEWPORT.classList.remove('hidden');
+
+                const playlistUrl = `/api/share/${shareId}/playlist/main.m3u8?path=${encodeURIComponent(currentFilePath)}&quality=${currentQuality}&segment_length=${currentSegmentLength}`;
+
+                if (Hls.isSupported()) {
+                    hls = new Hls({
+                        debug: false,
+                        enableWorker: true,
+                        maxBufferLength: 30,
+                    });
+
+                    hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                        VIDEO.play();
+                        if (seekTime > 0) { VIDEO.currentTime = seekTime; }
+                    });
+
+                    hls.loadSource(playlistUrl);
+                    hls.attachMedia(VIDEO);
+                    hls.setAuthToken(jwt);
+                } else if (VIDEO.canPlayType('application/vnd.apple.mpegurl')) {
+                    VIDEO.src = playlistUrl;
+                    VIDEO.play();
+                }
+            } catch (e) {
+                console.error('Error starting playback:', e);
+                backToGrid();
+            }
+        }
+
+        function backToGrid() {
+            if (hls) { hls.destroy(); hls = null; }
+            VIDEO.pause();
+            VIDEO.src = '';
+            currentFilePath = null;
+            isPlaying = false;
+            infoVisible = false;
+
+            VIDEO_VIEWPORT.classList.add('hidden');
+            FILE_GRID_VIEW.classList.remove('hidden');
+            document.getElementById('playbackInfoPanel').classList.add('hidden');
+        }
+
+        async function downloadFile() {
+            if (!currentFilePath) return;
+            try {
+                const resp = await fetch(`/api/share/${shareId}/download?path=${encodeURIComponent(currentFilePath)}`, {
+                    headers: { 'Authorization': `Bearer ${jwt}` }
+                });
+                if (!resp.ok) throw new Error('Download failed');
+
+                const blob = await resp.blob();
+                const filename = currentFilePath.split('/').pop();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                a.click();
+                URL.revokeObjectURL(url);
+            } catch (e) {
+                console.error('Download error:', e);
+                alert('Download failed');
+            }
+        }
+
+        function logout() {
+            sessionStorage.removeItem(`share_jwt_${shareId}`);
+            jwt = null;
+            currentFilePath = null;
+            if (hls) { hls.destroy(); hls = null; }
+            VIDEO.pause();
+            VIDEO.src = '';
+            backToGrid();
+            showPasswordGate();
+        }
+
+        function showError(msg) {
+            alert(msg);
+        }
+
+        // ===== VIDEO CONTROLS =====
+        function setupVideoEvents() {
+            VIDEO.addEventListener('play', () => {
+                isPlaying = true;
+                document.getElementById('playPauseBtn').textContent = '⏸';
+            });
+
+            VIDEO.addEventListener('pause', () => {
+                isPlaying = false;
+                document.getElementById('playPauseBtn').textContent = '▶';
+            });
+
+            VIDEO.addEventListener('timeupdate', () => {
+                updateTimeDisplay();
+                updateSeekBar();
+                updateInfoPanel();
+            });
+
+            VIDEO.addEventListener('loadedmetadata', () => {
+                updateTimeDisplay();
+            });
+
+            VIDEO.addEventListener('progress', () => {
+                updateBufferedRange();
+            });
+        }
+
+        function togglePlayPause() {
+            if (isPlaying) {
+                VIDEO.pause();
+            } else {
+                VIDEO.play();
+            }
+        }
+
+        function updateTimeDisplay() {
+            document.getElementById('currentTime').textContent = formatTime(VIDEO.currentTime);
+            document.getElementById('totalTime').textContent = formatTime(VIDEO.duration);
+        }
+
+        function updateSeekBar() {
+            if (VIDEO.duration) {
+                const pct = (VIDEO.currentTime / VIDEO.duration) * 100;
+                document.getElementById('seekProgress').style.width = pct + '%';
+            }
+        }
+
+        function updateBufferedRange() {
+            if (VIDEO.buffered.length > 0) {
+                const end = VIDEO.buffered.end(VIDEO.buffered.length - 1);
+                const pct = (end / VIDEO.duration) * 100;
+                document.getElementById('seekBuffered').style.width = pct + '%';
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const seekBar = document.getElementById('seekBar');
+            seekBar.addEventListener('click', (e) => {
+                if (!VIDEO.duration) return;
+                const rect = seekBar.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const pct = x / rect.width;
+                VIDEO.currentTime = pct * VIDEO.duration;
+            });
+        });
+
+        function setVolume() {
+            VIDEO.volume = parseInt(document.getElementById('volumeSlider').value) / 100;
+        }
+
+        function toggleVolumeMute() {
+            const slider = document.getElementById('volumeSlider');
+            if (VIDEO.volume > 0) {
+                VIDEO.volume = 0;
+                slider.value = 0;
+            } else {
+                VIDEO.volume = 1;
+                slider.value = 100;
+            }
+        }
+
+        function toggleFullscreen() {
+            if (!document.fullscreenElement) {
+                VIDEO_VIEWPORT.requestFullscreen().catch(err => console.error(err));
+            } else {
+                document.exitFullscreen();
+            }
+        }
+
+        function toggleInfoPanel() {
+            infoVisible = !infoVisible;
+            const panel = document.getElementById('playbackInfoPanel');
+            panel.classList.toggle('hidden', !infoVisible);
+            panel.classList.toggle('flex', infoVisible);
+            if (infoVisible) updateInfoPanel();
+        }
+
+        function updateInfoPanel() {
+            if (!infoVisible || !probeData) return;
+            const v = VIDEO;
+
+            let bufferedSec = 0;
+            if (v.buffered.length > 0) {
+                bufferedSec = (v.buffered.end(v.buffered.length - 1) - v.currentTime).toFixed(1);
+            }
+
+            const container = currentFilePath ? currentFilePath.split('.').pop().toUpperCase() : '—';
+            const sourceMbps = probeData ? (probeData.bitrate / 1_000_000).toFixed(1) + ' Mbps' : '—';
+            const sourceRes = probeData ? `${probeData.width}×${probeData.height}` : '—';
+            const srcCodec = probeData?.video_codec?.toUpperCase() || '—';
+
+            const sections = [
+                `<div>
+                    <div class="text-gray-400 font-sans font-semibold text-xs mb-1.5 uppercase tracking-wider">Media</div>
+                    <div class="space-y-0.5">
+                        <div class="flex justify-between gap-2 py-0.5">
+                            <span class="text-gray-500">Container</span>
+                            <span class="text-gray-200 text-right truncate">${container}</span>
+                        </div>
+                        <div class="flex justify-between gap-2 py-0.5">
+                            <span class="text-gray-500">Resolution</span>
+                            <span class="text-gray-200 text-right truncate">${sourceRes}</span>
+                        </div>
+                        <div class="flex justify-between gap-2 py-0.5">
+                            <span class="text-gray-500">Bitrate</span>
+                            <span class="text-gray-200 text-right truncate">${sourceMbps}</span>
+                        </div>
+                        <div class="flex justify-between gap-2 py-0.5">
+                            <span class="text-gray-500">Codec</span>
+                            <span class="text-gray-200 text-right truncate">${srcCodec}</span>
+                        </div>
+                        <div class="flex justify-between gap-2 py-0.5">
+                            <span class="text-gray-500">Duration</span>
+                            <span class="text-gray-200 text-right truncate">${formatTime(probeData.duration_seconds)}</span>
+                        </div>
+                    </div>
+                </div>`,
+                `<div>
+                    <div class="text-gray-400 font-sans font-semibold text-xs mb-1.5 uppercase tracking-wider">Playback</div>
+                    <div class="space-y-0.5">
+                        <div class="flex justify-between gap-2 py-0.5">
+                            <span class="text-gray-500">Current time</span>
+                            <span class="text-gray-200 text-right truncate">${formatTime(v.currentTime)}</span>
+                        </div>
+                        <div class="flex justify-between gap-2 py-0.5">
+                            <span class="text-gray-500">Buffered ahead</span>
+                            <span class="text-gray-200 text-right truncate">${bufferedSec}s</span>
+                        </div>
+                    </div>
+                </div>`
+            ];
+
+            document.getElementById('playbackInfoContent').innerHTML = sections.join('');
+        }
+
+        // ===== CONTROLS AUTO-HIDE =====
+        function setupControlsAutoHide() {
+            VIDEO_VIEWPORT.addEventListener('mousemove', () => {
+                CONTROLS_OVERLAY.classList.remove('opacity-0', 'pointer-events-none');
+                CONTROLS_OVERLAY.classList.add('opacity-100');
+                if (controlsHideTimer) clearTimeout(controlsHideTimer);
+                if (isPlaying) {
+                    controlsHideTimer = setTimeout(() => {
+                        if (isPlaying) {
+                            CONTROLS_OVERLAY.classList.add('opacity-0', 'pointer-events-none');
+                            CONTROLS_OVERLAY.classList.remove('opacity-100');
+                        }
+                    }, 3000);
+                }
+            });
+
+            VIDEO_VIEWPORT.addEventListener('mouseleave', () => {
+                if (isPlaying) {
+                    CONTROLS_OVERLAY.classList.add('opacity-0', 'pointer-events-none');
+                    CONTROLS_OVERLAY.classList.remove('opacity-100');
+                }
+            });
+        }
+
+        // ===== KEYBOARD SHORTCUTS =====
+        function setupKeyboardShortcuts() {
+            document.addEventListener('keydown', (e) => {
+                if (e.target.tagName === 'INPUT') return;
+
+                switch (e.key.toLowerCase()) {
+                    case ' ':
+                        if (currentFilePath) {
+                            e.preventDefault();
+                            togglePlayPause();
+                        }
+                        break;
+                    case 'f':
+                        if (currentFilePath) {
+                            e.preventDefault();
+                            toggleFullscreen();
+                        }
+                        break;
+                    case 'm':
+                        if (currentFilePath) {
+                            e.preventDefault();
+                            toggleVolumeMute();
+                        }
+                        break;
+                    case 'i':
+                        if (currentFilePath) {
+                            e.preventDefault();
+                            toggleInfoPanel();
+                        }
+                        break;
+                    case 'escape':
+                        if (currentFilePath) {
+                            e.preventDefault();
+                            backToGrid();
+                        }
+                        break;
+                    case 'arrowleft':
+                        if (currentFilePath) VIDEO.currentTime = Math.max(0, VIDEO.currentTime - 10);
+                        break;
+                    case 'arrowright':
+                        if (currentFilePath) VIDEO.currentTime = Math.min(VIDEO.duration, VIDEO.currentTime + 10);
+                        break;
+                }
+            });
+        }
+    </script>
+</body>
+</html>
