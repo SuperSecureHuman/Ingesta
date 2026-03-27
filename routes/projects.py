@@ -108,13 +108,14 @@ async def add_files_to_project(
             mtime = stat.st_mtime
 
             # Add to project with pending status
-            await crud.add_project_file(
+            result = await crud.add_project_file(
                 project_id=project_id,
                 file_path=str(p),
                 file_size=file_size,
                 mtime=mtime,
             )
-            added += 1
+            if result is not None:
+                added += 1
         except HTTPException:
             raise
         except Exception as e:
@@ -237,13 +238,14 @@ async def add_folder_to_project(
             file_size = stat.st_size
             mtime = stat.st_mtime
 
-            await crud.add_project_file(
+            result = await crud.add_project_file(
                 project_id=project_id,
                 file_path=str(file_path),
                 file_size=file_size,
                 mtime=mtime,
             )
-            added += 1
+            if result is not None:
+                added += 1
         except Exception as e:
             errors.append({"path": str(file_path), "error": str(e)})
 
@@ -287,13 +289,14 @@ async def add_library_to_project(
             file_size = stat.st_size
             mtime = stat.st_mtime
 
-            await crud.add_project_file(
+            result = await crud.add_project_file(
                 project_id=project_id,
                 file_path=str(file_path),
                 file_size=file_size,
                 mtime=mtime,
             )
-            added += 1
+            if result is not None:
+                added += 1
         except Exception as e:
             errors.append({"path": str(file_path), "error": str(e)})
 

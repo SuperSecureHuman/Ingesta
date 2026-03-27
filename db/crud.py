@@ -167,12 +167,18 @@ async def add_project_file(
     file_path: str,
     file_size: int,
     mtime: float,
-) -> str:
-    """Add a file to a project. Returns the file ID."""
+) -> Optional[str]:
+    """Add a file to a project. Returns the file ID, or None if already present."""
+    db = get_db()
+    existing = await db.fetchone(
+        "SELECT id FROM project_files WHERE project_id = ? AND file_path = ?",
+        (project_id, file_path),
+    )
+    if existing:
+        return None
+
     file_id = _new_uuid()
     added_at = _now_iso()
-
-    db = get_db()
     await db.execute(
         """
         INSERT INTO project_files

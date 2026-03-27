@@ -16,11 +16,13 @@ from fastapi.staticfiles import StaticFiles
 from config import settings
 import db
 import db.crud as crud
+from media.playlist import probe_media
 from media.transcoder import (
     TranscodeManager,
     probe_hardware,
     select_encoder,
 )
+
 from routes import libraries, projects, shares, auth, stream, debug, pages
 
 
@@ -32,7 +34,9 @@ async def cleanup_loop():
     while True:
         await asyncio.sleep(settings.cleanup_interval)
         for job in list(manager.get_all_jobs()):
-            await manager.cleanup_segments(job, keep_seconds=settings.segment_retention_seconds)
+            await manager.cleanup_segments(
+                job, keep_seconds=settings.segment_retention_seconds
+            )
 
 
 async def cleanup_old_workdirs():
@@ -74,7 +78,9 @@ async def background_scanner_loop():
                         bitrate=info.bitrate,
                         video_codec=info.video_codec,
                     )
-                    print(f"[scanner] Probed {file_path}: {info.width}x{info.height} {info.bitrate}bps")
+                    print(
+                        f"[scanner] Probed {file_path}: {info.width}x{info.height} {info.bitrate}bps"
+                    )
                 except Exception as e:
                     # Mark file as error
                     error_msg = str(e)[:255]
@@ -102,10 +108,13 @@ async def lifespan(app: FastAPI):
     if not await crud.user_exists():
         print(f"[startup] Creating default user '{settings.admin_username}'...")
         import hashlib
+
         password_hash = hashlib.sha256(settings.admin_password.encode()).hexdigest()
         await crud.create_user(settings.admin_username, password_hash)
         if settings.admin_password == "changeme":
-            print("[WARNING] Default user created with default password 'changeme'. Please change this in production.")
+            print(
+                "[WARNING] Default user created with default password 'changeme'. Please change this in production."
+            )
 
     print("[startup] Probing hardware...")
     shutil.rmtree("/tmp/hls_srv", ignore_errors=True)
@@ -149,8 +158,6 @@ app.include_router(projects.router)
 app.include_router(shares.router)
 app.include_router(stream.router)
 app.include_router(debug.router)
-
-
 
 
 if __name__ == "__main__":
