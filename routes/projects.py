@@ -87,10 +87,18 @@ async def add_files_to_project(
 
     added = 0
     errors = []
+    seen = set()  # Track resolved paths in this request to avoid duplicates
 
     for file_path in req.paths:
         try:
             p = Path(file_path).resolve()
+            resolved_path = str(p)
+
+            # Skip if we've already seen this path in this request
+            if resolved_path in seen:
+                errors.append({"path": file_path, "error": "Duplicate in request"})
+                continue
+            seen.add(resolved_path)
 
             # Validate file exists
             if not p.exists():
@@ -110,7 +118,7 @@ async def add_files_to_project(
             # Add to project with pending status
             result = await crud.add_project_file(
                 project_id=project_id,
-                file_path=str(p),
+                file_path=resolved_path,
                 file_size=file_size,
                 mtime=mtime,
             )
@@ -225,6 +233,7 @@ async def add_folder_to_project(
 
     added = 0
     errors = []
+    seen = set()  # Track resolved paths in this request to avoid duplicates
 
     # Walk the folder recursively
     for file_path in folder.rglob("*"):
@@ -233,6 +242,13 @@ async def add_folder_to_project(
         if file_path.suffix.lower() not in VIDEO_EXTENSIONS:
             continue
 
+        resolved_path = str(file_path.resolve())
+
+        # Skip if we've already seen this path in this request
+        if resolved_path in seen:
+            continue
+        seen.add(resolved_path)
+
         try:
             stat = file_path.stat()
             file_size = stat.st_size
@@ -240,14 +256,14 @@ async def add_folder_to_project(
 
             result = await crud.add_project_file(
                 project_id=project_id,
-                file_path=str(file_path),
+                file_path=resolved_path,
                 file_size=file_size,
                 mtime=mtime,
             )
             if result is not None:
                 added += 1
         except Exception as e:
-            errors.append({"path": str(file_path), "error": str(e)})
+            errors.append({"path": resolved_path, "error": str(e)})
 
     return {
         "added": added,
@@ -276,6 +292,7 @@ async def add_library_to_project(
 
     added = 0
     errors = []
+    seen = set()  # Track resolved paths in this request to avoid duplicates
 
     # Walk the library root recursively
     for file_path in root.rglob("*"):
@@ -284,6 +301,13 @@ async def add_library_to_project(
         if file_path.suffix.lower() not in VIDEO_EXTENSIONS:
             continue
 
+        resolved_path = str(file_path.resolve())
+
+        # Skip if we've already seen this path in this request
+        if resolved_path in seen:
+            continue
+        seen.add(resolved_path)
+
         try:
             stat = file_path.stat()
             file_size = stat.st_size
@@ -291,14 +315,14 @@ async def add_library_to_project(
 
             result = await crud.add_project_file(
                 project_id=project_id,
-                file_path=str(file_path),
+                file_path=resolved_path,
                 file_size=file_size,
                 mtime=mtime,
             )
             if result is not None:
                 added += 1
         except Exception as e:
-            errors.append({"path": str(file_path), "error": str(e)})
+            errors.append({"path": resolved_path, "error": str(e)})
 
     return {
         "added": added,
