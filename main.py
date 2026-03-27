@@ -16,6 +16,9 @@ from fastapi import FastAPI, Query, HTTPException, BackgroundTasks, Request
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
+from config import settings
+import db
+import db.crud as crud
 from playlist import probe_media, compute_equal_length_segments, build_vod_playlist
 from transcoder import (
     TranscodeManager,
@@ -29,9 +32,10 @@ from transcoder import (
     select_encoder,
 )
 from thumbs import get_or_generate_thumb
+from routes import libraries, projects, shares
 
-MEDIA_ROOT = Path(os.getenv("MEDIA_ROOT", "/")).resolve()
-MAX_CONCURRENT = int(os.getenv("MAX_CONCURRENT_STREAMS", "10"))
+MEDIA_ROOT = Path(settings.media_root).resolve()
+MAX_CONCURRENT = settings.max_concurrent_streams
 SESSION_RE = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
     re.IGNORECASE,
@@ -64,16 +68,16 @@ manager = TranscodeManager()
 async def cleanup_loop():
     """Periodically clean up old segments."""
     while True:
-        await asyncio.sleep(20)
+        await asyncio.sleep(settings.cleanup_interval)
         for job in list(manager.get_all_jobs()):
-            await manager.cleanup_segments(job, keep_seconds=120)
+            await manager.cleanup_segments(job, keep_seconds=settings.segment_retention_seconds)
 
 
 async def cleanup_old_workdirs():
-    """Clean up work directories older than 1 hour."""
+    """Clean up work directories older than configured retention time."""
     while True:
-        await asyncio.sleep(300)  # every 5 minutes
-        cutoff = time.time() - 3600  # 1 hour old
+        await asyncio.sleep(settings.workdir_cleanup_interval)
+        cutoff = time.time() - settings.workdir_retention_seconds
         try:
             for d in Path("/tmp/hls_srv").iterdir():
                 if d.is_dir() and d.stat().st_mtime < cutoff:
@@ -82,10 +86,56 @@ async def cleanup_old_workdirs():
             pass
 
 
+async def background_scanner_loop():
+    """Periodically scan pending files and probe them for metadata."""
+    while True:
+        try:
+            await asyncio.sleep(settings.scanner_interval)
+
+            # Get pending files (limit 10 per scan)
+            pending = await crud.get_pending_files(limit=10)
+
+            for file_record in pending:
+                try:
+                    file_path = file_record["file_path"]
+                    file_id = file_record["id"]
+
+                    # Probe the file
+                    info = await probe_media(file_path)
+
+                    # Update DB with results
+                    await crud.update_file_probe_results(
+                        file_id=file_id,
+                        duration_seconds=info.duration_seconds,
+                        width=info.width,
+                        height=info.height,
+                        bitrate=info.bitrate,
+                        video_codec=info.video_codec,
+                    )
+                    print(f"[scanner] Probed {file_path}: {info.width}x{info.height} {info.bitrate}bps")
+                except Exception as e:
+                    # Mark file as error
+                    error_msg = str(e)[:255]
+                    try:
+                        await crud.mark_file_scan_error(file_id, error_msg)
+                    except Exception as db_err:
+                        print(f"[scanner] Failed to mark error for {file_id}: {db_err}")
+                    print(f"[scanner] Error probing {file_path}: {error_msg}")
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            print(f"[scanner] Unexpected error in scanner loop: {e}")
+            # Continue running, don't crash the loop
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Handle startup and shutdown events."""
     # Startup
+    print("[startup] Initializing database...")
+    await db.init_db(settings.database_url)
+
+    print("[startup] Probing hardware...")
     shutil.rmtree("/tmp/hls_srv", ignore_errors=True)
     hw = await probe_hardware()
     app.state.hardware = hw
@@ -94,20 +144,32 @@ async def lifespan(app: FastAPI):
     manager.encoder = select_encoder(hw)
     print(f"[startup] Selected encoder: {manager.encoder}")
 
+    # Start background tasks
     cleanup_task = asyncio.create_task(cleanup_loop())
     workdir_cleanup_task = asyncio.create_task(cleanup_old_workdirs())
+    scanner_task = asyncio.create_task(background_scanner_loop())
 
     yield
 
     # Shutdown
+    print("[shutdown] Cancelling background tasks...")
     cleanup_task.cancel()
     workdir_cleanup_task.cancel()
+    scanner_task.cancel()
     for job in list(manager.get_all_jobs()):
         await manager.kill_ffmpeg(job, reason="server_shutdown")
+
+    print("[shutdown] Closing database...")
+    await db.close_db()
 
 
 app = FastAPI(lifespan=lifespan)
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# Mount route modules
+app.include_router(libraries.router)
+app.include_router(projects.router)
+app.include_router(shares.router)
 
 
 @app.get("/")
