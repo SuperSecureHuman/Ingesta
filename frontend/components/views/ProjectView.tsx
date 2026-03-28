@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { apiFetch } from '@/lib/api';
 import { ProjectFile, PanelName } from '@/lib/types';
+import { getFileName } from '@/lib/utils';
 import { useToast } from '@/context/ToastContext';
 import { useAppContext } from '@/context/AppContext';
 import { usePlayerContext } from '@/context/PlayerContext';
@@ -117,14 +118,14 @@ export default function ProjectView({ onOpenPanel }: ProjectViewProps) {
             <div key={file.id} className="card" onClick={() => handleFilePlay(file.file_path)} style={{ cursor: 'pointer' }}>
               <img
                 src={`/api/thumb?path=${encodeURIComponent(file.file_path)}&w=200`}
-                alt={file.file_path.split('/').pop()}
+                alt={getFileName(file.file_path)}
                 className="card-image"
                 onError={(e) => {
                   const fallbackSvg = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='120'%3E%3Crect fill='%231a1a1a' width='200' height='120'/%3E%3Ctext x='50%25' y='50%25' fill='%23666' text-anchor='middle' dy='.3em' font-size='14'%3E🎥%3C/text%3E%3C/svg%3E`;
                   (e.target as HTMLImageElement).src = fallbackSvg;
                 }}
               />
-              <div className="card-title">{file.file_path.split('/').pop()}</div>
+              <div className="card-title">{getFileName(file.file_path)}</div>
               <div className="card-meta">
                 {file.scan_status === 'done' && file.duration_seconds ? (
                   <>

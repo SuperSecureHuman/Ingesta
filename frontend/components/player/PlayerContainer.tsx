@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { usePlayerContext } from '@/context/PlayerContext';
-import { formatTime } from '@/lib/utils';
+import { formatTime, getResolutionLabel } from '@/lib/utils';
 
 export default function PlayerContainer() {
   const {
@@ -54,9 +54,7 @@ export default function PlayerContainer() {
   // Computed values with memoization
   const { sourceResLabel, sourceMbps } = useMemo(() => {
     if (!probeData) return { sourceResLabel: 'Source', sourceMbps: '—' };
-    const h = probeData.height;
-    const label = h >= 2160 ? '4K' : h >= 1440 ? '1440p' : h >= 1080 ? '1080p' : h >= 720 ? '720p' : `${h}p`;
-    return { sourceResLabel: label, sourceMbps: (probeData.bitrate / 1_000_000).toFixed(1) };
+    return { sourceResLabel: getResolutionLabel(probeData.height), sourceMbps: (probeData.bitrate / 1_000_000).toFixed(1) };
   }, [probeData]);
 
   const qualityLabel = quality === 'source' ? sourceResLabel : quality;

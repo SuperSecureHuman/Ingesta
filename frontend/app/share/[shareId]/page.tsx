@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useParams } from 'next/navigation';
 import Hls from 'hls.js';
 import { ShareFile, ProbeData, Capabilities } from '@/lib/types';
-import { generateUUID, formatTime } from '@/lib/utils';
+import { generateUUID, formatTime, getResolutionLabel, getFileName } from '@/lib/utils';
 import { fetchCapabilities } from '@/lib/api';
 
 export default function ShareViewerPage() {
@@ -304,7 +304,7 @@ export default function ShareViewerPage() {
       if (!res.ok) throw new Error('Download failed');
 
       const blob = await res.blob();
-      const filename = currentFilePath.split('/').pop();
+      const filename = getFileName(currentFilePath);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -559,9 +559,7 @@ export default function ShareViewerPage() {
   // COMPUTED
   const { sourceResLabel, sourceMbps } = useMemo(() => {
     if (!probeData) return { sourceResLabel: 'Source', sourceMbps: '—' };
-    const h = probeData.height;
-    const label = h >= 2160 ? '4K' : h >= 1440 ? '1440p' : h >= 1080 ? '1080p' : h >= 720 ? '720p' : `${h}p`;
-    return { sourceResLabel: label, sourceMbps: (probeData.bitrate / 1_000_000).toFixed(1) };
+    return { sourceResLabel: getResolutionLabel(probeData.height), sourceMbps: (probeData.bitrate / 1_000_000).toFixed(1) };
   }, [probeData]);
 
   const filteredTiers = useMemo(() => {
@@ -634,21 +632,12 @@ export default function ShareViewerPage() {
                 <div className="col-span-full text-center py-20 text-gray-500">No files in this share</div>
               ) : (
                 files.map((file) => {
-                  const fileName = file.file_path.split('/').pop();
+                  const fileName = getFileName(file.file_path);
                   const posterUrl = `/api/share/${shareId}/thumb?path=${encodeURIComponent(
                     file.file_path
                   )}&t=0&token=${encodeURIComponent(jwt || '')}`;
                   const durationStr = formatTime(file.duration_seconds || 0);
-                  const resLabel =
-                    file.height >= 2160
-                      ? '4K'
-                      : file.height >= 1440
-                        ? '1440p'
-                        : file.height >= 1080
-                          ? '1080p'
-                          : file.height >= 720
-                            ? '720p'
-                            : `${file.height}p`;
+                  const resLabel = getResolutionLabel(file.height || 0);
                   const mbps = file.bitrate ? (file.bitrate / 1_000_000).toFixed(1) : '—';
                   const isLoading = file.scan_status === 'pending';
 
