@@ -1,5 +1,6 @@
 'use client';
 
+import React from 'react';
 import { BrowseEntry } from '@/lib/types';
 import { escapeHtml } from '@/lib/utils';
 
@@ -10,7 +11,7 @@ interface FileCardProps {
   onSelectionChange: (path: string, type: 'file' | 'folder', selected: boolean) => void;
 }
 
-export default function FileCard({
+function FileCard({
   entry,
   isSelected,
   onPlay,
@@ -87,3 +88,5 @@ export default function FileCard({
     </div>
   );
 }
+
+export default React.memo(FileCard);

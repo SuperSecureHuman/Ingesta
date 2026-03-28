@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { apiFetch } from '@/lib/api';
 import { BrowseResult, PanelName, SelectionItem } from '@/lib/types';
 import { useToast } from '@/context/ToastContext';
@@ -63,14 +63,14 @@ export default function LibraryView({
     onOpenPanel('addToProject');
   };
 
-  const handleFilePlay = (path: string) => {
+  const handleFilePlay = useCallback((path: string) => {
     startPlayback(path);
-  };
+  }, [startPlayback]);
 
-  const handleSelectionChange = (path: string, type: 'file' | 'folder', selected: boolean) => {
+  const handleSelectionChange = useCallback((path: string, type: 'file' | 'folder', selected: boolean) => {
     const item: SelectionItem = { type, path };
     updateSelection(item, selected);
-  };
+  }, [updateSelection]);
 
   if (loading) {
     return (

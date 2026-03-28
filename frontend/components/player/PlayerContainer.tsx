@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { usePlayerContext } from '@/context/PlayerContext';
 import { formatTime } from '@/lib/utils';
 
@@ -51,32 +51,25 @@ export default function PlayerContainer() {
     infoVisibleRef.current = infoVisible;
   }, [infoVisible]);
 
-  // Computed values
-  const sourceResLabel = probeData
-    ? probeData.height >= 2160
-      ? '4K'
-      : probeData.height >= 1440
-        ? '1440p'
-        : probeData.height >= 1080
-          ? '1080p'
-          : probeData.height >= 720
-            ? '720p'
-            : `${probeData.height}p`
-    : 'Source';
-
-  const sourceMbps = probeData
-    ? ((probeData.bitrate / 1_000_000).toFixed(1))
-    : '—';
+  // Computed values with memoization
+  const { sourceResLabel, sourceMbps } = useMemo(() => {
+    if (!probeData) return { sourceResLabel: 'Source', sourceMbps: '—' };
+    const h = probeData.height;
+    const label = h >= 2160 ? '4K' : h >= 1440 ? '1440p' : h >= 1080 ? '1080p' : h >= 720 ? '720p' : `${h}p`;
+    return { sourceResLabel: label, sourceMbps: (probeData.bitrate / 1_000_000).toFixed(1) };
+  }, [probeData]);
 
   const qualityLabel = quality === 'source' ? sourceResLabel : quality;
 
-  const filteredTiers = capabilities?.bitrate_tiers?.filter((tier) => {
-    if (probeData) {
-      if (tier.max_height && tier.max_height > probeData.height) return false;
-      if (tier.bitrate >= probeData.bitrate) return false;
-    }
-    return true;
-  }) || [];
+  const filteredTiers = useMemo(() => {
+    return capabilities?.bitrate_tiers?.filter((tier) => {
+      if (probeData) {
+        if (tier.max_height && tier.max_height > probeData.height) return false;
+        if (tier.bitrate >= probeData.bitrate) return false;
+      }
+      return true;
+    }) || [];
+  }, [probeData, capabilities]);
 
   // Helper: format info section
   function formatInfoSection(

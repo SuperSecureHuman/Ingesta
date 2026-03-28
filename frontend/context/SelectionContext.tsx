@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
 import { SelectionItem } from '@/lib/types';
 
 interface SelectionContextType {
@@ -17,23 +17,25 @@ export function SelectionProvider({ children }: { children: ReactNode }) {
     new Map()
   );
 
-  const updateSelection = (item: SelectionItem, isSelected: boolean) => {
-    const newMap = new Map(selectedItems);
-    if (isSelected) {
-      newMap.set(item.path, item);
-    } else {
-      newMap.delete(item.path);
-    }
-    setSelectedItems(newMap);
-  };
+  const updateSelection = useCallback((item: SelectionItem, isSelected: boolean) => {
+    setSelectedItems(prev => {
+      const newMap = new Map(prev);
+      if (isSelected) {
+        newMap.set(item.path, item);
+      } else {
+        newMap.delete(item.path);
+      }
+      return newMap;
+    });
+  }, []);
 
-  const clearSelection = () => {
+  const clearSelection = useCallback(() => {
     setSelectedItems(new Map());
-  };
+  }, []);
 
-  const getSelectedPaths = () => {
+  const getSelectedPaths = useCallback(() => {
     return Array.from(selectedItems.values());
-  };
+  }, [selectedItems]);
 
   return (
     <SelectionContext.Provider

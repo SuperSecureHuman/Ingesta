@@ -51,6 +51,11 @@ export function PlayerContextProvider({ children }: { children: React.ReactNode 
       const active = data.jobs?.find(
         (j: any) => !j.has_exited && j.transcode_fps > 0
       );
+      // Auto-stop polling when no active job (catches source quality and idle)
+      if (!active && transcodeStatsIntervalRef.current) {
+        clearInterval(transcodeStatsIntervalRef.current);
+        transcodeStatsIntervalRef.current = null;
+      }
       setTranscodeStats(
         active
           ? { fps: active.transcode_fps, speed: active.transcode_speed }
@@ -143,13 +148,15 @@ export function PlayerContextProvider({ children }: { children: React.ReactNode 
         );
       }, 10000);
 
-      // Start transcode stats poll (2 seconds)
-      if (transcodeStatsIntervalRef.current)
-        clearInterval(transcodeStatsIntervalRef.current);
-      transcodeStatsIntervalRef.current = setInterval(
-        fetchTranscodeStats,
-        2000
-      );
+      // Start transcode stats poll (2 seconds) — only if not source quality
+      if (qualityRef.current !== 'source') {
+        if (transcodeStatsIntervalRef.current)
+          clearInterval(transcodeStatsIntervalRef.current);
+        transcodeStatsIntervalRef.current = setInterval(
+          fetchTranscodeStats,
+          2000
+        );
+      }
     } catch (e) {
       console.error('startPlayback error:', e);
       setIsVisible(false);
