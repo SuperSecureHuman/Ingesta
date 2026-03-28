@@ -19,7 +19,7 @@ export default function AppShell() {
   const { currentView, currentUser, currentLibraryId, currentProjectId } = useAppContext();
   const { isVisible } = usePlayerContext();
   const { logout } = useAuth();
-  const { clearSelection } = useSelection();
+  const { selectedItems, clearSelection } = useSelection();
   const { activePanel, closePanel, openPanel } = usePanels();
 
   const handleLogout = async () => {
@@ -46,7 +46,7 @@ export default function AppShell() {
           isOpen={activePanel === 'addToProject'}
           onClose={closePanel}
           onSuccess={() => clearSelection()}
-          selectedItems={new Map()}
+          selectedItems={selectedItems}
           currentLibraryId={currentLibraryId}
         />
 

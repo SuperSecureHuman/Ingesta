@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 import { AppContextProvider } from '@/context/AppContext';
 import { ToastProvider } from '@/context/ToastContext';
+import { SelectionProvider } from '@/context/SelectionContext';
 
 export const metadata: Metadata = {
   title: 'HLS Media Review',
@@ -17,7 +18,9 @@ export default function RootLayout({
     <html lang="en" style={{ background: '#1a1a1a' }}>
       <body>
         <AppContextProvider>
-          <ToastProvider>{children}</ToastProvider>
+          <ToastProvider>
+            <SelectionProvider>{children}</SelectionProvider>
+          </ToastProvider>
         </AppContextProvider>
       </body>
     </html>
