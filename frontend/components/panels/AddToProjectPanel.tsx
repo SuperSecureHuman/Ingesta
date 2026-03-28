@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '@/lib/api';
 import { Project, SelectionItem } from '@/lib/types';
 import { useToast } from '@/context/ToastContext';
+import { useAppContext } from '@/context/AppContext';
 import PanelShell from './PanelShell';
 
 interface AddToProjectPanelProps {
@@ -22,30 +23,18 @@ export default function AddToProjectPanel({
   currentLibraryId,
 }: AddToProjectPanelProps) {
   const { showToast } = useToast();
-  const [projects, setProjects] = useState<Project[]>([]);
+  const { projects } = useAppContext();
   const [targetProjectId, setTargetProjectId] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
-  const loadProjects = useCallback(async () => {
-    try {
-      const res = await apiFetch('/api/projects');
-      if (!res.ok) throw new Error('Failed to load projects');
-      const data = await res.json();
-      setProjects(data.projects || []);
-    } catch (e) {
-      setError(`Error loading projects: ${e}`);
-      showToast(`Error loading projects: ${e}`, 'error');
-    }
-  }, [showToast]);
 
   useEffect(() => {
     if (isOpen) {
-      loadProjects();
       setTargetProjectId('');
       setError('');
     }
-  }, [isOpen, loadProjects]);
+  }, [isOpen]);
 
   const handleSubmit = async () => {
     if (!targetProjectId) {

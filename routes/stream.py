@@ -23,6 +23,7 @@ from media.transcoder import (
 from media.playlist import probe_media, compute_equal_length_segments, build_vod_playlist
 from media.thumbs import get_or_generate_thumb
 from routes.deps import validate_path, validate_session_id, get_manager, MEDIA_ROOT
+from routes.utils import async_iterdir
 
 router = APIRouter(prefix="/api")
 
@@ -63,7 +64,7 @@ async def browse(path: str = Query("/")):
             raise HTTPException(status_code=400, detail="Not a directory")
 
         entries = []
-        for entry in sorted(p.iterdir()):
+        for entry in await async_iterdir(p):
             entries.append(
                 {
                     "name": entry.name,
@@ -112,7 +113,10 @@ async def bitrate_tiers(bitrate: int = Query(None), height: int = Query(None)):
         if bitrate_ok and height_ok:
             tiers.append(tier)
 
-    return {"tiers": tiers}
+    return JSONResponse(
+        content={"tiers": tiers},
+        headers={"Cache-Control": "public, max-age=300"}
+    )
 
 
 @router.get("/playlist/{stream_id}/main.m3u8")

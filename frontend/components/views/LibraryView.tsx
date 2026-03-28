@@ -18,7 +18,7 @@ interface LibraryViewProps {
 export default function LibraryView({
   onOpenPanel,
 }: LibraryViewProps) {
-  const { currentLibraryId, setCurrentView } = useAppContext();
+  const { currentLibraryId, currentLibrary, setCurrentView } = useAppContext();
   const { showToast } = useToast();
   const { startPlayback } = usePlayerContext();
   const { selectedItems, updateSelection, clearSelection } = useSelection();
@@ -26,29 +26,21 @@ export default function LibraryView({
   const [files, setFiles] = useState<BrowseResult | null>(null);
 
   useEffect(() => {
-    if (!currentLibraryId) {
+    if (!currentLibraryId || !currentLibrary) {
       setCurrentView('home');
       return;
     }
     loadLibraryFiles();
-  }, [currentLibraryId, setCurrentView]);
+  }, [currentLibraryId, currentLibrary, setCurrentView]);
 
   const loadLibraryFiles = async () => {
-    if (!currentLibraryId) return;
+    if (!currentLibraryId || !currentLibrary) return;
     try {
       setLoading(true);
-      // First get library to get root_path
-      const libRes = await apiFetch(`/api/libraries/${currentLibraryId}`);
-      if (!libRes.ok) {
-        showToast('Failed to load library', 'error');
-        setCurrentView('home');
-        return;
-      }
+      // Use root_path from currentLibrary (already loaded in HomeView)
+      const rootPath = currentLibrary.root_path;
 
-      const libData = await libRes.json();
-      const rootPath = libData.root_path;
-
-      // Then browse the root path
+      // Browse the root path
       const browseRes = await apiFetch(
         `/api/libraries/${currentLibraryId}/browse?path=${encodeURIComponent(rootPath)}`
       );

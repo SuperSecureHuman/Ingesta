@@ -54,6 +54,40 @@ async def cleanup_old_workdirs():
 
 async def background_scanner_loop():
     """Periodically scan pending files and probe them for metadata."""
+    # Semaphore to limit concurrent ffprobe processes
+    sem = asyncio.Semaphore(5)
+
+    async def probe_one(file_record):
+        """Probe a single file with semaphore limiting."""
+        async with sem:
+            try:
+                file_path = file_record["file_path"]
+                file_id = file_record["id"]
+
+                # Probe the file
+                info = await probe_media(file_path)
+
+                # Update DB with results
+                await crud.update_file_probe_results(
+                    file_id=file_id,
+                    duration_seconds=info.duration_seconds,
+                    width=info.width,
+                    height=info.height,
+                    bitrate=info.bitrate,
+                    video_codec=info.video_codec,
+                )
+                print(
+                    f"[scanner] Probed {file_path}: {info.width}x{info.height} {info.bitrate}bps"
+                )
+            except Exception as e:
+                # Mark file as error
+                error_msg = str(e)[:255]
+                try:
+                    await crud.mark_file_scan_error(file_record["id"], error_msg)
+                except Exception as db_err:
+                    print(f"[scanner] Failed to mark error for {file_record['id']}: {db_err}")
+                print(f"[scanner] Error probing {file_record['file_path']}: {error_msg}")
+
     while True:
         try:
             await asyncio.sleep(settings.scanner_interval)
@@ -61,34 +95,9 @@ async def background_scanner_loop():
             # Get pending files (limit 10 per scan)
             pending = await crud.get_pending_files(limit=10)
 
-            for file_record in pending:
-                try:
-                    file_path = file_record["file_path"]
-                    file_id = file_record["id"]
-
-                    # Probe the file
-                    info = await probe_media(file_path)
-
-                    # Update DB with results
-                    await crud.update_file_probe_results(
-                        file_id=file_id,
-                        duration_seconds=info.duration_seconds,
-                        width=info.width,
-                        height=info.height,
-                        bitrate=info.bitrate,
-                        video_codec=info.video_codec,
-                    )
-                    print(
-                        f"[scanner] Probed {file_path}: {info.width}x{info.height} {info.bitrate}bps"
-                    )
-                except Exception as e:
-                    # Mark file as error
-                    error_msg = str(e)[:255]
-                    try:
-                        await crud.mark_file_scan_error(file_id, error_msg)
-                    except Exception as db_err:
-                        print(f"[scanner] Failed to mark error for {file_id}: {db_err}")
-                    print(f"[scanner] Error probing {file_path}: {error_msg}")
+            # Probe all files concurrently (with semaphore limiting to 5 parallel)
+            if pending:
+                await asyncio.gather(*[probe_one(f) for f in pending])
         except asyncio.CancelledError:
             break
         except Exception as e:

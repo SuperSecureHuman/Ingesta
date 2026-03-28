@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from config import settings
 import db.crud as crud
 from routes.deps import require_auth
+from routes.utils import async_iterdir
 
 
 router = APIRouter(prefix="/api/libraries", tags=["libraries"])
@@ -109,7 +110,7 @@ async def browse_library(
             raise HTTPException(400, "Not a directory")
 
         entries = []
-        for entry in sorted(p.iterdir()):
+        for entry in await async_iterdir(p):
             entries.append(
                 {
                     "name": entry.name,

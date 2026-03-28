@@ -149,11 +149,19 @@ async def update_project(project_id: str, name: str) -> bool:
 
 
 async def delete_project(project_id: str) -> bool:
-    """Delete project and all its files."""
+    """Delete project and all its files in a single transaction."""
     db = get_db()
-    await db.execute("DELETE FROM project_files WHERE project_id = ?", (project_id,))
-    await db.execute("DELETE FROM shares WHERE project_id = ?", (project_id,))
-    await db.execute("DELETE FROM projects WHERE id = ?", (project_id,))
+    # Execute all deletes within a single transaction (BEGIN ... COMMIT)
+    async with db.connection:
+        await db.connection.execute(
+            "DELETE FROM project_files WHERE project_id = ?", (project_id,)
+        )
+        await db.connection.execute(
+            "DELETE FROM shares WHERE project_id = ?", (project_id,)
+        )
+        await db.connection.execute(
+            "DELETE FROM projects WHERE id = ?", (project_id,)
+        )
     return True
 
 

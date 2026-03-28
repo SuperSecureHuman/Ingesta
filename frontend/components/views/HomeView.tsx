@@ -14,10 +14,9 @@ import CreateProjectPanel from '@/components/panels/CreateProjectPanel';
 
 export default function HomeView() {
   const [libraries, setLibraries] = useState<Library[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const { showToast } = useToast();
-  const { setCurrentView, setCurrentLibraryId, setCurrentProjectId } = useAppContext();
+  const { setCurrentView, setCurrentLibraryId, setCurrentLibrary, setCurrentProjectId, setProjects, projects } = useAppContext();
   const { activePanel, openPanel, closePanel } = usePanels();
 
   useEffect(() => {
@@ -46,8 +45,9 @@ export default function HomeView() {
     }
   };
 
-  const handleSelectLibrary = (libId: string) => {
-    setCurrentLibraryId(libId);
+  const handleSelectLibrary = (lib: Library) => {
+    setCurrentLibraryId(lib.id);
+    setCurrentLibrary(lib);
     setCurrentProjectId(null);
     setCurrentView('library');
   };
@@ -115,7 +115,7 @@ export default function HomeView() {
             <LibraryCard
               key={lib.id}
               library={lib}
-              onSelect={() => handleSelectLibrary(lib.id)}
+              onSelect={() => handleSelectLibrary(lib)}
               onDelete={handleDeleteLibrary}
             />
           ))

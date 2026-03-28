@@ -13,6 +13,7 @@ from pydantic import BaseModel
 from config import settings
 import db.crud as crud
 from routes.deps import require_auth
+from routes.utils import async_rglob
 
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
@@ -238,8 +239,9 @@ async def add_folder_to_project(
     errors = []
     seen = set()  # Track resolved paths in this request to avoid duplicates
 
-    # Walk the folder recursively
-    for file_path in folder.rglob("*"):
+    # Walk the folder recursively (async)
+    file_paths = await async_rglob(folder, "*")
+    for file_path in file_paths:
         if not file_path.is_file():
             continue
         if file_path.suffix.lower() not in VIDEO_EXTENSIONS:
@@ -297,8 +299,9 @@ async def add_library_to_project(
     errors = []
     seen = set()  # Track resolved paths in this request to avoid duplicates
 
-    # Walk the library root recursively
-    for file_path in root.rglob("*"):
+    # Walk the library root recursively (async)
+    file_paths = await async_rglob(root, "*")
+    for file_path in file_paths:
         if not file_path.is_file():
             continue
         if file_path.suffix.lower() not in VIDEO_EXTENSIONS:
