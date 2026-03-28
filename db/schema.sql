@@ -65,6 +65,7 @@ CREATE TABLE IF NOT EXISTS users (
 -- Create indexes for common queries
 CREATE INDEX IF NOT EXISTS idx_projects_library_id ON projects (library_id);
 CREATE INDEX IF NOT EXISTS idx_project_files_project_id ON project_files (project_id);
+CREATE INDEX IF NOT EXISTS idx_project_files_project_id_path ON project_files (project_id, file_path);
 CREATE INDEX IF NOT EXISTS idx_project_files_scan_status ON project_files (scan_status);
 CREATE INDEX IF NOT EXISTS idx_shares_project_id ON shares (project_id);
 CREATE INDEX IF NOT EXISTS idx_shares_active ON shares (active);

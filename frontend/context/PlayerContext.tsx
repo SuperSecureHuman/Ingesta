@@ -4,6 +4,7 @@ import React, { createContext, useContext, useState, useRef, useEffect } from 'r
 import Hls from 'hls.js';
 import { ProbeData, Capabilities, TranscodeStats } from '@/lib/types';
 import { generateUUID } from '@/lib/utils';
+import { fetchCapabilities } from '@/lib/api';
 
 interface PlayerContextType {
   isVisible: boolean;
@@ -34,6 +35,7 @@ export function PlayerContextProvider({ children }: { children: React.ReactNode 
   const pingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const transcodeStatsIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const qualityRef = useRef('source');
+  const probedFilePathRef = useRef<string | null>(null);
 
   // Sync qualityRef to quality state
   useEffect(() => {
@@ -69,19 +71,23 @@ export function PlayerContextProvider({ children }: { children: React.ReactNode 
     setIsVisible(true);
 
     try {
-      // Probe the file
-      const probeResp = await fetch(
-        `/api/probe?path=${encodeURIComponent(newFilePath)}`
-      );
-      if (!probeResp.ok) throw new Error('Probe failed');
-      const probe = await probeResp.json();
-      setProbeData(probe);
+      // Skip probe if we've already probed this file
+      const shouldProbe = newFilePath !== probedFilePathRef.current || !probeData;
 
-      // Get capabilities
-      const capsResp = await fetch('/api/capabilities');
-      if (!capsResp.ok) throw new Error('Capabilities failed');
-      const caps = await capsResp.json();
-      setCapabilities(caps);
+      if (shouldProbe) {
+        // Probe and capabilities in parallel
+        const [probeResp, caps] = await Promise.all([
+          fetch(`/api/probe?path=${encodeURIComponent(newFilePath)}`),
+          fetchCapabilities(),
+        ]);
+
+        if (!probeResp.ok) throw new Error('Probe failed');
+
+        const probe = await probeResp.json();
+        setProbeData(probe);
+        setCapabilities(caps);
+        probedFilePathRef.current = newFilePath;
+      }
 
       // Build playlist URL
       const playlistUrl = `/api/playlist/${sid}/main.m3u8?path=${encodeURIComponent(
@@ -187,6 +193,7 @@ export function PlayerContextProvider({ children }: { children: React.ReactNode 
     setFilePath(null);
     setProbeData(null);
     setTranscodeStats({});
+    probedFilePathRef.current = null;
   };
 
   // Change quality
@@ -224,7 +231,8 @@ export function PlayerContextProvider({ children }: { children: React.ReactNode 
       }
     }
 
-    // Update quality and restart playback
+    // Update quality (update ref immediately so startPlayback uses the new quality)
+    qualityRef.current = newQuality;
     setQuality(newQuality);
     if (filePath) {
       await startPlayback(filePath, seekTime);

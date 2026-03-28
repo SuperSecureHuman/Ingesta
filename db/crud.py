@@ -253,6 +253,32 @@ async def get_project_files(project_id: str) -> List[Dict[str, Any]]:
     ]
 
 
+async def get_project_file_by_path(
+    project_id: str, file_path: str
+) -> Optional[Dict[str, Any]]:
+    """Get project file by path (used for share segment validation)."""
+    db = get_db()
+    row = await db.fetchone(
+        """
+        SELECT id, duration_seconds, width, height, bitrate, video_codec, scan_status
+        FROM project_files WHERE project_id = ? AND file_path = ? LIMIT 1
+        """,
+        (project_id, file_path),
+    )
+    if not row:
+        return None
+
+    return {
+        "id": row[0],
+        "duration_seconds": row[1],
+        "width": row[2],
+        "height": row[3],
+        "bitrate": row[4],
+        "video_codec": row[5],
+        "scan_status": row[6],
+    }
+
+
 async def get_pending_files(limit: int = 100) -> List[Dict[str, Any]]:
     """Get files pending scan (for background scanner)."""
     db = get_db()
@@ -325,6 +351,19 @@ async def delete_project_file(file_id: str) -> bool:
     db = get_db()
     await db.execute("DELETE FROM project_files WHERE id = ?", (file_id,))
     return True
+
+
+async def delete_project_files_by_ids(file_ids: List[str]) -> int:
+    """Delete multiple files from a project in one batch query."""
+    if not file_ids:
+        return 0
+    db = get_db()
+    placeholders = ",".join("?" * len(file_ids))
+    await db.execute(
+        f"DELETE FROM project_files WHERE id IN ({placeholders})",
+        tuple(file_ids),
+    )
+    return len(file_ids)
 
 
 # ============================================================================

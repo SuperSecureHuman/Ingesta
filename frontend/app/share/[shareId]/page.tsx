@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import Hls from 'hls.js';
 import { ShareFile, ProbeData, Capabilities } from '@/lib/types';
 import { generateUUID, formatTime } from '@/lib/utils';
+import { fetchCapabilities } from '@/lib/api';
 
 export default function ShareViewerPage() {
   const params = useParams();
@@ -160,15 +161,16 @@ export default function ShareViewerPage() {
     if (!jwtRef.current) return;
 
     try {
-      const probeRes = await fetch(`/api/share/${shareId}/probe?path=${encodeURIComponent(filePath)}`, {
-        headers: { 'Authorization': `Bearer ${jwtRef.current}` },
-      });
+      const [probeRes, caps] = await Promise.all([
+        fetch(`/api/share/${shareId}/probe?path=${encodeURIComponent(filePath)}`, {
+          headers: { 'Authorization': `Bearer ${jwtRef.current}` },
+        }),
+        fetchCapabilities(),
+      ]);
+
       if (!probeRes.ok) throw new Error('Probe failed');
       const probeData = await probeRes.json();
       setProbeData(probeData);
-
-      const capsRes = await fetch('/api/capabilities');
-      const caps = await capsRes.json();
       setCapabilities(caps);
     } catch (e) {
       console.warn('Error probing:', e instanceof Error ? e.message : String(e));

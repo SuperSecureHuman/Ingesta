@@ -147,26 +147,29 @@ async def remove_files_from_project(
         raise HTTPException(404, "Project not found")
 
     removed = 0
+    # Fetch all files once before the loop
+    project_files = await crud.get_project_files(project_id)
+    files_by_path = {f["file_path"]: f for f in project_files}
+
     errors = []
+    file_ids_to_delete = []
 
     for file_path in req.paths:
         try:
-            # Find file in project by path
-            files = await crud.get_project_files(project_id)
-            file_record = None
-            for f in files:
-                if f["file_path"] == file_path:
-                    file_record = f
-                    break
+            file_record = files_by_path.get(file_path)
 
             if not file_record:
                 errors.append({"path": file_path, "error": "File not in project"})
                 continue
 
-            await crud.delete_project_file(file_record["id"])
+            file_ids_to_delete.append(file_record["id"])
             removed += 1
         except Exception as e:
             errors.append({"path": file_path, "error": str(e)})
+
+    # Batch delete all valid files
+    if file_ids_to_delete:
+        await crud.delete_project_files_by_ids(file_ids_to_delete)
 
     return {
         "removed": removed,

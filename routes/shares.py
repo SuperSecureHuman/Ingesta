@@ -214,11 +214,9 @@ async def validate_file_in_project(project_id: str, file_path: str) -> str:
     Validate that a file path belongs to the given project.
     Returns the absolute file path if valid.
     """
-    files = await crud.get_project_files(project_id)
-    for f in files:
-        if f["file_path"] == file_path:
-            # File is in project, return it
-            return f["file_path"]
+    file_record = await crud.get_project_file_by_path(project_id, file_path)
+    if file_record:
+        return file_path
 
     raise HTTPException(403, "File not in project")
 
@@ -267,8 +265,29 @@ async def share_probe(
 
     try:
         path = unquote(path)
-        await validate_file_in_project(token["project_id"], path)
+        file_record = await crud.get_project_file_by_path(token["project_id"], path)
+        if not file_record:
+            raise HTTPException(403, "File not in project")
 
+        # Try to use cached probe results from DB if scan is done
+        if file_record["scan_status"] == "done" and all(
+            file_record.get(k) is not None
+            for k in ["duration_seconds", "width", "height", "bitrate", "video_codec"]
+        ):
+            # Use cached probe data
+            return {
+                "duration_seconds": file_record["duration_seconds"],
+                "duration_ticks": int(file_record["duration_seconds"] * 10_000_000),
+                "width": file_record["width"],
+                "height": file_record["height"],
+                "bitrate": file_record["bitrate"],
+                "video_codec": file_record["video_codec"],
+                "pix_fmt": None,
+                "bit_depth": None,
+                "audio_codec": None,
+            }
+
+        # Fall back to live probe
         info = await probe_media(path)
         return {
             "duration_seconds": info.duration_seconds,
@@ -302,7 +321,9 @@ async def share_playlist(
 
     try:
         path = unquote(path)
-        await validate_file_in_project(token["project_id"], path)
+        file_record = await crud.get_project_file_by_path(token["project_id"], path)
+        if not file_record:
+            raise HTTPException(403, "File not in project")
 
         # Import here to avoid circular dependency
         from media.transcoder import get_bitrate_preset
@@ -315,11 +336,18 @@ async def share_playlist(
             except ValueError:
                 raise ValueError(f"Unknown quality: {quality}")
 
-        # Probe media
-        info = await probe_media(path)
+        # Try to use cached probe results from DB if scan is done
+        if file_record["scan_status"] == "done" and file_record.get("duration_seconds"):
+            duration_seconds = file_record["duration_seconds"]
+            duration_ticks = int(duration_seconds * 10_000_000)
+        else:
+            # Fall back to live probe
+            info = await probe_media(path)
+            duration_seconds = info.duration_seconds
+            duration_ticks = info.duration_ticks
 
         # Compute segments
-        segments = compute_equal_length_segments(info.duration_ticks, segment_length)
+        segments = compute_equal_length_segments(duration_ticks, segment_length)
 
         # Build playlist
         playlist_text = build_vod_playlist(

@@ -10,7 +10,7 @@ from pathlib import Path
 from urllib.parse import quote, unquote
 
 from fastapi import APIRouter, Depends, Query, BackgroundTasks, HTTPException, Request
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
 
 from media.transcoder import (
     TranscodeManager,
@@ -359,11 +359,14 @@ async def ping(session_id: str, manager: TranscodeManager = Depends(get_manager)
 @router.get("/capabilities")
 async def capabilities(request: Request):
     """Get server capabilities including hardware support and media root."""
-    return {
-        "media_root": str(MEDIA_ROOT),
-        "hardware": request.app.state.hardware,
-        "bitrate_tiers": BITRATE_TIERS,
-    }
+    return JSONResponse(
+        content={
+            "media_root": str(MEDIA_ROOT),
+            "hardware": request.app.state.hardware,
+            "bitrate_tiers": BITRATE_TIERS,
+        },
+        headers={"Cache-Control": "public, max-age=3600"}
+    )
 
 
 @router.get("/thumb")
