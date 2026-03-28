@@ -5,6 +5,7 @@ import { apiFetch } from '@/lib/api';
 import { ProjectFile, PanelName } from '@/lib/types';
 import { useToast } from '@/context/ToastContext';
 import { useAppContext } from '@/context/AppContext';
+import { usePlayerContext } from '@/context/PlayerContext';
 import ConfirmOverlay from '@/components/ui/ConfirmOverlay';
 import Spinner from '@/components/ui/Spinner';
 
@@ -15,6 +16,7 @@ interface ProjectViewProps {
 export default function ProjectView({ onOpenPanel }: ProjectViewProps) {
   const { currentProjectId, setCurrentView } = useAppContext();
   const { showToast } = useToast();
+  const { startPlayback } = usePlayerContext();
   const [loading, setLoading] = useState(true);
   const [files, setFiles] = useState<ProjectFile[]>([]);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -71,6 +73,10 @@ export default function ProjectView({ onOpenPanel }: ProjectViewProps) {
     }
   };
 
+  const handleFilePlay = (filePath: string) => {
+    startPlayback(filePath);
+  };
+
   if (loading) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', padding: '40px' }}>
@@ -108,7 +114,7 @@ export default function ProjectView({ onOpenPanel }: ProjectViewProps) {
           </div>
         ) : (
           files.map((file) => (
-            <div key={file.id} className="card">
+            <div key={file.id} className="card" onClick={() => handleFilePlay(file.file_path)} style={{ cursor: 'pointer' }}>
               <img
                 src={`/api/thumb?path=${encodeURIComponent(file.file_path)}&w=200`}
                 alt={file.file_path.split('/').pop()}

@@ -5,6 +5,7 @@ import { apiFetch } from '@/lib/api';
 import { BrowseResult, PanelName, SelectionItem } from '@/lib/types';
 import { useToast } from '@/context/ToastContext';
 import { useAppContext } from '@/context/AppContext';
+import { usePlayerContext } from '@/context/PlayerContext';
 import { useSelection } from '@/hooks/useSelection';
 import Spinner from '@/components/ui/Spinner';
 import FileCard from '@/components/cards/FileCard';
@@ -19,6 +20,7 @@ export default function LibraryView({
 }: LibraryViewProps) {
   const { currentLibraryId, setCurrentView } = useAppContext();
   const { showToast } = useToast();
+  const { startPlayback } = usePlayerContext();
   const { selectedItems, updateSelection, clearSelection } = useSelection();
   const [loading, setLoading] = useState(true);
   const [files, setFiles] = useState<BrowseResult | null>(null);
@@ -70,8 +72,7 @@ export default function LibraryView({
   };
 
   const handleFilePlay = (path: string) => {
-    // Placeholder for player integration (will be done in Phase 7)
-    showToast('Player integration coming soon', 'error');
+    startPlayback(path);
   };
 
   const handleSelectionChange = (path: string, type: 'file' | 'folder', selected: boolean) => {
