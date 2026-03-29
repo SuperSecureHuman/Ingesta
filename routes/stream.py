@@ -24,8 +24,10 @@ from media.playlist import probe_media, compute_equal_length_segments, build_vod
 from media.thumbs import get_or_generate_thumb
 from routes.deps import validate_path, validate_session_id, get_manager, MEDIA_ROOT, require_auth
 from routes.utils import async_iterdir
+from logger import get_logger
 
 router = APIRouter(prefix="/api")
+logger = get_logger("routes.stream")
 
 
 @router.get("/probe")
@@ -318,11 +320,16 @@ async def get_segment(
         # Re-raise HTTP exceptions as-is (like 504 timeout)
         raise
     except Exception as e:
-        import traceback
-
         err_msg = f"{type(e).__name__}: {str(e)}"
-        print(f"ERROR in get_segment: {err_msg}")
-        traceback.print_exc()
+        logger.error(
+            f"Error generating segment",
+            extra={
+                "stream_id": stream_id,
+                "segment_id": segment_id,
+                "quality": quality,
+            },
+            exc_info=True,
+        )
         await manager.broadcast_event(
             {
                 "type": "error",

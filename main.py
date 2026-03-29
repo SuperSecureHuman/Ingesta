@@ -7,13 +7,15 @@ import os
 import re
 import shutil
 import time
+import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 
 from config import settings
+from logger import setup_logging, get_logger, set_request_id
 import db
 import db.crud as crud
 from media.playlist import probe_media
@@ -24,6 +26,10 @@ from media.transcoder import (
 )
 from routes.auth import pwd_context
 from routes import libraries, projects, shares, auth, stream, debug, pages
+
+# Initialize logging
+setup_logging()
+logger = get_logger("main")
 
 
 manager = TranscodeManager()
@@ -76,8 +82,14 @@ async def background_scanner_loop():
                     bitrate=info.bitrate,
                     video_codec=info.video_codec,
                 )
-                print(
-                    f"[scanner] Probed {file_path}: {info.width}x{info.height} {info.bitrate}bps"
+                logger.info(
+                    "File probed",
+                    extra={
+                        "file_path": file_path,
+                        "width": info.width,
+                        "height": info.height,
+                        "bitrate": info.bitrate,
+                    },
                 )
             except Exception as e:
                 # Mark file as error
@@ -85,8 +97,15 @@ async def background_scanner_loop():
                 try:
                     await crud.mark_file_scan_error(file_record["id"], error_msg)
                 except Exception as db_err:
-                    print(f"[scanner] Failed to mark error for {file_record['id']}: {db_err}")
-                print(f"[scanner] Error probing {file_record['file_path']}: {error_msg}")
+                    logger.error(
+                        f"Failed to mark scan error for file {file_record['id']}",
+                        exc_info=True,
+                    )
+                logger.error(
+                    f"Error probing file",
+                    extra={"file_path": file_record["file_path"]},
+                    exc_info=True,
+                )
 
     while True:
         try:
@@ -101,7 +120,7 @@ async def background_scanner_loop():
         except asyncio.CancelledError:
             break
         except Exception as e:
-            print(f"[scanner] Unexpected error in scanner loop: {e}")
+            logger.error("Unexpected error in scanner loop", exc_info=True)
             # Continue running, don't crash the loop
 
 
@@ -109,34 +128,38 @@ async def background_scanner_loop():
 async def lifespan(app: FastAPI):
     """Handle startup and shutdown events."""
     # Startup
-    print("[startup] Initializing database...")
+    logger.info("Initializing database")
     await db.init_db(settings.database_url)
 
     # Bootstrap default user if none exists
-    print("[startup] Checking for default user...")
+    logger.info("Checking for default user")
     if not await crud.user_exists():
-        print(f"[startup] Creating default user '{settings.admin_username}'...")
+        logger.info(f"Creating default user '{settings.admin_username}'")
         password_hash = pwd_context.hash(settings.admin_password)
         await crud.create_user(settings.admin_username, password_hash)
         if settings.admin_password == "changeme":
-            print(
-                "[WARNING] Default user created with default password 'changeme'. Please change this in production."
+            logger.warning(
+                "Default user created with default password 'changeme'. Please change this in production."
             )
 
     # Warn if security settings are at defaults
     if settings.secret_key == "change-me-in-production":
-        print("[WARNING] secret_key is set to default value. Please set SECRET_KEY in .env file.")
+        logger.warning(
+            "secret_key is set to default value. Please set SECRET_KEY in .env file."
+        )
     if settings.admin_api_key == "change-me-in-production":
-        print("[WARNING] admin_api_key is set to default value. Please set ADMIN_API_KEY in .env file.")
+        logger.warning(
+            "admin_api_key is set to default value. Please set ADMIN_API_KEY in .env file."
+        )
 
-    print("[startup] Probing hardware...")
+    logger.info("Probing hardware")
     shutil.rmtree("/tmp/hls_srv", ignore_errors=True)
     hw = await probe_hardware()
     app.state.hardware = hw
 
     # Select best available encoder
     manager.encoder = select_encoder(hw)
-    print(f"[startup] Selected encoder: {manager.encoder}")
+    logger.info(f"Selected encoder: {manager.encoder}")
 
     # Store manager in app state for route access
     app.state.manager = manager
@@ -149,19 +172,30 @@ async def lifespan(app: FastAPI):
     yield
 
     # Shutdown
-    print("[shutdown] Cancelling background tasks...")
+    logger.info("Cancelling background tasks")
     cleanup_task.cancel()
     workdir_cleanup_task.cancel()
     scanner_task.cancel()
     for job in list(manager.get_all_jobs()):
         await manager.kill_ffmpeg(job, reason="server_shutdown")
 
-    print("[shutdown] Closing database...")
+    logger.info("Closing database")
     await db.close_db()
 
 
 app = FastAPI(lifespan=lifespan)
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+
+@app.middleware("http")
+async def request_id_middleware(request: Request, call_next):
+    """Add request ID to all requests for tracing."""
+    request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
+    set_request_id(request_id)
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = request_id
+    return response
+
 
 # Mount route modules
 app.include_router(pages.router)

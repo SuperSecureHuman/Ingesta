@@ -4,7 +4,6 @@ Transcoder: FFmpeg process management, on-demand spawning, seeking
 
 import asyncio
 import hashlib
-import json
 import re
 import time
 from collections import deque
@@ -13,13 +12,11 @@ from pathlib import Path
 from typing import Optional
 
 from config import settings
+from logger import get_logger
+
+logger = get_logger("media.transcoder")
 
 TICKS_PER_SECOND = 10_000_000
-
-# ANSI color codes
-CYAN = "\033[96m"
-YELLOW = "\033[93m"
-RESET = "\033[0m"
 
 BITRATE_TIERS = [
     {"label": "120 Mbps", "key": "120M", "bitrate": 120_000_000, "max_height": None},
@@ -158,7 +155,7 @@ async def probe_hardware() -> dict:
             result["h264_vaapi"] = True
 
     except Exception as e:
-        print(f"[probe_hardware] Warning: {e}")
+        logger.warning(f"Hardware probing warning", exc_info=True)
 
     return result
 
@@ -378,9 +375,6 @@ class TranscodeManager:
         )
 
         try:
-            # Color by seek status: cyan for mid-stream restart, yellow for initial
-            color = CYAN if seek_time_seconds > 0 else YELLOW
-
             job.process = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdin=asyncio.subprocess.PIPE,
@@ -395,10 +389,16 @@ class TranscodeManager:
             job.last_request_time = time.monotonic()
 
             # Print actual PID after process creation
-            print(
-                f"{color}[SPAWN] FFmpeg PID {job.pid} | quality={job.quality} | seek={seek_time_seconds:.1f}s{RESET}"
+            logger.info(
+                "FFmpeg process spawned",
+                extra={
+                    "stream_id": job.stream_id,
+                    "pid": job.pid,
+                    "quality": job.quality,
+                    "seek_time_seconds": seek_time_seconds,
+                },
             )
-            print(f"  cmd: {' '.join(cmd)}")
+            logger.debug(f"FFmpeg command: {' '.join(cmd)}")
             job.active_requests = 0
 
             # Drain stderr to prevent pipe block
@@ -418,7 +418,11 @@ class TranscodeManager:
 
             return True
         except Exception as e:
-            print(f"[SPAWN] ERROR: {type(e).__name__}: {e}")
+            logger.error(
+                f"FFmpeg spawn failed",
+                extra={"stream_id": job.stream_id},
+                exc_info=True,
+            )
             await self.broadcast_event(
                 {
                     "type": "error",
@@ -441,7 +445,10 @@ class TranscodeManager:
 
                 decoded = line.decode("utf-8", errors="ignore").strip()
                 if decoded:
-                    print(f"[FFmpeg {job.pid}] {decoded}")
+                    logger.debug(
+                        f"FFmpeg stderr",
+                        extra={"stream_id": job.stream_id, "pid": job.pid},
+                    )
 
                     # Parse time= for transcode position
                     time_match = re.search(
@@ -468,7 +475,11 @@ class TranscodeManager:
         except asyncio.CancelledError:
             pass
         except Exception as e:
-            print(f"[FFmpeg stderr drain error] {e}")
+            logger.error(
+                f"FFmpeg stderr drain error",
+                extra={"stream_id": job.stream_id, "pid": job.pid},
+                exc_info=True,
+            )
 
     async def kill_ffmpeg(self, job: TranscodeJob, reason: str = "manual") -> None:
         """Kill FFmpeg process gracefully with timeout."""
@@ -486,13 +497,20 @@ class TranscodeManager:
             try:
                 job.process.stdin.write(b"q\n")
                 await job.process.stdin.drain()
-            except Exception as e:
-                print(f"[kill_ffmpeg] Could not send quit to {job.pid}: {e}")
+            except Exception:
+                logger.warning(
+                    f"Could not send quit to FFmpeg",
+                    extra={"stream_id": job.stream_id, "pid": job.pid},
+                    exc_info=True,
+                )
 
             try:
                 await asyncio.wait_for(job.process.wait(), timeout=5.0)
             except asyncio.TimeoutError:
-                print(f"[kill_ffmpeg] Timeout waiting for {job.pid}, force killing")
+                logger.warning(
+                    f"Timeout waiting for FFmpeg graceful exit, force killing",
+                    extra={"stream_id": job.stream_id, "pid": job.pid},
+                )
                 job.process.kill()
                 await job.process.wait()
 
