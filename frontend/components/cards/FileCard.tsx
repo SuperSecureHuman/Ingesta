@@ -9,6 +9,7 @@ interface FileCardProps {
   isSelected: boolean;
   onPlay: (path: string) => void;
   onSelectionChange: (path: string, type: 'file' | 'folder', selected: boolean) => void;
+  onFolderOpen?: (path: string) => void;
 }
 
 function FileCard({
@@ -16,6 +17,7 @@ function FileCard({
   isSelected,
   onPlay,
   onSelectionChange,
+  onFolderOpen,
 }: FileCardProps) {
   const isFolderOrVideo = entry.is_dir || entry.is_video;
 
@@ -34,7 +36,12 @@ function FileCard({
     if ((e.target as HTMLElement).tagName === 'INPUT') {
       return;
     }
-    // Only play on video files, not folders
+    // Open folder if it's a directory
+    if (entry.is_dir) {
+      onFolderOpen?.(entry.path);
+      return;
+    }
+    // Play on video files
     if (entry.is_video) {
       onPlay(entry.path);
     }

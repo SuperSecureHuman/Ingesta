@@ -24,25 +24,26 @@ export default function LibraryView({
   const { selectedItems, updateSelection, clearSelection } = useSelection();
   const [loading, setLoading] = useState(true);
   const [files, setFiles] = useState<BrowseResult | null>(null);
+  const [currentPath, setCurrentPath] = useState<string>('');
 
   useEffect(() => {
     if (!currentLibraryId || !currentLibrary) {
       setCurrentView('home');
       return;
     }
-    loadLibraryFiles();
+    // Initialize to root path
+    setCurrentPath(currentLibrary.root_path);
+    loadLibraryFiles(currentLibrary.root_path);
   }, [currentLibraryId, currentLibrary, setCurrentView]);
 
-  const loadLibraryFiles = async () => {
+  const loadLibraryFiles = async (path: string) => {
     if (!currentLibraryId || !currentLibrary) return;
     try {
       setLoading(true);
-      // Use root_path from currentLibrary (already loaded in HomeView)
-      const rootPath = currentLibrary.root_path;
 
-      // Browse the root path
+      // Browse the given path
       const browseRes = await apiFetch(
-        `/api/libraries/${currentLibraryId}/browse?path=${encodeURIComponent(rootPath)}`
+        `/api/libraries/${currentLibraryId}/browse?path=${encodeURIComponent(path)}`
       );
       if (!browseRes.ok) {
         showToast('Failed to load files', 'error');
@@ -51,10 +52,21 @@ export default function LibraryView({
 
       const browseData = await browseRes.json();
       setFiles(browseData);
+      setCurrentPath(path);
     } catch (e) {
       showToast(`Error: ${e}`, 'error');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleFolderOpen = (folderPath: string) => {
+    loadLibraryFiles(folderPath);
+  };
+
+  const handleNavigateBack = () => {
+    if (files?.parent) {
+      loadLibraryFiles(files.parent);
     }
   };
 
@@ -87,7 +99,14 @@ export default function LibraryView({
   return (
     <div>
       <div className="section-header">
-        <h2>Library Files</h2>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          {currentPath && currentPath !== currentLibrary?.root_path && (
+            <button className="btn btn-sm" onClick={handleNavigateBack}>
+              ← Back
+            </button>
+          )}
+          <h2>Library Files</h2>
+        </div>
         <button className="btn btn-primary btn-sm" onClick={handleAddEntireLibrary}>
           Add Entire Library to Project
         </button>
@@ -105,6 +124,7 @@ export default function LibraryView({
               isSelected={selectedItems.has(entry.path)}
               onPlay={handleFilePlay}
               onSelectionChange={handleSelectionChange}
+              onFolderOpen={handleFolderOpen}
             />
           ))
         )}
