@@ -511,3 +511,185 @@ async def user_exists() -> bool:
     db = get_db()
     row = await db.fetchone("SELECT COUNT(*) FROM users")
     return row[0] > 0 if row else False
+
+
+# ============================================================================
+# LUTS
+# ============================================================================
+
+
+async def get_all_luts() -> List[Dict[str, Any]]:
+    """Get all LUTs, ordered by camera and name."""
+    db = get_db()
+    rows = await db.fetch(
+        "SELECT id, name, camera, log_profile, color_space, gamma, file_path, lut_type, created_at FROM luts ORDER BY camera, name"
+    )
+    return [
+        {
+            "id": row[0],
+            "name": row[1],
+            "camera": row[2],
+            "log_profile": row[3],
+            "color_space": row[4],
+            "gamma": row[5],
+            "file_path": row[6],
+            "lut_type": row[7],
+            "created_at": row[8],
+        }
+        for row in rows
+    ]
+
+
+async def get_lut(lut_id: str) -> Optional[Dict[str, Any]]:
+    """Get LUT by ID."""
+    db = get_db()
+    row = await db.fetchone(
+        "SELECT id, name, camera, log_profile, color_space, gamma, file_path, lut_type, created_at FROM luts WHERE id = ?",
+        (lut_id,),
+    )
+    if not row:
+        return None
+    return {
+        "id": row[0],
+        "name": row[1],
+        "camera": row[2],
+        "log_profile": row[3],
+        "color_space": row[4],
+        "gamma": row[5],
+        "file_path": row[6],
+        "lut_type": row[7],
+        "created_at": row[8],
+    }
+
+
+async def upsert_lut(
+    id: str, name: str, camera: str, log_profile: str, color_space: Optional[str], gamma: Optional[str], file_path: str, lut_type: str = "3d"
+) -> str:
+    """Upsert a LUT (on conflict on file_path, update name/camera/log_profile). Returns LUT ID."""
+    created_at = _now_iso()
+    db = get_db()
+    await db.execute(
+        """
+        INSERT INTO luts (id, name, camera, log_profile, color_space, gamma, file_path, lut_type, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(file_path) DO UPDATE SET
+            name        = excluded.name,
+            camera      = excluded.camera,
+            log_profile = excluded.log_profile,
+            color_space = excluded.color_space,
+            gamma       = excluded.gamma
+        """,
+        (id, name, camera, log_profile, color_space, gamma, file_path, lut_type, created_at),
+    )
+    return id
+
+
+# ============================================================================
+# FILE COLOR METADATA
+# ============================================================================
+
+
+async def get_file_color_meta(file_id: str) -> Optional[Dict[str, Any]]:
+    """Get color metadata for a file."""
+    db = get_db()
+    row = await db.fetchone(
+        "SELECT file_id, color_space, color_transfer, color_primaries, log_profile, source, updated_at FROM file_color_meta WHERE file_id = ?",
+        (file_id,),
+    )
+    if not row:
+        return None
+    return {
+        "file_id": row[0],
+        "color_space": row[1],
+        "color_transfer": row[2],
+        "color_primaries": row[3],
+        "log_profile": row[4],
+        "source": row[5],
+        "updated_at": row[6],
+    }
+
+
+async def upsert_file_color_meta(
+    file_id: str,
+    color_space: Optional[str],
+    color_transfer: Optional[str],
+    color_primaries: Optional[str],
+    log_profile: Optional[str],
+    source: str = "auto",
+) -> Dict[str, Any]:
+    """Upsert color metadata for a file. Only updates if source is not 'manual' or if source param is 'manual'."""
+    updated_at = _now_iso()
+    db = get_db()
+
+    # First check if a manual override exists
+    existing = await db.fetchone(
+        "SELECT source FROM file_color_meta WHERE file_id = ?",
+        (file_id,),
+    )
+
+    # Skip upsert if existing source is 'manual' and we're trying to insert 'auto'
+    if existing and existing[0] == "manual" and source == "auto":
+        return await get_file_color_meta(file_id)
+
+    await db.execute(
+        """
+        INSERT INTO file_color_meta (file_id, color_space, color_transfer, color_primaries, log_profile, source, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(file_id) DO UPDATE SET
+            color_space     = excluded.color_space,
+            color_transfer  = excluded.color_transfer,
+            color_primaries = excluded.color_primaries,
+            log_profile     = excluded.log_profile,
+            source          = excluded.source,
+            updated_at      = excluded.updated_at
+        """,
+        (file_id, color_space, color_transfer, color_primaries, log_profile, source, updated_at),
+    )
+    return await get_file_color_meta(file_id)
+
+
+# ============================================================================
+# FILE LUT PREFERENCES
+# ============================================================================
+
+
+async def get_file_lut_pref(file_id: str) -> Optional[Dict[str, Any]]:
+    """Get LUT preference for a file."""
+    db = get_db()
+    row = await db.fetchone(
+        "SELECT file_id, lut_id, intensity, updated_at FROM file_lut_prefs WHERE file_id = ?",
+        (file_id,),
+    )
+    if not row:
+        return None
+    return {
+        "file_id": row[0],
+        "lut_id": row[1],
+        "intensity": row[2],
+        "updated_at": row[3],
+    }
+
+
+async def upsert_file_lut_pref(file_id: str, lut_id: Optional[str], intensity: float = 1.0) -> Dict[str, Any]:
+    """Upsert LUT preference for a file."""
+    updated_at = _now_iso()
+    db = get_db()
+    await db.execute(
+        """
+        INSERT INTO file_lut_prefs (file_id, lut_id, intensity, updated_at)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(file_id) DO UPDATE SET
+            lut_id     = excluded.lut_id,
+            intensity  = excluded.intensity,
+            updated_at = excluded.updated_at
+        """,
+        (file_id, lut_id, intensity, updated_at),
+    )
+    return await get_file_lut_pref(file_id)
+
+
+async def delete_file_lut_pref(file_id: str) -> None:
+    """Delete LUT preference for a file."""
+    db = get_db()
+    await db.execute("DELETE FROM file_lut_prefs WHERE file_id = ?", (file_id,))
+

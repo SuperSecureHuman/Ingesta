@@ -25,7 +25,8 @@ from media.transcoder import (
     select_encoder,
 )
 from routes.auth import pwd_context
-from routes import libraries, projects, shares, auth, stream, debug, pages
+from routes import libraries, projects, shares, auth, stream, debug, pages, luts
+from scripts.seed_luts import seed_luts
 
 # Initialize logging
 setup_logging()
@@ -82,6 +83,17 @@ async def background_scanner_loop():
                     bitrate=info.bitrate,
                     video_codec=info.video_codec,
                 )
+
+                # Upsert color metadata (auto-detected)
+                await crud.upsert_file_color_meta(
+                    file_id=file_id,
+                    color_space=info.color_space,
+                    color_transfer=info.color_transfer,
+                    color_primaries=info.color_primaries,
+                    log_profile=info.log_profile,
+                    source="auto",
+                )
+
                 logger.info(
                     "File probed",
                     extra={
@@ -152,6 +164,9 @@ async def lifespan(app: FastAPI):
             "admin_api_key is set to default value. Please set ADMIN_API_KEY in .env file."
         )
 
+    logger.info("Seeding LUT catalogue")
+    await seed_luts()
+
     logger.info("Probing hardware")
     shutil.rmtree("/tmp/hls_srv", ignore_errors=True)
     hw = await probe_hardware()
@@ -204,6 +219,7 @@ app.include_router(libraries.router)
 app.include_router(projects.router)
 app.include_router(shares.router)
 app.include_router(stream.router)
+app.include_router(luts.router)
 app.include_router(debug.router)
 
 

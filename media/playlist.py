@@ -10,6 +10,17 @@ from pathlib import Path
 
 TICKS_PER_SECOND = 10_000_000  # C# TimeSpan.TicksPerSecond
 
+# Map ffprobe color_transfer values to normalized log profile names
+LOG_PROFILE_MAP = {
+    "log_c": "logc3",
+    "arib-std-b67": "hlg",
+    "smpte2084": "pq",
+    "slog": "slog2",
+    "slog2": "slog3",
+    "clog": "clog2",
+    "clog3": "clog3",
+}
+
 
 @dataclass
 class MediaInfo:
@@ -22,6 +33,10 @@ class MediaInfo:
     pix_fmt: str = ""  # e.g. 'yuv420p', 'yuv420p10le'
     bit_depth: int = 8  # inferred from pix_fmt
     audio_codec: str = ""  # e.g. 'aac', 'ac3'
+    color_space: str = ""  # e.g. 'bt709', 'bt2020'
+    color_transfer: str = ""  # e.g. 'log_c', 'arib-std-b67'
+    color_primaries: str = ""  # e.g. 'bt709', 'bt2020'
+    log_profile: str = ""  # normalized enum: logc3, slog3, hlg, pq, rec709, dlog_m, etc.
 
 
 @dataclass
@@ -55,12 +70,16 @@ async def probe_media(path: str) -> MediaInfo:
     duration = float(data["format"]["duration"])
     bitrate = int(data["format"].get("bit_rate", 0))
 
-    # Find video stream for resolution, codec, pixel format
+    # Find video stream for resolution, codec, pixel format, color metadata
     width, height = 1920, 1080
     video_codec = ""
     pix_fmt = ""
     bit_depth = 8
     audio_codec = ""
+    color_space = ""
+    color_transfer = ""
+    color_primaries = ""
+    log_profile = ""
 
     for stream in data.get("streams", []):
         if stream["codec_type"] == "video":
@@ -74,6 +93,16 @@ async def probe_media(path: str) -> MediaInfo:
                 if ("10le" in pix_fmt or "10be" in pix_fmt)
                 else 12 if ("12le" in pix_fmt or "12be" in pix_fmt) else 8
             )
+            # Extract color metadata
+            color_space = stream.get("color_space", "")
+            color_transfer = stream.get("color_transfer", "")
+            color_primaries = stream.get("color_primaries", "")
+
+            # Derive log_profile from color_transfer
+            log_profile = LOG_PROFILE_MAP.get(color_transfer.lower() if color_transfer else "", None)
+            if log_profile is None and "dlog" in Path(path).name.lower():
+                log_profile = "dlog_m"
+            log_profile = log_profile or "rec709"
         elif stream["codec_type"] == "audio" and not audio_codec:
             audio_codec = stream.get("codec_name", "")
 
@@ -87,6 +116,10 @@ async def probe_media(path: str) -> MediaInfo:
         pix_fmt=pix_fmt,
         bit_depth=bit_depth,
         audio_codec=audio_codec,
+        color_space=color_space,
+        color_transfer=color_transfer,
+        color_primaries=color_primaries,
+        log_profile=log_profile,
     )
 
 

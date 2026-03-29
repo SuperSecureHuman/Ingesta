@@ -63,6 +63,39 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 -- Create indexes for common queries
+-- LUT library: 3D color lookup tables for live preview
+CREATE TABLE IF NOT EXISTS luts (
+    id          TEXT PRIMARY KEY,
+    name        TEXT NOT NULL,
+    camera      TEXT NOT NULL,
+    log_profile TEXT NOT NULL,
+    color_space TEXT,
+    gamma       TEXT,
+    file_path   TEXT NOT NULL UNIQUE,
+    lut_type    TEXT NOT NULL DEFAULT '3d',
+    created_at  TEXT NOT NULL
+);
+
+-- File color metadata: auto-detected or manually-set color profile for each file
+CREATE TABLE IF NOT EXISTS file_color_meta (
+    file_id         TEXT PRIMARY KEY REFERENCES project_files(id) ON DELETE CASCADE,
+    color_space     TEXT,
+    color_transfer  TEXT,
+    color_primaries TEXT,
+    log_profile     TEXT,
+    source          TEXT NOT NULL DEFAULT 'auto',
+    updated_at      TEXT NOT NULL
+);
+
+-- File LUT preferences: saved LUT selection and intensity per file
+CREATE TABLE IF NOT EXISTS file_lut_prefs (
+    file_id    TEXT PRIMARY KEY REFERENCES project_files(id) ON DELETE CASCADE,
+    lut_id     TEXT REFERENCES luts(id) ON DELETE SET NULL,
+    intensity  REAL NOT NULL DEFAULT 1.0,
+    updated_at TEXT NOT NULL
+);
+
+-- Create indexes for common queries
 CREATE INDEX IF NOT EXISTS idx_projects_library_id ON projects (library_id);
 CREATE INDEX IF NOT EXISTS idx_project_files_project_id ON project_files (project_id);
 CREATE INDEX IF NOT EXISTS idx_project_files_project_id_path ON project_files (project_id, file_path);
@@ -70,3 +103,6 @@ CREATE INDEX IF NOT EXISTS idx_project_files_scan_status ON project_files (scan_
 CREATE INDEX IF NOT EXISTS idx_shares_project_id ON shares (project_id);
 CREATE INDEX IF NOT EXISTS idx_shares_active ON shares (active);
 CREATE INDEX IF NOT EXISTS idx_users_username ON users (username);
+CREATE INDEX IF NOT EXISTS idx_luts_camera ON luts (camera);
+CREATE INDEX IF NOT EXISTS idx_luts_log_profile ON luts (log_profile);
+CREATE INDEX IF NOT EXISTS idx_file_color_meta_source ON file_color_meta (source);
