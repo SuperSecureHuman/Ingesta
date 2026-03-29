@@ -54,12 +54,11 @@ def validate_session_id(session_id: str):
 def validate_path(path: str) -> Path:
     """Validate path is within MEDIA_ROOT and exists."""
     p = Path(path).resolve()
-    if MEDIA_ROOT != Path("/"):
-        media_root_str = str(MEDIA_ROOT)
-        p_str = str(p)
-        # Allow exact match or anything under MEDIA_ROOT
-        if p_str != media_root_str and not p_str.startswith(media_root_str + "/"):
-            raise HTTPException(403, "Path outside MEDIA_ROOT")
+    media_root_str = str(MEDIA_ROOT)
+    p_str = str(p)
+    # Always enforce MEDIA_ROOT boundary
+    if p_str != media_root_str and not p_str.startswith(media_root_str + "/"):
+        raise HTTPException(403, "Path outside MEDIA_ROOT")
     if not p.exists():
         raise HTTPException(404, "File not found")
     return p

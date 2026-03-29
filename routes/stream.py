@@ -22,14 +22,14 @@ from media.transcoder import (
 )
 from media.playlist import probe_media, compute_equal_length_segments, build_vod_playlist
 from media.thumbs import get_or_generate_thumb
-from routes.deps import validate_path, validate_session_id, get_manager, MEDIA_ROOT
+from routes.deps import validate_path, validate_session_id, get_manager, MEDIA_ROOT, require_auth
 from routes.utils import async_iterdir
 
 router = APIRouter(prefix="/api")
 
 
 @router.get("/probe")
-async def probe(path: str = Query(...), stream_id: str = Query(None)):
+async def probe(path: str = Query(...), stream_id: str = Query(None), _auth: str = Depends(require_auth)):
     """Probe media file for duration, resolution, and bitrate."""
     try:
         if stream_id:
@@ -55,7 +55,7 @@ async def probe(path: str = Query(...), stream_id: str = Query(None)):
 
 
 @router.get("/browse")
-async def browse(path: str = Query("/")):
+async def browse(path: str = Query("/"), _auth: str = Depends(require_auth)):
     """List directory contents for file browser."""
     try:
         path = unquote(path)
@@ -101,7 +101,7 @@ async def browse(path: str = Query("/")):
 
 
 @router.get("/bitrate-tiers")
-async def bitrate_tiers(bitrate: int = Query(None), height: int = Query(None)):
+async def bitrate_tiers(bitrate: int = Query(None), height: int = Query(None), _auth: str = Depends(require_auth)):
     """Get available bitrate tiers filtered by source constraints."""
     tiers = []
     for tier in BITRATE_TIERS:
@@ -125,6 +125,7 @@ async def get_playlist(
     path: str = Query(...),
     quality: str = Query("720p"),
     segment_length: int = Query(6),
+    _auth: str = Depends(require_auth),
 ):
     """Generate VOD m3u8 playlist (pre-computed, no FFmpeg)."""
     try:
@@ -171,6 +172,7 @@ async def get_segment(
     actualSegmentLengthTicks: int = Query(None),
     background_tasks: BackgroundTasks = None,
     manager: TranscodeManager = Depends(get_manager),
+    _auth: str = Depends(require_auth),
 ):
     """On-demand segment handler (core seeking + transcoding logic)."""
     try:
@@ -332,7 +334,7 @@ async def get_segment(
 
 
 @router.post("/stop/{stream_id}")
-async def stop_stream(stream_id: str, manager: TranscodeManager = Depends(get_manager)):
+async def stop_stream(stream_id: str, manager: TranscodeManager = Depends(get_manager), _auth: str = Depends(require_auth)):
     """Kill FFmpeg for this stream (idempotent - OK even if not running)."""
     validate_session_id(stream_id)
     job = manager.get_job(stream_id)
@@ -350,7 +352,7 @@ async def stop_stream(stream_id: str, manager: TranscodeManager = Depends(get_ma
 
 
 @router.post("/ping/{session_id}")
-async def ping(session_id: str, manager: TranscodeManager = Depends(get_manager)):
+async def ping(session_id: str, manager: TranscodeManager = Depends(get_manager), _auth: str = Depends(require_auth)):
     """Keep-alive ping endpoint (Jellyfin pattern)."""
     validate_session_id(session_id)
     job = manager.get_job(session_id)
@@ -361,7 +363,7 @@ async def ping(session_id: str, manager: TranscodeManager = Depends(get_manager)
 
 
 @router.get("/capabilities")
-async def capabilities(request: Request):
+async def capabilities(request: Request, _auth: str = Depends(require_auth)):
     """Get server capabilities including hardware support and media root."""
     return JSONResponse(
         content={
@@ -374,7 +376,7 @@ async def capabilities(request: Request):
 
 
 @router.get("/thumb")
-async def get_thumb(path: str = Query(...), t: float = Query(0), w: int = Query(320)):
+async def get_thumb(path: str = Query(...), t: float = Query(0), w: int = Query(320), _auth: str = Depends(require_auth)):
     """Get or generate thumbnail at time offset t (seconds), width w."""
     try:
         path = unquote(path)
@@ -396,7 +398,7 @@ async def get_thumb(path: str = Query(...), t: float = Query(0), w: int = Query(
 
 
 @router.get("/poster")
-async def get_poster(path: str = Query(...)):
+async def get_poster(path: str = Query(...), _auth: str = Depends(require_auth)):
     """Get poster frame at 10% into video (or 10s min), width 640."""
     try:
         path = unquote(path)

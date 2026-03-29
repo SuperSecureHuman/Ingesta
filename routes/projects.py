@@ -12,7 +12,7 @@ from pydantic import BaseModel
 
 from config import settings
 import db.crud as crud
-from routes.deps import require_auth
+from routes.deps import require_auth, MEDIA_ROOT
 from routes.utils import async_rglob
 
 
@@ -94,6 +94,12 @@ async def add_files_to_project(
         try:
             p = Path(file_path).resolve()
             resolved_path = str(p)
+
+            # Validate path is within MEDIA_ROOT
+            media_root_str = str(MEDIA_ROOT)
+            if resolved_path != media_root_str and not resolved_path.startswith(media_root_str + "/"):
+                errors.append({"path": file_path, "error": "Path outside MEDIA_ROOT"})
+                continue
 
             # Skip if we've already seen this path in this request
             if resolved_path in seen:
@@ -230,6 +236,13 @@ async def add_folder_to_project(
         raise HTTPException(404, "Project not found")
 
     folder = Path(req.folder_path).resolve()
+
+    # Validate path is within MEDIA_ROOT
+    media_root_str = str(MEDIA_ROOT)
+    folder_str = str(folder)
+    if folder_str != media_root_str and not folder_str.startswith(media_root_str + "/"):
+        raise HTTPException(403, "Folder path outside MEDIA_ROOT")
+
     if not folder.exists():
         raise HTTPException(400, "Folder does not exist")
     if not folder.is_dir():

@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     """Application configuration from environment variables."""
 
     # Media paths
-    media_root: str = "/"
+    media_root: str = ""
 
     # Transcoding
     segment_length: int = 6

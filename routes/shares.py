@@ -11,12 +11,13 @@ from urllib.parse import quote, unquote
 from fastapi import APIRouter, Depends, HTTPException, Query, Header
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
-import hashlib
-from jose import JWTError, jwt
+import jwt as pyjwt
+from jwt import InvalidTokenError
 
 from config import settings
 import db.crud as crud
 from routes.deps import require_auth
+from routes.auth import pwd_context
 from media.playlist import probe_media
 from media.transcoder import TICKS_PER_SECOND
 from media.thumbs import get_or_generate_thumb
@@ -30,14 +31,13 @@ TOKEN_EXPIRE_HOURS = 24
 
 
 def hash_password(password: str) -> str:
-    """Hash a plaintext password using SHA256."""
-    # For POC purposes, use SHA256. In production, use bcrypt/argon2.
-    return hashlib.sha256(password.encode()).hexdigest()
+    """Hash a plaintext password using bcrypt."""
+    return pwd_context.hash(password)
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    """Verify plaintext password against hash."""
-    return hashlib.sha256(plain.encode()).hexdigest() == hashed
+    """Verify plaintext password against bcrypt hash."""
+    return pwd_context.verify(plain, hashed)
 
 
 def create_access_token(share_id: str, project_id: str) -> str:
@@ -47,18 +47,18 @@ def create_access_token(share_id: str, project_id: str) -> str:
     payload = {
         "share_id": share_id,
         "project_id": project_id,
-        "exp": expires.timestamp(),
+        "exp": int(expires.timestamp()),
     }
-    token = jwt.encode(payload, settings.secret_key, algorithm=ALGORITHM)
+    token = pyjwt.encode(payload, settings.secret_key, algorithm=ALGORITHM)
     return token
 
 
 def verify_token(token: str) -> dict:
     """Verify and decode JWT token."""
     try:
-        payload = jwt.decode(token, settings.secret_key, algorithms=[ALGORITHM])
+        payload = pyjwt.decode(token, settings.secret_key, algorithms=[ALGORITHM])
         return payload
-    except JWTError:
+    except InvalidTokenError:
         raise HTTPException(401, "Invalid or expired token")
 
 

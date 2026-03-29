@@ -22,7 +22,7 @@ from media.transcoder import (
     probe_hardware,
     select_encoder,
 )
-
+from routes.auth import pwd_context
 from routes import libraries, projects, shares, auth, stream, debug, pages
 
 
@@ -116,14 +116,18 @@ async def lifespan(app: FastAPI):
     print("[startup] Checking for default user...")
     if not await crud.user_exists():
         print(f"[startup] Creating default user '{settings.admin_username}'...")
-        import hashlib
-
-        password_hash = hashlib.sha256(settings.admin_password.encode()).hexdigest()
+        password_hash = pwd_context.hash(settings.admin_password)
         await crud.create_user(settings.admin_username, password_hash)
         if settings.admin_password == "changeme":
             print(
                 "[WARNING] Default user created with default password 'changeme'. Please change this in production."
             )
+
+    # Warn if security settings are at defaults
+    if settings.secret_key == "change-me-in-production":
+        print("[WARNING] secret_key is set to default value. Please set SECRET_KEY in .env file.")
+    if settings.admin_api_key == "change-me-in-production":
+        print("[WARNING] admin_api_key is set to default value. Please set ADMIN_API_KEY in .env file.")
 
     print("[startup] Probing hardware...")
     shutil.rmtree("/tmp/hls_srv", ignore_errors=True)

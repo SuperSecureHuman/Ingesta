@@ -8,11 +8,15 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Depends, Cookie, Response
 from pydantic import BaseModel
-from jose import jwt, JWTError
-import hashlib
+import jwt as pyjwt
+from jwt import InvalidTokenError
+from passlib.context import CryptContext
 
 from config import settings
 import db.crud as crud
+
+# Password hashing context
+pwd_context = CryptContext(schemes=["scrypt"], deprecated="auto")
 
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -29,9 +33,8 @@ class LoginRequest(BaseModel):
 
 
 class LoginResponse(BaseModel):
-    """Login response with username and API key."""
+    """Login response with username."""
     username: str
-    admin_api_key: str
 
 
 class MeResponse(BaseModel):
@@ -40,13 +43,13 @@ class MeResponse(BaseModel):
 
 
 def hash_password(password: str) -> str:
-    """Hash a password using SHA256."""
-    return hashlib.sha256(password.encode()).hexdigest()
+    """Hash a password using bcrypt."""
+    return pwd_context.hash(password)
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    """Verify plaintext password against hash."""
-    return hashlib.sha256(plain.encode()).hexdigest() == hashed
+    """Verify plaintext password against bcrypt hash."""
+    return pwd_context.verify(plain, hashed)
 
 
 def create_session_token(user_id: str, username: str) -> str:
@@ -56,18 +59,18 @@ def create_session_token(user_id: str, username: str) -> str:
     payload = {
         "user_id": user_id,
         "username": username,
-        "exp": expires.timestamp(),
+        "exp": int(expires.timestamp()),
     }
-    token = jwt.encode(payload, settings.secret_key, algorithm=ALGORITHM)
+    token = pyjwt.encode(payload, settings.secret_key, algorithm=ALGORITHM)
     return token
 
 
 def verify_session_token(token: str) -> dict:
     """Verify and decode session JWT token."""
     try:
-        payload = jwt.decode(token, settings.secret_key, algorithms=[ALGORITHM])
+        payload = pyjwt.decode(token, settings.secret_key, algorithms=[ALGORITHM])
         return payload
-    except JWTError:
+    except InvalidTokenError:
         raise HTTPException(401, "Invalid or expired session")
 
 
@@ -92,13 +95,13 @@ async def login(req: LoginRequest, response: Response):
         token,
         httponly=True,
         samesite="lax",
+        secure=True,
         path="/",
         max_age=TOKEN_EXPIRE_HOURS * 3600,
     )
 
     return LoginResponse(
         username=user["username"],
-        admin_api_key=settings.admin_api_key,
     )
 
 

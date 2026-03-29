@@ -7,13 +7,13 @@ import asyncio
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 
-from routes.deps import get_manager
+from routes.deps import get_manager, require_auth
 
 router = APIRouter(prefix="/api/debug")
 
 
 @router.get("/events")
-async def debug_events(request: Request, manager = Depends(get_manager)):
+async def debug_events(request: Request, manager = Depends(get_manager), _auth: str = Depends(require_auth)):
     """SSE stream for debug panel with heartbeat and event replay."""
     last_id = request.headers.get("last-event-id")
 
@@ -48,7 +48,7 @@ async def debug_events(request: Request, manager = Depends(get_manager)):
 
 
 @router.get("/state")
-async def debug_state(manager = Depends(get_manager)):
+async def debug_state(manager = Depends(get_manager), _auth: str = Depends(require_auth)):
     """JSON snapshot of all active jobs (polling fallback)."""
     return {
         "jobs": [

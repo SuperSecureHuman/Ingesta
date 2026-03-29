@@ -299,6 +299,12 @@ class TranscodeManager:
         bitrate = preset["bitrate"]
         max_height = preset["max_height"]
 
+        # Validate source_path is not a network URI (SSRF protection)
+        _BLOCKED_SCHEMES = ("http://", "https://", "ftp://", "ftps://", "rtmp://", "rtsp://", "smb://")
+        source_lower = job.source_path.lower()
+        if any(source_lower.startswith(s) for s in _BLOCKED_SCHEMES):
+            raise ValueError(f"Network URIs are not allowed as source path: {job.source_path}")
+
         # Build FFmpeg command
         cmd = ["ffmpeg"]
 
