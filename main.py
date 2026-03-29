@@ -210,4 +210,10 @@ app.include_router(debug.router)
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(
+        app,
+        host="0.0.0.0",
+        port=8000,
+        access_log=False,  # Disable Uvicorn access logging
+        log_config=None,  # Disable Uvicorn default logging config
+    )

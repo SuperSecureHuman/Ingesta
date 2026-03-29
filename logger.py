@@ -1,11 +1,12 @@
 """
-Structured logging configuration with JSON output and request tracing.
+Structured logging configuration with dual formatters: JSON for production, colored text for CLI.
 """
 
 import json
 import logging
 import logging.config
 import sys
+import os
 from typing import Optional
 from contextvars import ContextVar
 
@@ -13,6 +14,68 @@ from config import settings
 
 # Context variable for request ID tracking
 _request_id_ctx: ContextVar[Optional[str]] = ContextVar("request_id", default=None)
+
+# Color codes for CLI output
+class _Colors:
+    RESET = "\033[0m"
+    BOLD = "\033[1m"
+    DIM = "\033[2m"
+
+    RED = "\033[91m"
+    GREEN = "\033[92m"
+    YELLOW = "\033[93m"
+    BLUE = "\033[94m"
+    MAGENTA = "\033[95m"
+    CYAN = "\033[96m"
+
+
+class CliFormatter(logging.Formatter):
+    """Human-readable formatter with colors for CLI output."""
+
+    LEVEL_COLORS = {
+        "DEBUG": _Colors.CYAN,
+        "INFO": _Colors.GREEN,
+        "WARNING": _Colors.YELLOW,
+        "ERROR": _Colors.RED,
+        "CRITICAL": _Colors.RED + _Colors.BOLD,
+    }
+
+    def format(self, record: logging.LogRecord) -> str:
+        """Format log record for CLI with colors and extra fields."""
+        level_color = self.LEVEL_COLORS.get(record.levelname, "")
+        timestamp = self.formatTime(record, datefmt="%H:%M:%S")
+
+        # Build base log line
+        log_line = f"{_Colors.DIM}{timestamp}{_Colors.RESET} {level_color}{record.levelname:8}{_Colors.RESET} {record.name:20} {record.getMessage()}"
+
+        # Add extra fields inline
+        extras = []
+        if hasattr(record, "stream_id"):
+            extras.append(f"stream={record.stream_id}")
+        if hasattr(record, "pid"):
+            extras.append(f"pid={record.pid}")
+        if hasattr(record, "file_path"):
+            extras.append(f"file={record.file_path}")
+        if hasattr(record, "quality"):
+            extras.append(f"quality={record.quality}")
+        if hasattr(record, "width") and hasattr(record, "height"):
+            extras.append(f"{record.width}x{record.height}")
+        if hasattr(record, "bitrate"):
+            extras.append(f"{record.bitrate}bps")
+
+        if extras:
+            log_line += f" {_Colors.MAGENTA}[{', '.join(extras)}]{_Colors.RESET}"
+
+        # Add request ID if available
+        request_id = _request_id_ctx.get()
+        if request_id:
+            log_line += f" {_Colors.BLUE}req={request_id[:8]}...{_Colors.RESET}"
+
+        # Add exception info if present
+        if record.exc_info:
+            log_line += "\n" + self.formatException(record.exc_info)
+
+        return log_line
 
 
 class JSONFormatter(logging.Formatter):
@@ -52,11 +115,26 @@ class JSONFormatter(logging.Formatter):
 
 
 def setup_logging() -> None:
-    """Initialize logging configuration from config.log_level."""
+    """Initialize logging configuration from config.log_level.
+
+    Detects environment and uses:
+    - CLI formatter (colored text) when stdout is a TTY or LOG_FORMAT=text
+    - JSON formatter for production/structured logging (LOG_FORMAT=json)
+    """
+    # Detect format preference
+    log_format = os.getenv("LOG_FORMAT", "").lower()
+    is_tty = sys.stdout.isatty()
+    use_json = log_format == "json" or (not is_tty and log_format != "text")
+
+    formatter_name = "json" if use_json else "cli"
+
     config = {
         "version": 1,
         "disable_existing_loggers": False,
         "formatters": {
+            "cli": {
+                "()": CliFormatter,
+            },
             "json": {
                 "()": JSONFormatter,
             },
@@ -64,7 +142,7 @@ def setup_logging() -> None:
         "handlers": {
             "console": {
                 "class": "logging.StreamHandler",
-                "formatter": "json",
+                "formatter": formatter_name,
                 "stream": "ext://sys.stdout",
             },
         },

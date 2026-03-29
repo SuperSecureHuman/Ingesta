@@ -258,6 +258,14 @@ async def get_segment(
             if start_transcoding:
                 # Create or reuse job
                 if job is None:
+                    logger.info(
+                        "Starting new stream",
+                        extra={
+                            "stream_id": stream_id,
+                            "quality": quality,
+                            "segment_id": segment_id,
+                        },
+                    )
                     job = TranscodeJob(
                         stream_id=stream_id,
                         source_path=path,
@@ -266,6 +274,16 @@ async def get_segment(
                         work_dir=work_dir,
                     )
                     await manager.register_job(job)
+                else:
+                    # Quality change - log the transition
+                    logger.info(
+                        "Quality changed",
+                        extra={
+                            "stream_id": stream_id,
+                            "old_quality": job.quality,
+                            "new_quality": quality,
+                        },
+                    )
 
                 # Spawn FFmpeg
                 success = await manager.spawn_ffmpeg(job, seek_time_sec, segment_id)
@@ -308,6 +326,13 @@ async def get_segment(
             )
 
             return FileResponse(segment_path, media_type="video/mp2t")
+        except FileNotFoundError:
+            # Segment file was deleted (e.g., cleanup or stream stopped)
+            logger.debug(
+                "Segment file not found",
+                extra={"stream_id": stream_id, "segment_id": segment_id},
+            )
+            raise HTTPException(status_code=404, detail="Segment not available")
         finally:
             background_tasks.add_task(
                 manager.request_end,
@@ -346,6 +371,10 @@ async def stop_stream(stream_id: str, manager: TranscodeManager = Depends(get_ma
     validate_session_id(stream_id)
     job = manager.get_job(stream_id)
     if job:
+        logger.info(
+            "Stopping stream",
+            extra={"stream_id": stream_id, "quality": job.quality},
+        )
         await manager.kill_ffmpeg(job, reason="stop_request")
         if stream_id in manager._jobs:
             del manager._jobs[stream_id]
