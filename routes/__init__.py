@@ -1,5 +1,5 @@
 """
-API route modules for HLS POC.
+API route modules.
 """
 
 from . import libraries, projects, shares

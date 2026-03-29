@@ -1,4 +1,4 @@
--- HLS POC Database Schema
+-- Database Schema
 -- Supports both SQLite and PostgreSQL
 
 -- Libraries: named roots pointing to filesystem directories

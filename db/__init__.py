@@ -24,7 +24,7 @@ class Database:
 
         Args:
             database_url: Connection string
-                - SQLite: sqlite+aio:///./data/hls_poc.db
+                - SQLite: sqlite+aio:///./data/hls_realtime.db
                 - PostgreSQL: postgresql+asyncpg://user:password@localhost/dbname
         """
         self.database_url = database_url
@@ -43,7 +43,7 @@ class Database:
 
     def _get_sqlite_path(self) -> str:
         """Extract file path from SQLite URL."""
-        # sqlite+aio:///./data/hls_poc.db -> ./data/hls_poc.db
+        # sqlite+aio:///./data/hls_realtime.db -> ./data/hls_realtime.db
         match = re.match(r"sqlite\+aio:///?(.+)$", self.database_url)
         if not match:
             raise ValueError(f"Invalid SQLite URL: {self.database_url}")

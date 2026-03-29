@@ -70,7 +70,7 @@ class TranscodeJob:
 
     def __post_init__(self):
         if self.work_dir is None:
-            self.work_dir = Path(f"/tmp/hls_poc/{self.stream_id}")
+            self.work_dir = Path(f"/tmp/hls/{self.stream_id}")
 
 
 def make_stream_id(path: str, quality: str, segment_length: int) -> str:

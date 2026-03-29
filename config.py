@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     segment_length: int = 6
 
     # Database
-    database_url: str = "sqlite+aio:///./data/hls_poc.db"
+    database_url: str = "sqlite+aio:///./data/hls_realtime.db"
 
     # Server
     max_concurrent_streams: int = 10

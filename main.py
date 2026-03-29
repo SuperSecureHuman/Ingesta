@@ -1,5 +1,5 @@
 """
-FastAPI HLS POC server with on-demand transcoding and dynamic seeking.
+FastAPI server with on-demand transcoding and dynamic seeking.
 """
 
 import asyncio
