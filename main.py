@@ -25,7 +25,7 @@ from media.transcoder import (
     select_encoder,
 )
 from routes.auth import pwd_context
-from routes import libraries, projects, shares, auth, stream, debug, pages, luts
+from routes import libraries, projects, shares, auth, stream, debug, luts
 from scripts.seed_luts import seed_luts
 
 # Initialize logging
@@ -213,7 +213,6 @@ async def request_id_middleware(request: Request, call_next):
 
 
 # Mount route modules
-app.include_router(pages.router)
 app.include_router(auth.router)
 app.include_router(libraries.router)
 app.include_router(projects.router)
