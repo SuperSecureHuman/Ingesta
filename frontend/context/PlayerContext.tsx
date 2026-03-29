@@ -17,6 +17,7 @@ interface PlayerContextType {
   startPlayback: (filePath: string, seekTime?: number) => Promise<void>;
   stopPlayback: () => void;
   changeQuality: (key: string) => Promise<void>;
+  changeLut: (lutId: string | null) => Promise<void>;
 }
 
 const PlayerContext = createContext<PlayerContextType | undefined>(undefined);
@@ -35,6 +36,7 @@ export function PlayerContextProvider({ children }: { children: React.ReactNode 
   const pingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const transcodeStatsIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const qualityRef = useRef('source');
+  const lutIdRef = useRef<string | null>(null);
   const probedFilePathRef = useRef<string | null>(null);
 
   // Sync qualityRef to quality state
@@ -94,10 +96,10 @@ export function PlayerContextProvider({ children }: { children: React.ReactNode 
         probedFilePathRef.current = newFilePath;
       }
 
-      // Build playlist URL
+      // Build playlist URL with optional lut_id
       const playlistUrl = `/api/playlist/${sid}/main.m3u8?path=${encodeURIComponent(
         newFilePath
-      )}&quality=${qualityRef.current}&segment_length=6`;
+      )}&quality=${qualityRef.current}&segment_length=6${lutIdRef.current ? `&lut_id=${lutIdRef.current}` : ''}`;
 
       // Clean up old HLS instance
       if (hlsRef.current) {
@@ -246,6 +248,46 @@ export function PlayerContextProvider({ children }: { children: React.ReactNode 
     }
   };
 
+  // Change LUT
+  const changeLut = async (newLutId: string | null) => {
+    const video = videoRef.current;
+    if (!video || !filePath) return;
+
+    const seekTime = video.currentTime;
+
+    // Stop current playback
+    if (pingIntervalRef.current) {
+      clearInterval(pingIntervalRef.current);
+      pingIntervalRef.current = null;
+    }
+    if (transcodeStatsIntervalRef.current) {
+      clearInterval(transcodeStatsIntervalRef.current);
+      transcodeStatsIntervalRef.current = null;
+    }
+    if (hlsRef.current) {
+      hlsRef.current.destroy();
+      hlsRef.current = null;
+    }
+
+    video.pause();
+    video.src = '';
+
+    // Stop old session
+    if (sessionIdRef.current) {
+      try {
+        await fetch(`/api/stop/${sessionIdRef.current}`, { method: 'POST' });
+      } catch (e) {
+        console.warn(e);
+      }
+    }
+
+    // Update LUT ref
+    lutIdRef.current = newLutId;
+
+    // Restart playback at same seek time
+    await startPlayback(filePath, seekTime);
+  };
+
   // beforeunload handler
   useEffect(() => {
     const handler = () => {
@@ -270,6 +312,7 @@ export function PlayerContextProvider({ children }: { children: React.ReactNode 
     startPlayback,
     stopPlayback,
     changeQuality,
+    changeLut,
   };
 
   return (

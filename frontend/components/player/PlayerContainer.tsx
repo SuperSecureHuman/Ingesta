@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { usePlayerContext } from '@/context/PlayerContext';
+import { useLutContext } from '@/context/LutContext';
 import { formatTime, getResolutionLabel } from '@/lib/utils';
 
 export default function PlayerContainer() {
@@ -13,10 +14,12 @@ export default function PlayerContainer() {
     capabilities,
     transcodeStats,
     videoRef,
-    startPlayback,
     stopPlayback,
     changeQuality,
+    changeLut,
   } = usePlayerContext();
+
+  const { availableLuts, activeLutId } = useLutContext();
 
   // Local state
   const [isPlaying, setIsPlaying] = useState(false);
@@ -24,6 +27,7 @@ export default function PlayerContainer() {
   const [infoVisible, setInfoVisible] = useState(false);
   const [infoHtml, setInfoHtml] = useState('');
   const [qualityPopoverOpen, setQualityPopoverOpen] = useState(false);
+  const [lutDropdownOpen, setLutDropdownOpen] = useState(false);
   const [progressPct, setProgressPct] = useState(0);
   const [bufferedPct, setBufferedPct] = useState(0);
   const [currentTimeStr, setCurrentTimeStr] = useState('0:00');
@@ -535,6 +539,44 @@ export default function PlayerContainer() {
             >
               ⓘ
             </button>
+            <div className="relative">
+              <button
+                onClick={() => setLutDropdownOpen((v) => !v)}
+                className={`text-base transition-colors p-1 ${
+                  activeLutId ? 'text-yellow-400' : 'text-gray-400 hover:text-yellow-400'
+                }`}
+                title="LUT"
+              >
+                ◧
+              </button>
+              {lutDropdownOpen && (
+                <div className="absolute bottom-full right-0 mb-1 bg-gray-900 border border-gray-700 rounded-lg overflow-hidden z-50 min-w-max shadow-2xl">
+                  <div
+                    onClick={() => {
+                      changeLut(null);
+                      setLutDropdownOpen(false);
+                    }}
+                    className="px-3 py-2.5 cursor-pointer text-xs text-gray-400 hover:bg-gray-800 border-b border-gray-800"
+                  >
+                    None
+                  </div>
+                  {availableLuts.map((lut) => (
+                    <div
+                      key={lut.id}
+                      onClick={() => {
+                        changeLut(lut.id);
+                        setLutDropdownOpen(false);
+                      }}
+                      className={`px-3 py-2.5 cursor-pointer text-xs border-b border-gray-800 last:border-0 hover:bg-gray-800 ${
+                        activeLutId === lut.id ? 'text-yellow-400' : 'text-gray-100'
+                      }`}
+                    >
+                      {lut.name}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
             <button
               onClick={toggleFullscreen}
               className="text-gray-100 hover:text-yellow-400 text-lg transition-colors p-1"

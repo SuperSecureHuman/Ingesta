@@ -52,6 +52,7 @@ class TranscodeJob:
     source_path: str
     quality: str
     segment_length: int = field(default_factory=lambda: settings.segment_length)
+    lut_path: Optional[str] = None
     process: Optional[asyncio.subprocess.Process] = None
     start_segment: int = 0
     start_time_sec: float = 0.0
@@ -188,7 +189,7 @@ def _build_hwaccel_input_args(encoder: str) -> list[str]:
 
 
 def _build_video_codec_args(
-    encoder: str, bitrate: Optional[int], max_height: Optional[int]
+    encoder: str, bitrate: Optional[int], max_height: Optional[int], lut_path: Optional[str] = None
 ) -> list:
     """Build video codec args per encoder (bitrate control, preset, etc)."""
     args = ["-codec:v:0", encoder]
@@ -221,8 +222,17 @@ def _build_video_codec_args(
                 str(bitrate * 2),
             ]
 
+    # Build filter chain for scale and/or LUT
+    filters = []
     if max_height:
-        args += ["-vf", f"scale=-2:'min(ih,{max_height})'"]
+        filters.append(f"scale=-2:'min(ih,{max_height})'")
+    if lut_path:
+        # Escape colons and backslashes for FFmpeg filter syntax
+        safe_path = lut_path.replace("\\", "/").replace(":", "\\:")
+        filters.append(f"lut3d='{safe_path}'")
+
+    if filters:
+        args += ["-vf", ",".join(filters)]
 
     return args
 
@@ -296,6 +306,15 @@ class TranscodeManager:
         bitrate = preset["bitrate"]
         max_height = preset["max_height"]
 
+        # If LUT is active and copy codec is requested, downgrade to highest transcode tier
+        if job.lut_path and vcodec == "copy":
+            # lut3d filter requires re-encode, cannot use copy codec
+            preset = get_bitrate_preset("120M")
+            vcodec = self.encoder  # use detected hw encoder
+            acodec = preset["acodec"]
+            bitrate = preset["bitrate"]
+            max_height = preset["max_height"]
+
         # Validate source_path is not a network URI (SSRF protection)
         _BLOCKED_SCHEMES = ("http://", "https://", "ftp://", "ftps://", "rtmp://", "rtsp://", "smb://")
         source_lower = job.source_path.lower()
@@ -331,7 +350,7 @@ class TranscodeManager:
             cmd.extend(["-codec:v:0", "copy", "-start_at_zero"])
         else:
             # Use encoder-aware codec builder (respects hw-specific bitrate control)
-            codec_args = _build_video_codec_args(self.encoder, bitrate, max_height)
+            codec_args = _build_video_codec_args(self.encoder, bitrate, max_height, job.lut_path)
             cmd.extend(codec_args)
 
             # Force keyframes at segment boundaries

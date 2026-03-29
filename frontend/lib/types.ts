@@ -90,6 +90,15 @@ export interface TranscodeStats {
   speed?: number;
 }
 
+export interface LutEntry {
+  id: string;
+  name: string;
+  camera: string;
+  log_profile: string;
+  lut_type: string;
+  file_path: string;
+}
+
 export interface SelectionItem {
   type: 'file' | 'folder';
   path: string;

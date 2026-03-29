@@ -1,4 +1,4 @@
-import { Capabilities } from './types';
+import { Capabilities, LutEntry } from './types';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
@@ -26,5 +26,12 @@ export async function fetchCapabilities(): Promise<Capabilities> {
   if (!res.ok) throw new Error('Failed to fetch capabilities');
   _capabilitiesCache = await res.json();
   return _capabilitiesCache!;
+}
+
+export async function fetchLuts(): Promise<LutEntry[]> {
+  const res = await apiFetch('/api/luts');
+  if (!res.ok) throw new Error('Failed to fetch LUTs');
+  const data = await res.json();
+  return data.luts || [];
 }
 

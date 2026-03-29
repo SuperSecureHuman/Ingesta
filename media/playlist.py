@@ -154,6 +154,7 @@ def build_vod_playlist(
     segment_length_seconds: int,
     path: str,
     quality: str,
+    lut_id: str = None,
 ) -> str:
     """Build VOD m3u8 with per-segment runtimeTicks."""
     lines = [
@@ -172,6 +173,8 @@ def build_vod_playlist(
             f"actualSegmentLengthTicks={seg.actual_length_ticks}&"
             f"path={path}&quality={quality}&segment_length={segment_length_seconds}"
         )
+        if lut_id:
+            segment_url += f"&lut_id={lut_id}"
         lines.append(segment_url)
 
     lines.append("#EXT-X-ENDLIST")

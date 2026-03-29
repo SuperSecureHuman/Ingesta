@@ -25,6 +25,7 @@ from media.thumbs import get_or_generate_thumb
 from routes.deps import validate_path, validate_session_id, get_manager, MEDIA_ROOT, require_auth
 from routes.utils import async_iterdir
 from logger import get_logger
+from db import crud
 
 router = APIRouter(prefix="/api")
 logger = get_logger("routes.stream")
@@ -127,6 +128,7 @@ async def get_playlist(
     path: str = Query(...),
     quality: str = Query("720p"),
     segment_length: int = Query(6),
+    lut_id: str = Query(None),
     _auth: str = Depends(require_auth),
 ):
     """Generate VOD m3u8 playlist (pre-computed, no FFmpeg)."""
@@ -150,7 +152,7 @@ async def get_playlist(
 
         # Build playlist with per-segment runtimeTicks
         playlist_text = build_vod_playlist(
-            stream_id, segments, segment_length, quote(path), quality
+            stream_id, segments, segment_length, quote(path), quality, lut_id
         )
 
         return StreamingResponse(
@@ -170,6 +172,7 @@ async def get_segment(
     path: str = Query(...),
     quality: str = Query("720p"),
     segment_length: int = Query(6),
+    lut_id: str = Query(None),
     runtimeTicks: int = Query(None),
     actualSegmentLengthTicks: int = Query(None),
     background_tasks: BackgroundTasks = None,
@@ -258,6 +261,13 @@ async def get_segment(
             if start_transcoding:
                 # Create or reuse job
                 if job is None:
+                    # Resolve LUT file path if lut_id is provided
+                    lut_path = None
+                    if lut_id:
+                        lut_path = await crud.get_lut_file_path(lut_id)
+                        if not lut_path:
+                            raise ValueError(f"LUT not found: {lut_id}")
+
                     logger.info(
                         "Starting new stream",
                         extra={
@@ -271,6 +281,7 @@ async def get_segment(
                         source_path=path,
                         quality=quality,
                         segment_length=segment_length,
+                        lut_path=lut_path,
                         work_dir=work_dir,
                     )
                     await manager.register_job(job)

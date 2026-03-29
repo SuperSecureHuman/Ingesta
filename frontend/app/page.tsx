@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import LoginForm from '@/components/auth/LoginForm';
 import AppShell from '@/components/layout/AppShell';
 import { PlayerContextProvider } from '@/context/PlayerContext';
+import { LutContextProvider } from '@/context/LutContext';
 import { useAppContext } from '@/context/AppContext';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -37,7 +38,9 @@ export default function Home() {
 
   return (
     <PlayerContextProvider>
-      <AppShell />
+      <LutContextProvider>
+        <AppShell />
+      </LutContextProvider>
     </PlayerContextProvider>
   );
 }
