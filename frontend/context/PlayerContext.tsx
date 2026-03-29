@@ -38,20 +38,22 @@ export function PlayerContextProvider({ children }: { children: React.ReactNode 
   const qualityRef = useRef('source');
   const lutIdRef = useRef<string | null>(null);
   const probedFilePathRef = useRef<string | null>(null);
+  const playbackStartTimeRef = useRef<number | null>(null);  // For adaptive polling backoff
 
   // Sync qualityRef to quality state
   useEffect(() => {
     qualityRef.current = quality;
   }, [quality]);
 
-  // Fetch transcode stats
+  // Fetch transcode stats with adaptive polling backoff
   const fetchTranscodeStats = async () => {
     try {
       const resp = await fetch('/api/debug/state');
       if (!resp.ok) return;
       const data = await resp.json();
+      // Find any active transcoding job (even if fps not yet reported)
       const active = data.jobs?.find(
-        (j: any) => !j.has_exited && j.transcode_fps > 0
+        (j: any) => !j.has_exited && j.pid
       );
       // Auto-stop polling when no active job (catches source quality and idle)
       if (!active && transcodeStatsIntervalRef.current) {
@@ -60,7 +62,10 @@ export function PlayerContextProvider({ children }: { children: React.ReactNode 
       }
       setTranscodeStats(
         active
-          ? { fps: active.transcode_fps, speed: active.transcode_speed }
+          ? {
+              fps: active.transcode_fps || 0,
+              speed: active.transcode_speed || 0
+            }
           : {}
       );
     } catch (e) {
@@ -74,6 +79,7 @@ export function PlayerContextProvider({ children }: { children: React.ReactNode 
 
     const sid = generateUUID();
     sessionIdRef.current = sid;
+    playbackStartTimeRef.current = Date.now();
     setFilePath(newFilePath);
     setIsVisible(true);
 
@@ -96,10 +102,14 @@ export function PlayerContextProvider({ children }: { children: React.ReactNode 
         probedFilePathRef.current = newFilePath;
       }
 
+      // Adaptive segment length: short for transcoding, long for source
+      const isTranscoding = lutIdRef.current || qualityRef.current !== 'source';
+      const segmentLength = isTranscoding ? 1 : 4;
+
       // Build playlist URL with optional lut_id
       const playlistUrl = `/api/playlist/${sid}/main.m3u8?path=${encodeURIComponent(
         newFilePath
-      )}&quality=${qualityRef.current}&segment_length=6${lutIdRef.current ? `&lut_id=${lutIdRef.current}` : ''}`;
+      )}&quality=${qualityRef.current}&segment_length=${segmentLength}${lutIdRef.current ? `&lut_id=${lutIdRef.current}` : ''}`;
 
       // Clean up old HLS instance
       if (hlsRef.current) {
@@ -113,13 +123,36 @@ export function PlayerContextProvider({ children }: { children: React.ReactNode 
 
       // Load with HLS.js if supported
       if (Hls.isSupported()) {
+        // Adaptive buffer strategy:
+        // - Transcoding (slow): bigger buffer to hide latency
+        // - Source (fast): minimal buffer to stay responsive
+        const isTranscoding = lutIdRef.current || qualityRef.current !== 'source';
+
+        const bufferConfig = isTranscoding
+          ? {
+              maxBufferLength: 60,        // Aggressively buffer ahead
+              maxMaxBufferLength: 120,    // But cap total buffer
+              backBufferLength: 5,        // Keep less history (reduce memory)
+              lowWaterMark: 10,           // Start playback at 10s
+              highWaterMark: 30,          // Stop buffering at 30s
+            }
+          : {
+              maxBufferLength: 15,        // Minimal buffer for source
+              maxMaxBufferLength: 30,
+              backBufferLength: 2,        // Almost no history
+              lowWaterMark: 3,            // Start playback sooner
+              highWaterMark: 10,          // Maintain small buffer
+            };
+
         const hls = new Hls({
           debug: false,
           enableWorker: true,
-          maxBufferLength: 30,
-          maxMaxBufferLength: 60,
-          backBufferLength: 10,
-          maxBufferSize: 100 * 1000 * 1000, // 100 MB
+          ...bufferConfig,
+          maxBufferSize: isTranscoding ? 200 * 1000 * 1000 : 50 * 1000 * 1000,
+          startLevel: -1,  // auto-select quality
+          abrEwmaDefaultEstimate: 5000000,  // Start with 5Mbps guess
+          abrEwmaFastLive: 3,
+          abrEwmaSlowLive: 9,
         });
 
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
@@ -150,14 +183,27 @@ export function PlayerContextProvider({ children }: { children: React.ReactNode 
         );
       }, 10000);
 
-      // Start transcode stats poll (2 seconds) — only if not source quality
+      // Start transcode stats poll with adaptive backoff
+      // Fast polling first 15s, then slow down
       if (qualityRef.current !== 'source') {
         if (transcodeStatsIntervalRef.current)
           clearInterval(transcodeStatsIntervalRef.current);
-        transcodeStatsIntervalRef.current = setInterval(
-          fetchTranscodeStats,
-          2000
-        );
+
+        // Aggressive first poll (every 1s for first 15s to catch startup)
+        let pollCount = 0;
+        transcodeStatsIntervalRef.current = setInterval(() => {
+          pollCount++;
+          fetchTranscodeStats();
+
+          // After 15 polls (15s), switch to slower 5s interval
+          if (pollCount === 15) {
+            clearInterval(transcodeStatsIntervalRef.current!);
+            transcodeStatsIntervalRef.current = setInterval(
+              fetchTranscodeStats,
+              5000  // Back off to 5s after startup
+            );
+          }
+        }, 1000);
       }
     } catch (e) {
       console.error('startPlayback error:', e);

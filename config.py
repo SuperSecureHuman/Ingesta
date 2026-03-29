@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     media_root: str = ""
 
     # Transcoding
-    segment_length: int = 6
+    segment_length: int = 1
 
     # Database
     database_url: str = "sqlite+aio:///./data/hls_realtime.db"

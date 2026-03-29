@@ -195,7 +195,7 @@ def _build_video_codec_args(
     args = ["-codec:v:0", encoder]
 
     if encoder == "libx264":
-        args += ["-preset", "veryfast", "-crf", "23"]
+        args += ["-preset", "ultrafast", "-crf", "23"]
         if bitrate:
             args += ["-maxrate", str(bitrate), "-bufsize", str(bitrate * 2)]
 
@@ -211,7 +211,7 @@ def _build_video_codec_args(
             args += ["-maxrate", str(bitrate), "-bufsize", str(bitrate * 2)]
 
     elif encoder in ("h264_qsv", "h264_vaapi"):
-        args += ["-preset", "veryfast"]
+        args += ["-preset", "ultrafast"]
         if bitrate:
             args += [
                 "-b:v",
@@ -293,9 +293,14 @@ class TranscodeManager:
         segment_id: int,
     ) -> bool:
         """Spawn FFmpeg process for this job. Returns True if successful."""
-        # Kill existing process if any
+        # Kill existing process in background — don't block spawn
         if job.process is not None and not job.has_exited:
-            await self.kill_ffmpeg(job, reason="restart_for_seek")
+            old_process = job.process
+            old_drain = job.drain_task
+            # Detach from job so new spawn doesn't wait
+            job.process = None
+            job.drain_task = None
+            asyncio.create_task(self._kill_process_bg(old_process, old_drain))
 
         work_dir = job.work_dir
         work_dir.mkdir(parents=True, exist_ok=True)
@@ -353,7 +358,7 @@ class TranscodeManager:
             codec_args = _build_video_codec_args(self.encoder, bitrate, max_height, job.lut_path)
             cmd.extend(codec_args)
 
-            # Force keyframes at segment boundaries
+            # Force keyframes at segment boundaries (only for transcoding, not copy)
             cmd.extend(
                 [
                     "-force_key_frames:v:0",
@@ -364,15 +369,15 @@ class TranscodeManager:
         # Audio codec
         cmd.extend(["-codec:a:0", acodec, "-b:a", "128k", "-ac", "2"])
 
-        # HLS muxer
+        # HLS muxer — aggressive settings for low latency
         cmd.extend(
             [
                 "-max_muxing_queue_size",
-                "128",
+                "32",  # Was 128; smaller = flush segments faster
                 "-f",
                 "hls",
                 "-max_delay",
-                "5000000",
+                "100000",  # Was 5000000; more aggressive flushing
                 "-hls_time",
                 str(job.segment_length),
                 "-hls_segment_type",
@@ -546,6 +551,21 @@ class TranscodeManager:
                 }
             )
 
+    async def _kill_process_bg(self, process: asyncio.subprocess.Process, drain_task: Optional[asyncio.Task]) -> None:
+        """Kill FFmpeg process in background without blocking."""
+        if drain_task:
+            drain_task.cancel()
+        try:
+            process.stdin.write(b"q\n")
+            await process.stdin.drain()
+        except Exception:
+            pass
+        try:
+            await asyncio.wait_for(process.wait(), timeout=5.0)
+        except asyncio.TimeoutError:
+            process.kill()
+            await process.wait()
+
     async def wait_for_segment(
         self,
         job: TranscodeJob,
@@ -553,21 +573,23 @@ class TranscodeManager:
         next_segment_path: Path,
         timeout: float = 30.0,
     ) -> bool:
-        """Poll for segment N and N+1 to exist (or ffmpeg exit). Returns True if ready."""
+        """Poll for segment N to be ready. Serves as soon as file reaches min size."""
         deadline = time.monotonic() + timeout
-        segment_exists = segment_path.exists()
+        MIN_SEGMENT_SIZE = 8192  # 8KB minimum (most TS segments are larger)
 
         while time.monotonic() < deadline:
-            if segment_exists:
-                # Check if next segment exists or ffmpeg exited
-                if job.has_exited or next_segment_path.exists():
-                    return True
-            else:
-                segment_exists = segment_path.exists()
-                if segment_exists:
-                    continue  # Avoid 100ms delay
+            if job.has_exited:
+                return segment_path.exists()
 
-            await asyncio.sleep(0.1)
+            try:
+                size = segment_path.stat().st_size
+                # Serve segment as soon as it's large enough (don't wait for completion)
+                if size >= MIN_SEGMENT_SIZE:
+                    return True
+            except FileNotFoundError:
+                pass
+
+            await asyncio.sleep(0.05)  # 50ms poll interval
 
         return segment_path.exists()
 

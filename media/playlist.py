@@ -10,6 +10,9 @@ from pathlib import Path
 
 TICKS_PER_SECOND = 10_000_000  # C# TimeSpan.TicksPerSecond
 
+# Probe result cache to avoid re-running ffprobe on every playlist request
+_probe_cache: dict[str, "MediaInfo"] = {}
+
 # Map ffprobe color_transfer values to normalized log profile names
 LOG_PROFILE_MAP = {
     "log_c": "logc3",
@@ -48,7 +51,11 @@ class PlaylistSegment:
 
 
 async def probe_media(path: str) -> MediaInfo:
-    """Run ffprobe and extract duration, resolution, and bitrate."""
+    """Run ffprobe and extract duration, resolution, and bitrate. Results are cached per path."""
+    # Return cached result if available
+    if path in _probe_cache:
+        return _probe_cache[path]
+
     proc = await asyncio.create_subprocess_exec(
         "ffprobe",
         "-v",
@@ -106,7 +113,7 @@ async def probe_media(path: str) -> MediaInfo:
         elif stream["codec_type"] == "audio" and not audio_codec:
             audio_codec = stream.get("codec_name", "")
 
-    return MediaInfo(
+    result = MediaInfo(
         duration_seconds=duration,
         duration_ticks=int(duration * TICKS_PER_SECOND),
         width=width,
@@ -121,6 +128,10 @@ async def probe_media(path: str) -> MediaInfo:
         color_primaries=color_primaries,
         log_profile=log_profile,
     )
+
+    # Cache result
+    _probe_cache[path] = result
+    return result
 
 
 def compute_equal_length_segments(
