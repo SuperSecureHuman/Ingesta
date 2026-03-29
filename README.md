@@ -1,5 +1,8 @@
 # Ingesta
 
+## CAUTION: Work in progress (or vibe in progress)
+
+
 A professional media review and delivery platform for teams that work with large-format media files. Preview, scrub, and selectively download instantly—without waiting for 50GB downloads.
 
 ## Objective
