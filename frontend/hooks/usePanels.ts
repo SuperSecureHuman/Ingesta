@@ -1,29 +1,29 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { PanelName } from '@/lib/types';
 
 export function usePanels() {
   const [activePanel, setActivePanel] = useState<PanelName>(null);
   const [panelError, setPanelError] = useState('');
 
-  const openPanel = (panelName: PanelName) => {
+  const openPanel = useCallback((panelName: PanelName) => {
     setActivePanel(panelName);
     setPanelError('');
-  };
+  }, []);
 
-  const closePanel = () => {
+  const closePanel = useCallback(() => {
     setActivePanel(null);
     setPanelError('');
-  };
+  }, []);
 
-  const showPanelError = (error: string) => {
+  const showPanelError = useCallback((error: string) => {
     setPanelError(error);
-  };
+  }, []);
 
-  const clearPanelError = () => {
+  const clearPanelError = useCallback(() => {
     setPanelError('');
-  };
+  }, []);
 
   return {
     activePanel,

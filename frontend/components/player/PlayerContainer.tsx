@@ -165,7 +165,7 @@ export default function PlayerContainer() {
         ['Dimensions', `${v.videoWidth}×${v.videoHeight}`],
         ['Current time', formatTime(v.currentTime)],
         ['Buffered ahead', `${bufferedSec}s`],
-        ['Dropped frames', (q as any).droppedVideoFrames ?? '—'],
+        ['Dropped frames', (q as VideoPlaybackQuality).droppedVideoFrames ?? '—'],
       ]),
       formatInfoSection('Codecs', [
         ['Source video', `${srcCodec} · ${srcBitDepth}`],

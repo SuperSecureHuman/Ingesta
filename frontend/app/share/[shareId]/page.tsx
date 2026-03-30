@@ -9,6 +9,9 @@ import { fetchCapabilities } from '@/lib/api';
 
 export default function ShareViewerPage() {
   const params = useParams();
+  // NOTE: In Next.js 15, useParams() in Client Components remains synchronous.
+  // If this page is converted to a Server Component in future, params becomes
+  // Promise<Params> and must be awaited.
   const shareId = params.shareId as string;
 
   // STATE

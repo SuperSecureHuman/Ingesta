@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useRef, useEffect } from 'react';
+import React, { createContext, useContext, useState, useRef, useEffect, useMemo } from 'react';
 import Hls from 'hls.js';
 import { ProbeData, Capabilities, TranscodeStats } from '@/lib/types';
 import { generateUUID } from '@/lib/utils';
@@ -16,8 +16,8 @@ interface PlayerContextType {
   probeData: ProbeData | null;
   capabilities: Capabilities | null;
   transcodeStats: TranscodeStats;
-  videoRef: React.RefObject<HTMLVideoElement>;
-  canvasRef: React.RefObject<HTMLCanvasElement>;
+  videoRef: React.RefObject<HTMLVideoElement | null>;
+  canvasRef: React.RefObject<HTMLCanvasElement | null>;
   startPlayback: (filePath: string, seekTime?: number) => Promise<void>;
   stopPlayback: () => void;
   changeQuality: (key: string) => Promise<void>;
@@ -569,20 +569,34 @@ export function PlayerContextProvider({ children }: { children: React.ReactNode 
     };
   }, []);
 
-  const value: PlayerContextType = {
-    isVisible,
-    filePath,
-    quality,
-    probeData,
-    capabilities,
-    transcodeStats,
-    videoRef,
-    canvasRef,
-    startPlayback,
-    stopPlayback,
-    changeQuality,
-    changeLut,
-  };
+  const value = useMemo(
+    () => ({
+      isVisible,
+      filePath,
+      quality,
+      probeData,
+      capabilities,
+      transcodeStats,
+      videoRef,
+      canvasRef,
+      startPlayback,
+      stopPlayback,
+      changeQuality,
+      changeLut,
+    }),
+    [
+      isVisible,
+      filePath,
+      quality,
+      probeData,
+      capabilities,
+      transcodeStats,
+      startPlayback,
+      stopPlayback,
+      changeQuality,
+      changeLut,
+    ]
+  );
 
   return (
     <PlayerContext.Provider value={value}>{children}</PlayerContext.Provider>

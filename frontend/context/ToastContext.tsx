@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useCallback, useState } from 'react';
+import React, { createContext, useContext, useCallback, useState, useRef, useEffect, useMemo } from 'react';
 
 interface ToastContextType {
   showToast: (message: string, type?: 'success' | 'error') => void;
@@ -9,24 +9,44 @@ interface ToastContextType {
 const ToastContext = createContext<ToastContextType | undefined>(undefined);
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
-  const [toastMessage, setToastMessage] = useState('');
-  const [toastVisible, setToastVisible] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [toastType, setToastType] = useState<'success' | 'error'>('success');
 
-  const showToast = useCallback((message: string, type?: 'success' | 'error') => {
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+      }
+    };
+  }, []);
+
+  const showToast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
+    // Clear any existing timer
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+    }
+
     setToastMessage(message);
-    setToastVisible(true);
-    setTimeout(() => {
-      setToastVisible(false);
+    setToastType(type);
+
+    // Set new timer
+    timerRef.current = setTimeout(() => {
+      setToastMessage(null);
+      timerRef.current = null;
     }, 3000);
   }, []);
 
+  const value = useMemo(() => ({ showToast }), [showToast]);
+
   return (
-    <ToastContext.Provider value={{ showToast }}>
+    <ToastContext.Provider value={value}>
       {children}
       <div
         id="toast"
-        className={toastVisible ? 'show' : ''}
-        style={{ display: toastVisible ? 'block' : 'none' }}
+        className={`${toastMessage ? 'show' : ''} ${toastType === 'error' ? 'error' : 'success'}`}
+        style={{ display: toastMessage ? 'block' : 'none' }}
       >
         {toastMessage}
       </div>

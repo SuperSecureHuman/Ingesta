@@ -1,5 +1,6 @@
 'use client';
 
+import { useCallback } from 'react';
 import { useAppContext } from '@/context/AppContext';
 import { useAuth } from '@/hooks/useAuth';
 import { useSelection } from '@/hooks/useSelection';
@@ -22,10 +23,18 @@ export default function AppShell() {
   const { selectedItems, clearSelection } = useSelection();
   const { activePanel, closePanel, openPanel } = usePanels();
 
-  const handleLogout = async () => {
+  const handleLogout = useCallback(async () => {
     await logout();
     window.location.reload();
-  };
+  }, [logout]);
+
+  const handleAddSuccess = useCallback(() => {
+    clearSelection();
+  }, [clearSelection]);
+
+  const handleOpenShareLinks = useCallback(() => {
+    openPanel('shareLinks');
+  }, [openPanel]);
 
   return (
     <>
@@ -45,7 +54,7 @@ export default function AppShell() {
         <AddToProjectPanel
           isOpen={activePanel === 'addToProject'}
           onClose={closePanel}
-          onSuccess={() => clearSelection()}
+          onSuccess={handleAddSuccess}
           selectedItems={selectedItems}
           currentLibraryId={currentLibraryId}
         />
@@ -54,7 +63,7 @@ export default function AppShell() {
           isOpen={activePanel === 'createShare'}
           onClose={closePanel}
           currentProjectId={currentProjectId}
-          onOpenShareLinks={() => openPanel('shareLinks')}
+          onOpenShareLinks={handleOpenShareLinks}
         />
 
         <ShareLinksPanel

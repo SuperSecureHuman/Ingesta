@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import { LutEntry } from '@/lib/types';
 import { fetchLuts } from '@/lib/api';
 
@@ -53,17 +53,20 @@ export function LutContextProvider({ children }: { children: React.ReactNode }) 
     setActiveLutId(null);
   };
 
-  const value: LutContextType = {
-    availableLuts,
-    activeLutId,
-    isLoading,
-    applyLut,
-    clearLut,
-    lutMode,
-    setLutMode,
-    lutStrength,
-    setLutStrength,
-  };
+  const value = useMemo(
+    () => ({
+      availableLuts,
+      activeLutId,
+      isLoading,
+      applyLut,
+      clearLut,
+      lutMode,
+      setLutMode,
+      lutStrength,
+      setLutStrength,
+    }),
+    [availableLuts, activeLutId, isLoading, lutMode, lutStrength]
+  );
 
   return (
     <LutContext.Provider value={value}>{children}</LutContext.Provider>

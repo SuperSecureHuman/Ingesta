@@ -43,7 +43,7 @@ export default function CreateSharePanel({
       setLoading(true);
       setError('');
 
-      const body: Record<string, any> = {
+      const body: Record<string, string | number> = {
         password,
       };
 
