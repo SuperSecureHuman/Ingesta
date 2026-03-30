@@ -14,12 +14,13 @@ export default function PlayerContainer() {
     capabilities,
     transcodeStats,
     videoRef,
+    canvasRef,
     stopPlayback,
     changeQuality,
     changeLut,
   } = usePlayerContext();
 
-  const { availableLuts, activeLutId } = useLutContext();
+  const { availableLuts, activeLutId, lutMode, setLutMode, lutStrength, setLutStrength, applyLut, clearLut } = useLutContext();
 
   // Local state
   const [isPlaying, setIsPlaying] = useState(false);
@@ -403,6 +404,21 @@ export default function PlayerContainer() {
       >
         <video ref={videoRef} className="w-full h-full object-contain" />
 
+        {/* WebGL canvas for client-side LUT */}
+        <canvas
+          ref={canvasRef}
+          width={1920}
+          height={1080}
+          style={{
+            position: 'absolute',
+            inset: 0,
+            width: '100%',
+            height: '100%',
+            display: (lutMode === 'client' && activeLutId) ? 'block' : 'none',
+            pointerEvents: 'none',
+          }}
+        />
+
         {/* Back button */}
         <button
           onClick={stopPlayback}
@@ -551,8 +567,63 @@ export default function PlayerContainer() {
               </button>
               {lutDropdownOpen && (
                 <div className="absolute bottom-full right-0 mb-1 bg-gray-900 border border-gray-700 rounded-lg overflow-hidden z-50 min-w-max shadow-2xl">
+                  {/* Mode Toggle Pills */}
+                  <div className="flex gap-1 p-2 border-b border-gray-800 bg-gray-800/50">
+                    <button
+                      onClick={() => {
+                        setLutMode('client');
+                        if (activeLutId) {
+                          changeLut(activeLutId);
+                        }
+                      }}
+                      className={`px-2.5 py-1 text-xs rounded transition-colors ${
+                        lutMode === 'client'
+                          ? 'bg-yellow-400/30 text-yellow-300 border border-yellow-400/50'
+                          : 'bg-gray-700 text-gray-400 hover:bg-gray-600'
+                      }`}
+                    >
+                      Client
+                    </button>
+                    <button
+                      onClick={() => {
+                        setLutMode('server');
+                        if (activeLutId) {
+                          changeLut(activeLutId);
+                        }
+                      }}
+                      className={`px-2.5 py-1 text-xs rounded transition-colors ${
+                        lutMode === 'server'
+                          ? 'bg-yellow-400/30 text-yellow-300 border border-yellow-400/50'
+                          : 'bg-gray-700 text-gray-400 hover:bg-gray-600'
+                      }`}
+                    >
+                      Server
+                    </button>
+                  </div>
+
+                  {/* Strength Slider (client mode only) */}
+                  {lutMode === 'client' && activeLutId && (
+                    <div className="px-3 py-2 border-b border-gray-800 flex items-center gap-2">
+                      <label className="text-xs text-gray-400 whitespace-nowrap">Strength:</label>
+                      <input
+                        type="range"
+                        min="0"
+                        max="1"
+                        step="0.01"
+                        value={lutStrength}
+                        onChange={(e) => setLutStrength(parseFloat(e.target.value))}
+                        className="w-20 h-1 bg-gray-600 rounded appearance-none cursor-pointer"
+                      />
+                      <span className="text-xs text-gray-400 w-8 text-right">
+                        {lutStrength.toFixed(2)}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* LUT Selection */}
                   <div
                     onClick={() => {
+                      clearLut();
                       changeLut(null);
                       setLutDropdownOpen(false);
                     }}
@@ -564,6 +635,7 @@ export default function PlayerContainer() {
                     <div
                       key={lut.id}
                       onClick={() => {
+                        applyLut(lut.id);
                         changeLut(lut.id);
                         setLutDropdownOpen(false);
                       }}

@@ -5,6 +5,9 @@ import Hls from 'hls.js';
 import { ProbeData, Capabilities, TranscodeStats } from '@/lib/types';
 import { generateUUID } from '@/lib/utils';
 import { fetchCapabilities } from '@/lib/api';
+import { parseCube } from '@/lib/parseCube';
+import { vertexShaderSrc, fragmentShaderSrc } from '@/lib/lutShader';
+import { useLutContext } from './LutContext';
 
 interface PlayerContextType {
   isVisible: boolean;
@@ -14,6 +17,7 @@ interface PlayerContextType {
   capabilities: Capabilities | null;
   transcodeStats: TranscodeStats;
   videoRef: React.RefObject<HTMLVideoElement>;
+  canvasRef: React.RefObject<HTMLCanvasElement>;
   startPlayback: (filePath: string, seekTime?: number) => Promise<void>;
   stopPlayback: () => void;
   changeQuality: (key: string) => Promise<void>;
@@ -31,6 +35,7 @@ export function PlayerContextProvider({ children }: { children: React.ReactNode 
   const [transcodeStats, setTranscodeStats] = useState<TranscodeStats>({});
 
   const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const sessionIdRef = useRef<string | null>(null);
   const pingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -38,12 +43,23 @@ export function PlayerContextProvider({ children }: { children: React.ReactNode 
   const qualityRef = useRef('source');
   const lutIdRef = useRef<string | null>(null);
   const probedFilePathRef = useRef<string | null>(null);
-  const playbackStartTimeRef = useRef<number | null>(null);  // For adaptive polling backoff
+  const playbackStartTimeRef = useRef<number | null>(null);
 
-  // Sync qualityRef to quality state
+  // WebGL refs
+  const glRef = useRef<WebGL2RenderingContext | null>(null);
+  const programRef = useRef<WebGLProgram | null>(null);
+  const videoTexRef = useRef<WebGLTexture | null>(null);
+  const lutTexRef = useRef<WebGLTexture | null>(null);
+  const rafRef = useRef<number | null>(null);
+  const lutLoadedRef = useRef(false);
+  const lutStrengthRef = useRef(1.0);
+
+  const { lutMode, activeLutId, lutStrength } = useLutContext();
+
+  // Sync lutStrengthRef to LutContext lutStrength
   useEffect(() => {
-    qualityRef.current = quality;
-  }, [quality]);
+    lutStrengthRef.current = lutStrength;
+  }, [lutStrength]);
 
   // Fetch transcode stats with adaptive polling backoff
   const fetchTranscodeStats = async () => {
@@ -51,11 +67,9 @@ export function PlayerContextProvider({ children }: { children: React.ReactNode 
       const resp = await fetch('/api/debug/state');
       if (!resp.ok) return;
       const data = await resp.json();
-      // Find any active transcoding job (even if fps not yet reported)
       const active = data.jobs?.find(
         (j: any) => !j.has_exited && j.pid
       );
-      // Auto-stop polling when no active job (catches source quality and idle)
       if (!active && transcodeStatsIntervalRef.current) {
         clearInterval(transcodeStatsIntervalRef.current);
         transcodeStatsIntervalRef.current = null;
@@ -73,6 +87,177 @@ export function PlayerContextProvider({ children }: { children: React.ReactNode 
     }
   };
 
+  // Compile shader helper
+  const compileShader = (source: string, type: GLenum): WebGLShader | null => {
+    const gl = glRef.current;
+    if (!gl) return null;
+    const shader = gl.createShader(type);
+    if (!shader) return null;
+    gl.shaderSource(shader, source);
+    gl.compileShader(shader);
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+      console.error('Shader compile error:', gl.getShaderInfoLog(shader));
+      gl.deleteShader(shader);
+      return null;
+    }
+    return shader;
+  };
+
+  // Create WebGL program
+  const createProgram = (): WebGLProgram | null => {
+    const gl = glRef.current;
+    if (!gl) return null;
+    const vShader = compileShader(vertexShaderSrc, gl.VERTEX_SHADER);
+    const fShader = compileShader(fragmentShaderSrc, gl.FRAGMENT_SHADER);
+    if (!vShader || !fShader) return null;
+    const prog = gl.createProgram();
+    if (!prog) return null;
+    gl.attachShader(prog, vShader);
+    gl.attachShader(prog, fShader);
+    gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+      console.error('Program link error:', gl.getProgramInfoLog(prog));
+      return null;
+    }
+    gl.deleteShader(vShader);
+    gl.deleteShader(fShader);
+    return prog;
+  };
+
+  // Initialize WebGL
+  const initWebGL = () => {
+    const canvas = canvasRef.current;
+    const video = videoRef.current;
+    if (!canvas || !video) return;
+
+    // Set canvas size to match video
+    canvas.width = video.videoWidth || 1920;
+    canvas.height = video.videoHeight || 1080;
+
+    const gl = canvas.getContext('webgl2') as WebGL2RenderingContext | null;
+    if (!gl) {
+      console.error('WebGL2 not supported');
+      return;
+    }
+
+    glRef.current = gl;
+
+    // Set viewport
+    gl.viewport(0, 0, canvas.width, canvas.height);
+
+    // Create program
+    const prog = createProgram();
+    if (!prog) return;
+    programRef.current = prog;
+
+    // Create VAO with fullscreen quad
+    const vao = gl.createVertexArray();
+    gl.bindVertexArray(vao);
+
+    const posBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, posBuffer);
+    const positions = new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]);
+    gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW);
+
+    const posLoc = gl.getAttribLocation(prog, 'aPosition');
+    gl.enableVertexAttribArray(posLoc);
+    gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 8, 0);
+
+    // Create video texture
+    const vidTex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, vidTex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, 1, 1, 0, gl.RGB, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0]));
+    videoTexRef.current = vidTex;
+
+    // Create LUT texture
+    const lutTex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_3D, lutTex);
+    gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_R, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    lutTexRef.current = lutTex;
+
+    // Set uniforms
+    gl.useProgram(prog);
+    gl.uniform1i(gl.getUniformLocation(prog, 'uVideo'), 0);
+    gl.uniform1i(gl.getUniformLocation(prog, 'uLut'), 1);
+  };
+
+  // Load LUT texture
+  const loadLutTexture = async (lutId: string | null) => {
+    if (!lutId) {
+      lutLoadedRef.current = false;
+      return;
+    }
+
+    try {
+      const gl = glRef.current;
+      if (!gl) return;
+
+      const cubeData = await parseCube(`/api/luts/${lutId}/file`);
+
+      // Convert Float32Array [0, 1] to Uint8Array [0, 255]
+      const bytes = new Uint8Array(cubeData.data.length);
+      for (let i = 0; i < cubeData.data.length; i++) {
+        bytes[i] = Math.max(0, Math.min(255, Math.round(cubeData.data[i] * 255)));
+      }
+
+      gl.bindTexture(gl.TEXTURE_3D, lutTexRef.current);
+      gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+
+      gl.texImage3D(
+        gl.TEXTURE_3D, 0, gl.RGB8,
+        cubeData.size, cubeData.size, cubeData.size,
+        0,
+        gl.RGB, gl.UNSIGNED_BYTE,
+        bytes
+      );
+
+      lutLoadedRef.current = true;
+      console.log(`LUT loaded: ${cubeData.size}×${cubeData.size}×${cubeData.size}`);
+    } catch (e) {
+      console.error('Failed to load LUT texture:', e);
+      lutLoadedRef.current = false;
+    }
+  };
+
+  // RAF render loop
+  const renderFrame = () => {
+    const gl = glRef.current;
+    const video = videoRef.current;
+    const prog = programRef.current;
+
+    if (!gl || !video || !prog || video.readyState < 2) {
+      rafRef.current = requestAnimationFrame(renderFrame);
+      return;
+    }
+
+    // Upload video frame
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, videoTexRef.current);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, video);
+
+    // Update uniforms
+    gl.useProgram(prog);
+    if (lutLoadedRef.current) {
+      gl.uniform1f(gl.getUniformLocation(prog, 'uLutSize'), 32); // TODO: make dynamic
+      gl.uniform1f(gl.getUniformLocation(prog, 'uLutStrength'), lutStrengthRef.current);
+      gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_3D, lutTexRef.current);
+    }
+
+    // Draw
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+    rafRef.current = requestAnimationFrame(renderFrame);
+  };
+
   // Start playback
   const startPlayback = async (newFilePath: string, seekTime = 0) => {
     if (!videoRef.current) return;
@@ -84,11 +269,9 @@ export function PlayerContextProvider({ children }: { children: React.ReactNode 
     setIsVisible(true);
 
     try {
-      // Skip probe if we've already probed this file
       const shouldProbe = newFilePath !== probedFilePathRef.current || !probeData;
 
       if (shouldProbe) {
-        // Probe and capabilities in parallel
         const [probeResp, caps] = await Promise.all([
           fetch(`/api/probe?path=${encodeURIComponent(newFilePath)}`),
           fetchCapabilities(),
@@ -102,16 +285,20 @@ export function PlayerContextProvider({ children }: { children: React.ReactNode 
         probedFilePathRef.current = newFilePath;
       }
 
-      // Adaptive segment length: short for transcoding, long for source
-      const isTranscoding = lutIdRef.current || qualityRef.current !== 'source';
+      // Determine if using client or server LUT
+      const useClientLut = lutMode === 'client' && activeLutId;
+      const useServerLut = lutMode === 'server' && activeLutId;
+
+      // Adaptive segment length
+      const isTranscoding = useServerLut || qualityRef.current !== 'source';
       const segmentLength = isTranscoding ? 1 : 4;
 
-      // Build playlist URL with optional lut_id
+      // Build playlist URL (no lut_id for client mode)
       const playlistUrl = `/api/playlist/${sid}/main.m3u8?path=${encodeURIComponent(
         newFilePath
-      )}&quality=${qualityRef.current}&segment_length=${segmentLength}${lutIdRef.current ? `&lut_id=${lutIdRef.current}` : ''}`;
+      )}&quality=${qualityRef.current}&segment_length=${segmentLength}${useServerLut ? `&lut_id=${activeLutId}` : ''}`;
 
-      // Clean up old HLS instance
+      // Clean up old HLS
       if (hlsRef.current) {
         hlsRef.current.destroy();
         hlsRef.current = null;
@@ -121,27 +308,22 @@ export function PlayerContextProvider({ children }: { children: React.ReactNode 
       video.pause();
       video.src = '';
 
-      // Load with HLS.js if supported
+      // Set up buffer config
       if (Hls.isSupported()) {
-        // Adaptive buffer strategy:
-        // - Transcoding (slow): bigger buffer to hide latency
-        // - Source (fast): minimal buffer to stay responsive
-        const isTranscoding = lutIdRef.current || qualityRef.current !== 'source';
-
         const bufferConfig = isTranscoding
           ? {
-              maxBufferLength: 60,        // Aggressively buffer ahead
-              maxMaxBufferLength: 120,    // But cap total buffer
-              backBufferLength: 5,        // Keep less history (reduce memory)
-              lowWaterMark: 10,           // Start playback at 10s
-              highWaterMark: 30,          // Stop buffering at 30s
+              maxBufferLength: 60,
+              maxMaxBufferLength: 120,
+              backBufferLength: 5,
+              lowWaterMark: 10,
+              highWaterMark: 30,
             }
           : {
-              maxBufferLength: 15,        // Minimal buffer for source
+              maxBufferLength: 15,
               maxMaxBufferLength: 30,
-              backBufferLength: 2,        // Almost no history
-              lowWaterMark: 3,            // Start playback sooner
-              highWaterMark: 10,          // Maintain small buffer
+              backBufferLength: 2,
+              lowWaterMark: 3,
+              highWaterMark: 10,
             };
 
         const hls = new Hls({
@@ -149,16 +331,23 @@ export function PlayerContextProvider({ children }: { children: React.ReactNode 
           enableWorker: true,
           ...bufferConfig,
           maxBufferSize: isTranscoding ? 200 * 1000 * 1000 : 50 * 1000 * 1000,
-          startLevel: -1,  // auto-select quality
-          abrEwmaDefaultEstimate: 5000000,  // Start with 5Mbps guess
+          startLevel: -1,
+          abrEwmaDefaultEstimate: 5000000,
           abrEwmaFastLive: 3,
           abrEwmaSlowLive: 9,
         });
 
-        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        hls.on(Hls.Events.MANIFEST_PARSED, async () => {
           video.play();
           if (seekTime > 0) {
             video.currentTime = seekTime;
+          }
+
+          // Init WebGL and start RAF for client LUT
+          if (useClientLut) {
+            initWebGL();
+            await loadLutTexture(activeLutId);
+            rafRef.current = requestAnimationFrame(renderFrame);
           }
         });
 
@@ -170,12 +359,11 @@ export function PlayerContextProvider({ children }: { children: React.ReactNode 
         hls.attachMedia(video);
         hlsRef.current = hls;
       } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-        // Native HLS support (Safari)
         video.src = playlistUrl;
         video.play();
       }
 
-      // Start ping loop (10 seconds)
+      // Ping loop
       if (pingIntervalRef.current) clearInterval(pingIntervalRef.current);
       pingIntervalRef.current = setInterval(() => {
         fetch(`/api/ping/${sid}`, { method: 'POST' }).catch(
@@ -183,24 +371,21 @@ export function PlayerContextProvider({ children }: { children: React.ReactNode 
         );
       }, 10000);
 
-      // Start transcode stats poll with adaptive backoff
-      // Fast polling first 15s, then slow down
-      if (qualityRef.current !== 'source') {
+      // Transcode stats (only for server-side LUT)
+      if (useServerLut || qualityRef.current !== 'source') {
         if (transcodeStatsIntervalRef.current)
           clearInterval(transcodeStatsIntervalRef.current);
 
-        // Aggressive first poll (every 1s for first 15s to catch startup)
         let pollCount = 0;
         transcodeStatsIntervalRef.current = setInterval(() => {
           pollCount++;
           fetchTranscodeStats();
 
-          // After 15 polls (15s), switch to slower 5s interval
           if (pollCount === 15) {
             clearInterval(transcodeStatsIntervalRef.current!);
             transcodeStatsIntervalRef.current = setInterval(
               fetchTranscodeStats,
-              5000  // Back off to 5s after startup
+              5000
             );
           }
         }, 1000);
@@ -214,6 +399,12 @@ export function PlayerContextProvider({ children }: { children: React.ReactNode 
 
   // Stop playback
   const stopPlayback = () => {
+    // Cancel RAF
+    if (rafRef.current) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+
     // Clear intervals
     if (pingIntervalRef.current) {
       clearInterval(pingIntervalRef.current);
@@ -236,6 +427,13 @@ export function PlayerContextProvider({ children }: { children: React.ReactNode 
       videoRef.current.src = '';
     }
 
+    // Clean up GL
+    const gl = glRef.current;
+    if (gl && videoTexRef.current) {
+      gl.deleteTexture(videoTexRef.current);
+      videoTexRef.current = null;
+    }
+
     // Send stop signal
     if (sessionIdRef.current) {
       fetch(`/api/stop/${sessionIdRef.current}`, { method: 'POST' }).catch(
@@ -249,6 +447,7 @@ export function PlayerContextProvider({ children }: { children: React.ReactNode 
     setProbeData(null);
     setTranscodeStats({});
     probedFilePathRef.current = null;
+    lutLoadedRef.current = false;
   };
 
   // Change quality
@@ -259,6 +458,12 @@ export function PlayerContextProvider({ children }: { children: React.ReactNode 
     if (!video) return;
 
     const seekTime = video.currentTime;
+
+    // Cancel RAF
+    if (rafRef.current) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
 
     // Stop current playback
     if (pingIntervalRef.current) {
@@ -286,7 +491,6 @@ export function PlayerContextProvider({ children }: { children: React.ReactNode 
       }
     }
 
-    // Update quality (update ref immediately so startPlayback uses the new quality)
     qualityRef.current = newQuality;
     setQuality(newQuality);
     if (filePath) {
@@ -301,37 +505,55 @@ export function PlayerContextProvider({ children }: { children: React.ReactNode 
 
     const seekTime = video.currentTime;
 
-    // Stop current playback
-    if (pingIntervalRef.current) {
-      clearInterval(pingIntervalRef.current);
-      pingIntervalRef.current = null;
-    }
-    if (transcodeStatsIntervalRef.current) {
-      clearInterval(transcodeStatsIntervalRef.current);
-      transcodeStatsIntervalRef.current = null;
-    }
-    if (hlsRef.current) {
-      hlsRef.current.destroy();
-      hlsRef.current = null;
-    }
-
-    video.pause();
-    video.src = '';
-
-    // Stop old session
-    if (sessionIdRef.current) {
-      try {
-        await fetch(`/api/stop/${sessionIdRef.current}`, { method: 'POST' });
-      } catch (e) {
-        console.warn(e);
+    if (lutMode === 'client') {
+      // Client-side LUT: no HLS restart, just swap texture
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
       }
+
+      if (newLutId) {
+        initWebGL();
+        await loadLutTexture(newLutId);
+        rafRef.current = requestAnimationFrame(renderFrame);
+      } else {
+        // No LUT - stop rendering
+        lutLoadedRef.current = false;
+      }
+    } else {
+      // Server-side LUT: full HLS restart
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+
+      if (pingIntervalRef.current) {
+        clearInterval(pingIntervalRef.current);
+        pingIntervalRef.current = null;
+      }
+      if (transcodeStatsIntervalRef.current) {
+        clearInterval(transcodeStatsIntervalRef.current);
+        transcodeStatsIntervalRef.current = null;
+      }
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+        hlsRef.current = null;
+      }
+
+      video.pause();
+      video.src = '';
+
+      if (sessionIdRef.current) {
+        try {
+          await fetch(`/api/stop/${sessionIdRef.current}`, { method: 'POST' });
+        } catch (e) {
+          console.warn(e);
+        }
+      }
+
+      lutIdRef.current = newLutId;
+      await startPlayback(filePath, seekTime);
     }
-
-    // Update LUT ref
-    lutIdRef.current = newLutId;
-
-    // Restart playback at same seek time
-    await startPlayback(filePath, seekTime);
   };
 
   // beforeunload handler
@@ -355,6 +577,7 @@ export function PlayerContextProvider({ children }: { children: React.ReactNode 
     capabilities,
     transcodeStats,
     videoRef,
+    canvasRef,
     startPlayback,
     stopPlayback,
     changeQuality,

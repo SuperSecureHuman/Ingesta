@@ -10,6 +10,10 @@ interface LutContextType {
   isLoading: boolean;
   applyLut: (lutId: string) => void;
   clearLut: () => void;
+  lutMode: 'client' | 'server';
+  setLutMode: (mode: 'client' | 'server') => void;
+  lutStrength: number;
+  setLutStrength: (strength: number) => void;
 }
 
 const LutContext = createContext<LutContextType | undefined>(undefined);
@@ -18,6 +22,8 @@ export function LutContextProvider({ children }: { children: React.ReactNode }) 
   const [availableLuts, setAvailableLuts] = useState<LutEntry[]>([]);
   const [activeLutId, setActiveLutId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [lutMode, setLutMode] = useState<'client' | 'server'>('client');
+  const [lutStrength, setLutStrength] = useState<number>(1.0);
 
   // Fetch available LUTs on mount
   useEffect(() => {
@@ -53,6 +59,10 @@ export function LutContextProvider({ children }: { children: React.ReactNode }) 
     isLoading,
     applyLut,
     clearLut,
+    lutMode,
+    setLutMode,
+    lutStrength,
+    setLutStrength,
   };
 
   return (

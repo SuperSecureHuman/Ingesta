@@ -37,10 +37,10 @@ export default function Home() {
   }
 
   return (
-    <PlayerContextProvider>
-      <LutContextProvider>
+    <LutContextProvider>
+      <PlayerContextProvider>
         <AppShell />
-      </LutContextProvider>
-    </PlayerContextProvider>
+      </PlayerContextProvider>
+    </LutContextProvider>
   );
 }

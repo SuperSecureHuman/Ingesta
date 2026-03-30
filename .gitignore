@@ -186,3 +186,6 @@ junk/
 
 *.mp4
 *.db
+
+ffmpeg
+ffprobe
