@@ -17,8 +17,8 @@ class Settings(BaseSettings):
     segment_length: int = 1
 
     # FFmpeg/FFprobe executables (project-local or system)
-    ffmpeg_path: str = "/Users/I749659/repo/hls_poc/ffmpeg"
-    ffprobe_path: str = "/Users/I749659/repo/hls_poc/ffprobe"
+    ffmpeg_path: str = ""
+    ffprobe_path: str = ""
 
     # Database
     database_url: str = "sqlite+aio:///./data/hls_realtime.db"

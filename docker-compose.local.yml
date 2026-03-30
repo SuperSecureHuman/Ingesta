@@ -1,0 +1,57 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: hls-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - MEDIA_ROOT=/media
+      - DATABASE_URL=sqlite+aio:///./data/hls_poc.db
+      - SECRET_KEY=your-secret-key-change-in-prod
+      - ADMIN_API_KEY=admin-key-test-value
+      - ADMIN_USERNAME=admin
+      - ADMIN_PASSWORD=changeme
+      - LOG_LEVEL=INFO
+      - CORS_ORIGINS=http://localhost:3000,http://localhost
+      - FFMPEG_PATH=/usr/bin/ffmpeg
+      - FFPROBE_PATH=/usr/bin/ffprobe
+      - DISABLE_HW_ENCODING=1
+    volumes:
+      - ./data:/app/data
+      - ./samples:/media
+    networks:
+      - hls-network
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: hls-frontend
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    networks:
+      - hls-network
+
+  # Nginx reverse proxy to expose single endpoint
+  nginx:
+    image: nginx:alpine
+    container_name: hls-proxy
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - hls-network
+
+networks:
+  hls-network:
+    driver: bridge

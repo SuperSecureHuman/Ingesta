@@ -163,6 +163,9 @@ async def probe_hardware() -> dict:
 
 def select_encoder(hardware: dict) -> str:
     """Pick best available H.264 encoder, falling back to libx264."""
+    import os
+    if os.getenv("DISABLE_HW_ENCODING"):
+        return "libx264"
     priority = ["h264_videotoolbox", "h264_nvenc", "h264_qsv", "h264_vaapi"]
     for enc in priority:
         if hardware.get(enc):
@@ -596,7 +599,7 @@ class TranscodeManager:
         job: TranscodeJob,
         segment_path: Path,
         next_segment_path: Path,
-        timeout: float = 30.0,
+        timeout: float = 600.0,
     ) -> bool:
         """Poll for segment N to be ready. Wait for file to stop growing (FFmpeg finished writing)."""
         deadline = time.monotonic() + timeout
