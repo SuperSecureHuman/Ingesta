@@ -210,6 +210,7 @@ def select_encoder(hardware: dict, hw_accel_method: str = None) -> str:
         else:
             # Fall back to software if requested encoder not available
             import logging
+
             logger = logging.getLogger("media.transcoder")
             logger.warning(
                 f"Requested hardware encoder '{encoder}' not available, falling back to libx264"
@@ -506,6 +507,7 @@ class TranscodeManager:
                 "FFmpeg command",
                 extra={"ffmpeg_command": cmd_str},
             )
+            print(cmd_str)
             job.active_requests = 0
 
             # Drain stderr to prevent pipe block
@@ -552,10 +554,21 @@ class TranscodeManager:
 
                 decoded = line.decode("utf-8", errors="ignore").strip()
                 if decoded:
-                    logger.debug(
-                        f"FFmpeg stderr",
-                        extra={"stream_id": job.stream_id, "pid": job.pid},
-                    )
+                    # Log errors and warnings at WARNING level for visibility
+                    if (
+                        "error" in decoded.lower()
+                        or "invalid" in decoded.lower()
+                        or "unknown" in decoded.lower()
+                    ):
+                        logger.warning(
+                            f"FFmpeg stderr: {decoded}",
+                            extra={"stream_id": job.stream_id, "pid": job.pid},
+                        )
+                    else:
+                        logger.debug(
+                            f"FFmpeg stderr: {decoded}",
+                            extra={"stream_id": job.stream_id, "pid": job.pid},
+                        )
 
                     # Parse time= for transcode position
                     time_match = re.search(

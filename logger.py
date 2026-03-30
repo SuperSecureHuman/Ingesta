@@ -121,6 +121,10 @@ class JSONFormatter(logging.Formatter):
         if record.exc_info:
             log_data["exception"] = self.formatException(record.exc_info)
 
+        # Add FFmpeg command if present
+        if hasattr(record, "ffmpeg_command") and record.ffmpeg_command:
+            log_data["ffmpeg_command"] = record.ffmpeg_command
+
         # Add extra fields
         if hasattr(record, "stream_id"):
             log_data["stream_id"] = record.stream_id
