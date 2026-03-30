@@ -598,21 +598,45 @@ class TranscodeManager:
         next_segment_path: Path,
         timeout: float = 30.0,
     ) -> bool:
-        """Poll for segment N to be ready. Serves as soon as file reaches min size."""
+        """Poll for segment N to be ready. Wait for file to stop growing (FFmpeg finished writing)."""
         deadline = time.monotonic() + timeout
         MIN_SEGMENT_SIZE = 8192  # 8KB minimum (most TS segments are larger)
+        MIN_STABLE_TIME = 0.1  # 100ms — file must not grow during this window
+
+        last_size = 0
+        stable_start = None
 
         while time.monotonic() < deadline:
             if job.has_exited:
+                # If process exited, ensure segment exists and is complete
                 return segment_path.exists()
 
             try:
                 size = segment_path.stat().st_size
-                # Serve segment as soon as it's large enough (don't wait for completion)
-                if size >= MIN_SEGMENT_SIZE:
-                    return True
+
+                # Check if file has reached minimum size
+                if size < MIN_SEGMENT_SIZE:
+                    stable_start = None  # Reset if file shrinks below threshold
+                    last_size = size
+                    await asyncio.sleep(0.05)
+                    continue
+
+                # File is large enough. Now check if it's stable (stopped growing)
+                if size == last_size:
+                    # Size didn't change
+                    if stable_start is None:
+                        stable_start = time.monotonic()
+                    elif time.monotonic() - stable_start >= MIN_STABLE_TIME:
+                        # File hasn't grown for MIN_STABLE_TIME — FFmpeg finished writing
+                        return True
+                else:
+                    # Size changed — reset stability timer
+                    stable_start = None
+                    last_size = size
+
             except FileNotFoundError:
-                pass
+                stable_start = None
+                last_size = 0
 
             await asyncio.sleep(0.05)  # 50ms poll interval
 
