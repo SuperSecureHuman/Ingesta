@@ -53,6 +53,8 @@ export function PlayerContextProvider({ children }: { children: React.ReactNode 
   const rafRef = useRef<number | null>(null);
   const lutLoadedRef = useRef(false);
   const lutStrengthRef = useRef(1.0);
+  const lutSizeLocRef = useRef<WebGLUniformLocation | null>(null);
+  const lutStrengthLocRef = useRef<WebGLUniformLocation | null>(null);
 
   const { lutMode, activeLutId, lutStrength } = useLutContext();
 
@@ -187,6 +189,10 @@ export function PlayerContextProvider({ children }: { children: React.ReactNode 
     gl.useProgram(prog);
     gl.uniform1i(gl.getUniformLocation(prog, 'uVideo'), 0);
     gl.uniform1i(gl.getUniformLocation(prog, 'uLut'), 1);
+
+    // Cache uniform locations
+    lutSizeLocRef.current = gl.getUniformLocation(prog, 'uLutSize');
+    lutStrengthLocRef.current = gl.getUniformLocation(prog, 'uLutStrength');
   };
 
   // Load LUT texture
@@ -246,8 +252,8 @@ export function PlayerContextProvider({ children }: { children: React.ReactNode 
     // Update uniforms
     gl.useProgram(prog);
     if (lutLoadedRef.current) {
-      gl.uniform1f(gl.getUniformLocation(prog, 'uLutSize'), 32); // TODO: make dynamic
-      gl.uniform1f(gl.getUniformLocation(prog, 'uLutStrength'), lutStrengthRef.current);
+      gl.uniform1f(lutSizeLocRef.current, 32); // TODO: make dynamic
+      gl.uniform1f(lutStrengthLocRef.current, lutStrengthRef.current);
       gl.activeTexture(gl.TEXTURE1);
       gl.bindTexture(gl.TEXTURE_3D, lutTexRef.current);
     }

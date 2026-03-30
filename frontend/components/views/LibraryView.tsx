@@ -117,9 +117,9 @@ export default function LibraryView({
             No files in this library.
           </div>
         ) : (
-          files.entries.map((entry, idx) => (
+          files.entries.map((entry) => (
             <FileCard
-              key={`${entry.path}-${idx}`}
+              key={entry.path}
               entry={entry}
               isSelected={selectedItems.has(entry.path)}
               onPlay={handleFilePlay}

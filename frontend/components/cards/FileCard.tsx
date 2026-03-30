@@ -2,7 +2,8 @@
 
 import React from 'react';
 import { BrowseEntry } from '@/lib/types';
-import { escapeHtml } from '@/lib/utils';
+
+const FALLBACK_SVG = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="120"><rect fill="%231a1a1a" width="200" height="120"/></svg>';
 
 interface FileCardProps {
   entry: BrowseEntry;
@@ -47,8 +48,6 @@ function FileCard({
     }
   };
 
-  const fallbackSvg = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="120"><rect fill="%231a1a1a" width="200" height="120"/></svg>';
-
   return (
     <div
       className="card selectable"
@@ -85,12 +84,12 @@ function FileCard({
           className="card-image"
           alt={entry.name}
           onError={(e) => {
-            (e.target as HTMLImageElement).src = fallbackSvg;
+            (e.target as HTMLImageElement).src = FALLBACK_SVG;
           }}
         />
       )}
 
-      <div className="card-title">{escapeHtml(entry.name)}</div>
+      <div className="card-title">{entry.name}</div>
       <div className="card-meta">{entry.is_dir ? 'Folder' : 'Video file'}</div>
     </div>
   );

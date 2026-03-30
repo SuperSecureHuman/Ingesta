@@ -6,13 +6,20 @@ export async function apiFetch(
   path: string,
   init: RequestInit = {}
 ): Promise<Response> {
+  const headers: Record<string, string> = { ...init.headers as Record<string, string> };
+
+  // Only set Content-Type for POST/PUT with body, not for DELETE or GET
+  if (init.method && ['POST', 'PUT'].includes(init.method) && init.body && !headers['Content-Type']) {
+    // Don't set Content-Type if body is FormData (browser will set boundary)
+    if (!(init.body instanceof FormData)) {
+      headers['Content-Type'] = 'application/json';
+    }
+  }
+
   return fetch(`${API_BASE}${path}`, {
     ...init,
     credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      ...init.headers,
-    },
+    headers,
   });
 }
 

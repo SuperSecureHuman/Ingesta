@@ -7,19 +7,36 @@ import { ShareFile, ProbeData, Capabilities } from '@/lib/types';
 import { generateUUID, formatTime, getResolutionLabel, getFileName } from '@/lib/utils';
 import { fetchCapabilities } from '@/lib/api';
 
+// INFO PANEL HELPER
+function formatInfoSection(title: string, rows: [string, string | number | null | undefined][]): string {
+  const items = rows
+    .map(
+      ([k, v]) =>
+        `<div class="flex justify-between gap-2 py-0.5">
+           <span class="text-gray-500 shrink-0">${k}</span>
+           <span class="text-gray-200 text-right truncate">${v ?? '—'}</span>
+         </div>`
+    )
+    .join('');
+  return `<div>
+    <div class="text-gray-400 font-sans font-semibold text-xs mb-1.5 uppercase tracking-wider">${title}</div>
+    <div class="space-y-0.5">${items}</div>
+  </div>`;
+}
+
 export default function ShareViewerPage() {
   const params = useParams();
   // NOTE: In Next.js 15, useParams() in Client Components remains synchronous.
   // If this page is converted to a Server Component in future, params becomes
   // Promise<Params> and must be awaited.
   const shareId = params.shareId as string;
+  const projectName = 'Shared Footage';
 
   // STATE
   const [jwt, setJwt] = useState<string | null>(null);
   const [view, setView] = useState<'password' | 'grid' | 'player'>('password');
   const [passwordError, setPasswordError] = useState('');
   const [files, setFiles] = useState<ShareFile[]>([]);
-  const [projectName] = useState('Shared Footage');
 
   // Player state
   const [probeData, setProbeData] = useState<ProbeData | null>(null);
@@ -347,23 +364,6 @@ export default function ShareViewerPage() {
     const pct = videoRef.current.duration ? (end / videoRef.current.duration) * 100 : 0;
     setBufferedPct(pct);
   }, []);
-
-  // INFO PANEL (2 sections)
-  function formatInfoSection(title: string, rows: [string, string | number | null | undefined][]): string {
-    const items = rows
-      .map(
-        ([k, v]) =>
-          `<div class="flex justify-between gap-2 py-0.5">
-             <span class="text-gray-500 shrink-0">${k}</span>
-             <span class="text-gray-200 text-right truncate">${v ?? '—'}</span>
-           </div>`
-      )
-      .join('');
-    return `<div>
-      <div class="text-gray-400 font-sans font-semibold text-xs mb-1.5 uppercase tracking-wider">${title}</div>
-      <div class="space-y-0.5">${items}</div>
-    </div>`;
-  }
 
   const updateInfoPanel = useCallback(() => {
     if (!infoVisibleRef.current || !probeData || !videoRef.current) return;

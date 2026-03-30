@@ -113,5 +113,5 @@ export interface ShareFile {
   height: number;
   bitrate: number;
   video_codec: string;
-  scan_status: string;
+  scan_status: 'pending' | 'done' | 'error';
 }

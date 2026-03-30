@@ -120,6 +120,8 @@ export default function ProjectView({ onOpenPanel }: ProjectViewProps) {
                 src={`/api/thumb?path=${encodeURIComponent(file.file_path)}&w=200`}
                 alt={getFileName(file.file_path)}
                 className="card-image"
+                loading="lazy"
+                decoding="async"
                 onError={(e) => {
                   const fallbackSvg = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='120'%3E%3Crect fill='%231a1a1a' width='200' height='120'/%3E%3Ctext x='50%25' y='50%25' fill='%23666' text-anchor='middle' dy='.3em' font-size='14'%3E🎥%3C/text%3E%3C/svg%3E`;
                   (e.target as HTMLImageElement).src = fallbackSvg;

@@ -1,5 +1,3 @@
-'use client';
-
 import { useCallback } from 'react';
 import { apiFetch } from '@/lib/api';
 import { useToast } from '@/context/ToastContext';
