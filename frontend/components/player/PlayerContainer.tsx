@@ -402,18 +402,24 @@ export default function PlayerContainer() {
         ref={viewportRef}
         className="relative flex-1 bg-black overflow-hidden"
       >
-        <video ref={videoRef} className="w-full h-full object-contain" />
+        <video
+          ref={videoRef}
+          className="w-full h-full object-contain"
+          style={{ visibility: (lutMode === 'client' && activeLutId) ? 'hidden' : 'visible' }}
+        />
 
         {/* WebGL canvas for client-side LUT */}
         <canvas
           ref={canvasRef}
-          width={1920}
-          height={1080}
           style={{
             position: 'absolute',
-            inset: 0,
-            width: '100%',
-            height: '100%',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            maxWidth: '100%',
+            maxHeight: '100%',
+            width: 'auto',
+            height: 'auto',
             display: (lutMode === 'client' && activeLutId) ? 'block' : 'none',
             pointerEvents: 'none',
           }}
