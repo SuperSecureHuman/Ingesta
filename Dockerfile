@@ -3,12 +3,17 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies (ffmpeg + Intel QSV support)
+# Install system dependencies (ffmpeg + full Intel QSV/VAAPI support)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
-    intel-media-va-driver-non-free \
-    libva-drm2 \
     libva2 \
+    libva-drm2 \
+    libva-x11-2 \
+    libvpl2 \
+    intel-media-va-driver-non-free \
+    intel-gpu-tools \
+    libdrm2 \
+    libigfxcmrt7 \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements and install Python dependencies

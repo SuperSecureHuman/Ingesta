@@ -17,11 +17,16 @@ services:
       - CORS_ORIGINS=http://localhost:3000,http://localhost
       - FFMPEG_PATH=/usr/bin/ffmpeg
       - FFPROBE_PATH=/usr/bin/ffprobe
+      # Intel QSV/VAAPI support (if available)
+      - LIBVA_DRIVERS_PATH=/usr/lib/x86_64-linux-gnu/dri
+      - LIBVA_DRIVER_NAME=iHD
     volumes:
       - ./data:/app/data
       - ./samples:/media
-      # Intel QSV hardware acceleration (uncomment if using Intel GPU)
-      # - /dev/dri:/dev/dri
+    devices:
+      # Intel GPU device (for QSV/VAAPI acceleration)
+      - /dev/dri/card0:/dev/dri/card0
+      - /dev/dri/renderD128:/dev/dri/renderD128
     networks:
       - hls-network
 
