@@ -17,6 +17,8 @@ services:
       - CORS_ORIGINS=http://localhost:3000,http://localhost
       - FFMPEG_PATH=/usr/bin/ffmpeg
       - FFPROBE_PATH=/usr/bin/ffprobe
+      # Hardware acceleration method: qsv, vaapi, nvenc, videotoolbox, vdpau, or empty for auto-detect
+      - HW_ACCEL_METHOD=qsv
       # Intel QSV/VAAPI support (if available)
       - LIBVA_DRIVERS_PATH=/usr/lib/x86_64-linux-gnu/dri
       - LIBVA_DRIVER_NAME=iHD

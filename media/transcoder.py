@@ -161,15 +161,67 @@ async def probe_hardware() -> dict:
     return result
 
 
-def select_encoder(hardware: dict) -> str:
-    """Pick best available H.264 encoder, falling back to libx264."""
+def select_encoder(hardware: dict, hw_accel_method: str = None) -> str:
+    """
+    Pick best available H.264 encoder based on hardware acceleration method.
+
+    Args:
+        hardware: dict with available hardware encoders
+        hw_accel_method: Preferred acceleration method (qsv, vaapi, nvenc, videotoolbox, qsv_copy, etc.)
+                        If None, auto-selects best available.
+
+    Returns:
+        Encoder name (e.g., 'h264_qsv', 'h264_vaapi', 'libx264')
+    """
     import os
+
+    # Check if hardware encoding is disabled
     if os.getenv("DISABLE_HW_ENCODING"):
         return "libx264"
+
+    # Get acceleration method from env if not passed
+    if hw_accel_method is None:
+        hw_accel_method = os.getenv("HW_ACCEL_METHOD", "").lower()
+    else:
+        hw_accel_method = hw_accel_method.lower()
+
+    # Map user-friendly names to encoder names
+    accel_map = {
+        "qsv": "h264_qsv",
+        "vaapi": "h264_vaapi",
+        "nvenc": "h264_nvenc",
+        "cuda": "h264_nvenc",  # CUDA uses NVENC encoder
+        "videotoolbox": "h264_videotoolbox",
+        "toolbox": "h264_videotoolbox",
+        "vdpau": "h264_vdpau",
+        "drm": "h264_videotoolbox",  # DRM is for input, not encoding
+        "opencl": "libx264",  # OpenCL doesn't have dedicated encoder, use software
+        "vulkan": "libx264",  # Vulkan doesn't have dedicated encoder, use software
+    }
+
+    # If specific method requested
+    if hw_accel_method in accel_map:
+        encoder = accel_map[hw_accel_method]
+        if encoder == "libx264":
+            return encoder
+        # Check if the requested encoder is available
+        if hardware.get(encoder):
+            return encoder
+        else:
+            # Fall back to software if requested encoder not available
+            import logging
+            logger = logging.getLogger("media.transcoder")
+            logger.warning(
+                f"Requested hardware encoder '{encoder}' not available, falling back to libx264"
+            )
+            return "libx264"
+
+    # Auto-select best available
     priority = ["h264_videotoolbox", "h264_nvenc", "h264_qsv", "h264_vaapi"]
     for enc in priority:
         if hardware.get(enc):
             return enc
+
     return "libx264"
 
 

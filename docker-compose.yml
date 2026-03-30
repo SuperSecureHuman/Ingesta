@@ -15,7 +15,12 @@ services:
       - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000,http://localhost}
       - FFMPEG_PATH=/usr/bin/ffmpeg
       - FFPROBE_PATH=/usr/bin/ffprobe
-      - DISABLE_HW_ENCODING=1
+      # Hardware acceleration method: qsv, vaapi, nvenc, cuda, videotoolbox, vdpau, etc.
+      # Leave empty for auto-detect. Set to empty string to disable.
+      - HW_ACCEL_METHOD=${HW_ACCEL_METHOD:-}
+      # Intel VAAPI driver (if using VAAPI acceleration)
+      - LIBVA_DRIVERS_PATH=${LIBVA_DRIVERS_PATH:-}
+      - LIBVA_DRIVER_NAME=${LIBVA_DRIVER_NAME:-}
     volumes:
       - ./data:/app/data
       - ${MEDIA_ROOT:-/path/to/media}:/media
