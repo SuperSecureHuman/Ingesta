@@ -13,6 +13,7 @@ from typing import Optional
 
 from config import settings
 from logger import get_logger
+from media.hw_encoding_flags import build_hwaccel_input_args, build_video_codec_args
 
 logger = get_logger("media.transcoder")
 
@@ -226,80 +227,7 @@ def select_encoder(hardware: dict, hw_accel_method: str = None) -> str:
     return "libx264"
 
 
-def _build_hwaccel_input_args(encoder: str) -> list[str]:
-    """Build input-side hwaccel flags for hw-accelerated decoding."""
-    if encoder == "h264_videotoolbox":
-        return [
-            "-hwaccel",
-            "videotoolbox",
-            "-hwaccel_output_format",
-            "videotoolbox_vld",
-        ]
-    elif encoder == "h264_nvenc":
-        return ["-hwaccel", "cuda", "-hwaccel_output_format", "cuda", "-threads", "1"]
-    elif encoder == "h264_qsv":
-        return ["-hwaccel", "qsv", "-hwaccel_output_format", "qsv"]
-    elif encoder == "h264_vaapi":
-        return ["-hwaccel", "vaapi", "-hwaccel_output_format", "vaapi"]
-    return []
 
-
-def _build_video_codec_args(
-    encoder: str,
-    bitrate: Optional[int],
-    max_height: Optional[int],
-    lut_path: Optional[str] = None,
-) -> list:
-    """Build video codec args with LUT3D (software) for LUT application."""
-
-    args = ["-codec:v:0", encoder]
-
-    # --- Encoder configs ---
-    if encoder == "libx264":
-        args += ["-preset", "ultrafast", "-crf", "23"]
-        if bitrate:
-            args += ["-maxrate", str(bitrate), "-bufsize", str(bitrate * 2)]
-
-    elif encoder == "h264_videotoolbox":
-        args += ["-prio_speed", "1"]
-        if bitrate:
-            args += ["-b:v", str(bitrate), "-qmin", "-1", "-qmax", "-1"]
-
-    elif encoder == "h264_nvenc":
-        args += ["-preset", "p1"]
-        if bitrate:
-            args += ["-maxrate", str(bitrate), "-bufsize", str(bitrate * 2)]
-
-    elif encoder in ("h264_qsv", "h264_vaapi"):
-        args += ["-preset", "ultrafast"]
-        if bitrate:
-            args += [
-                "-b:v",
-                str(bitrate),
-                "-maxrate",
-                str(bitrate),
-                "-bufsize",
-                str(bitrate * 2),
-            ]
-
-    # --- Filter chain (lut3d for LUT, scale for max_height) ---
-    filters = []
-
-    if lut_path or max_height:
-        # Build filter chain: lut3d for color grading, scale for resolution
-        if lut_path:
-            # lut3d requires absolute path escaped for FFmpeg filter syntax
-            escaped_path = lut_path.replace("'", "\\'")
-            filters.append(f"lut3d='{escaped_path}'")
-
-        if max_height:
-            # Scale filter: keep aspect ratio, max height
-            filters.append(f"scale=w=-2:h='min(ih,{max_height})'")
-
-    if filters:
-        args += ["-vf", ",".join(filters)]
-
-    return args
 
 
 class TranscodeManager:
@@ -404,13 +332,12 @@ class TranscodeManager:
         # Build FFmpeg command
         cmd = [settings.ffmpeg_path]
 
-        # lut3d filter is CPU-based, no GPU device needed
-
-        # Add hwaccel input args ONLY when using copy codec (no filters needed)
-        # If we have filters like scale, hwaccel input creates videotoolbox_vld format
-        # which doesn't support standard filters. Decode in software, encode in hw.
-        if vcodec == "copy":
-            cmd.extend(_build_hwaccel_input_args(self.encoder))
+        # Add hwaccel input args for hardware decoding
+        # For QSV and VAAPI, these include device initialization
+        if vcodec != "copy" and self.encoder in ("h264_qsv", "h264_vaapi"):
+            cmd.extend(build_hwaccel_input_args(self.encoder))
+        elif vcodec == "copy":
+            cmd.extend(build_hwaccel_input_args(self.encoder))
 
         cmd.extend(
             [
@@ -432,7 +359,7 @@ class TranscodeManager:
             cmd.extend(["-codec:v:0", "copy", "-start_at_zero"])
         else:
             # Use encoder-aware codec builder (respects hw-specific bitrate control)
-            codec_args = _build_video_codec_args(
+            codec_args = build_video_codec_args(
                 self.encoder, bitrate, max_height, job.lut_path
             )
             cmd.extend(codec_args)
