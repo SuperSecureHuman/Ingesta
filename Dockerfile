@@ -10,6 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libva-drm2 \
     libdrm2 \
     intel-gpu-tools \
+    intel-media-va-driver mesa-va-drivers i965-va-driver libva2 libva-drm2 libva-x11-2 libvpl2 vainfo \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements and install Python dependencies
