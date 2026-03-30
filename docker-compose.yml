@@ -19,6 +19,8 @@ services:
     volumes:
       - ./data:/app/data
       - ${MEDIA_ROOT:-/path/to/media}:/media
+      # Intel QSV hardware acceleration (uncomment if using Intel GPU)
+      - /dev/dri:/dev/dri
     networks:
       - ingesta-network
     restart: unless-stopped

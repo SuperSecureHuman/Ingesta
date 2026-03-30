@@ -17,10 +17,11 @@ services:
       - CORS_ORIGINS=http://localhost:3000,http://localhost
       - FFMPEG_PATH=/usr/bin/ffmpeg
       - FFPROBE_PATH=/usr/bin/ffprobe
-      - DISABLE_HW_ENCODING=1
     volumes:
       - ./data:/app/data
       - ./samples:/media
+      # Intel QSV hardware acceleration (uncomment if using Intel GPU)
+      # - /dev/dri:/dev/dri
     networks:
       - hls-network
 
