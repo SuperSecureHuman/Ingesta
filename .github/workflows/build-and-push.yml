@@ -5,19 +5,19 @@ on:
     branches:
       - main
     paths:
-      - 'Dockerfile'
-      - 'Dockerfile.frontend'
-      - 'requirements.txt'
-      - 'frontend/**'
-      - 'routes/**'
-      - 'media/**'
-      - 'db/**'
-      - '.github/workflows/build-and-push.yml'
+      - "Dockerfile"
+      - "Dockerfile.frontend"
+      - "requirements.txt"
+      - "frontend/**"
+      - "routes/**"
+      - "media/**"
+      - "db/**"
+      - ".github/workflows/build-and-push.yml"
   workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
-  OWNER: ${{ github.repository_owner }}
+  OWNER: supersecurehuman
 
 jobs:
   build-backend:
