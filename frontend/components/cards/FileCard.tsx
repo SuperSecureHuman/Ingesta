@@ -63,30 +63,19 @@ function FileCard({
       />
 
       {entry.is_dir ? (
-        <div
-          style={{
-            height: '120px',
-            background: '#1a1a1a',
-            borderRadius: '4px',
-            marginBottom: '12px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: '#666',
-            fontSize: '12px',
-          }}
-        >
-          📁
-        </div>
+        <div className="card-placeholder">📁</div>
       ) : (
-        <img
-          src={`/api/thumb?path=${encodeURIComponent(entry.path)}&w=200`}
-          className="card-image"
-          alt={entry.name}
-          onError={(e) => {
-            (e.target as HTMLImageElement).src = FALLBACK_SVG;
-          }}
-        />
+        <>
+          <img
+            src={`/api/thumb?path=${encodeURIComponent(entry.path)}&w=200`}
+            className="card-image"
+            alt={entry.name}
+            onError={(e) => {
+              (e.target as HTMLImageElement).src = FALLBACK_SVG;
+            }}
+          />
+          <div className="card-duration">Video</div>
+        </>
       )}
 
       <div className="card-title">{entry.name}</div>

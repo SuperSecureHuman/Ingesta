@@ -107,8 +107,12 @@ export default function HomeView() {
       </div>
       <div className="grid">
         {libraries.length === 0 ? (
-          <div style={{ gridColumn: '1/-1', color: '#666', padding: '20px' }}>
-            No libraries yet. Create one to get started.
+          <div style={{ gridColumn: '1/-1', display: 'flex', justifyContent: 'center', padding: '40px', textAlign: 'center' }}>
+            <div>
+              <div style={{ fontSize: '48px', marginBottom: '12px' }}>📁</div>
+              <p style={{ color: 'var(--color-muted)', marginBottom: '8px' }}>No libraries yet</p>
+              <p style={{ fontSize: '13px', color: 'var(--color-muted)' }}>Create a new library to start organizing your media</p>
+            </div>
           </div>
         ) : (
           libraries.map((lib) => (
@@ -133,8 +137,12 @@ export default function HomeView() {
       </div>
       <div className="grid">
         {projects.length === 0 ? (
-          <div style={{ gridColumn: '1/-1', color: '#666', padding: '20px' }}>
-            No projects yet. Create one to get started.
+          <div style={{ gridColumn: '1/-1', display: 'flex', justifyContent: 'center', padding: '40px', textAlign: 'center' }}>
+            <div>
+              <div style={{ fontSize: '48px', marginBottom: '12px' }}>🎬</div>
+              <p style={{ color: 'var(--color-muted)', marginBottom: '8px' }}>No projects yet</p>
+              <p style={{ fontSize: '13px', color: 'var(--color-muted)' }}>Create a new project to start editing</p>
+            </div>
           </div>
         ) : (
           projects.map((proj) => (

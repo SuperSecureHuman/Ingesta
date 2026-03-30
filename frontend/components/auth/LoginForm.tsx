@@ -36,7 +36,8 @@ export default function LoginForm({ onLoginSuccess }: LoginFormProps) {
     <div id="loginView" style={{ display: 'flex' }}>
       <div className="login-container">
         <div className="login-header">
-          <h1>HLS Media Review</h1>
+          <div style={{ fontSize: '32px', marginBottom: '16px' }}>▶</div>
+          <h1>Ingesta</h1>
           <p>Sign in to your account</p>
         </div>
 

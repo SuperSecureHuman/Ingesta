@@ -25,22 +25,7 @@ export default function LibraryCard({ library, onSelect, onDelete }: LibraryCard
 
   return (
     <div className="card" onClick={onSelect}>
-      <div
-        style={{
-          position: 'relative',
-          height: '120px',
-          background: '#1a1a1a',
-          borderRadius: '4px',
-          marginBottom: '12px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: '#666',
-          fontSize: '12px',
-        }}
-      >
-        📁 Library
-      </div>
+      <div className="card-placeholder">📁</div>
       <div className="card-title">{library.name}</div>
       <div className="card-meta">
         <div>Path: {library.root_path}</div>

@@ -3,7 +3,7 @@
 import { useAppContext } from '@/context/AppContext';
 
 export default function Breadcrumb() {
-  const { currentView, setCurrentView } = useAppContext();
+  const { currentView, setCurrentView, currentLibrary } = useAppContext();
 
   const handleHomeClick = () => {
     setCurrentView('home');
@@ -18,8 +18,20 @@ export default function Breadcrumb() {
           <a onClick={handleHomeClick} style={{ cursor: 'pointer' }}>
             Home
           </a>
-          <span> / </span>
-          <span>{currentView === 'library' ? 'Libraries' : 'Projects'}</span>
+          <span> › </span>
+          {currentView === 'library' ? (
+            <>
+              <span>Libraries</span>
+              {currentLibrary && (
+                <>
+                  <span> › </span>
+                  <span>{currentLibrary.name}</span>
+                </>
+              )}
+            </>
+          ) : (
+            <span>Projects</span>
+          )}
         </>
       )}
     </div>
