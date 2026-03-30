@@ -189,24 +189,28 @@ def _build_hwaccel_input_args(encoder: str) -> list[str]:
 
 
 def _build_video_codec_args(
-    encoder: str, bitrate: Optional[int], max_height: Optional[int], lut_path: Optional[str] = None
+    encoder: str,
+    bitrate: Optional[int],
+    max_height: Optional[int],
+    lut_path: Optional[str] = None,
 ) -> list:
-    """Build video codec args per encoder (bitrate control, preset, etc)."""
+    """Build video codec args with LUT3D (software) for LUT application."""
+
     args = ["-codec:v:0", encoder]
 
+    # --- Encoder configs ---
     if encoder == "libx264":
         args += ["-preset", "ultrafast", "-crf", "23"]
         if bitrate:
             args += ["-maxrate", str(bitrate), "-bufsize", str(bitrate * 2)]
 
     elif encoder == "h264_videotoolbox":
-        args += ["-prio_speed", "1"]  # fast mode
+        args += ["-prio_speed", "1"]
         if bitrate:
             args += ["-b:v", str(bitrate), "-qmin", "-1", "-qmax", "-1"]
-        # No -maxrate/-bufsize: causes encoder hangs on VideoToolbox
 
     elif encoder == "h264_nvenc":
-        args += ["-preset", "p1"]  # fastest NVENC preset
+        args += ["-preset", "p1"]
         if bitrate:
             args += ["-maxrate", str(bitrate), "-bufsize", str(bitrate * 2)]
 
@@ -222,14 +226,19 @@ def _build_video_codec_args(
                 str(bitrate * 2),
             ]
 
-    # Build filter chain for scale and/or LUT
+    # --- Filter chain (lut3d for LUT, scale for max_height) ---
     filters = []
-    if max_height:
-        filters.append(f"scale=-2:'min(ih,{max_height})'")
-    if lut_path:
-        # Escape colons and backslashes for FFmpeg filter syntax
-        safe_path = lut_path.replace("\\", "/").replace(":", "\\:")
-        filters.append(f"lut3d='{safe_path}'")
+
+    if lut_path or max_height:
+        # Build filter chain: lut3d for color grading, scale for resolution
+        if lut_path:
+            # lut3d requires absolute path escaped for FFmpeg filter syntax
+            escaped_path = lut_path.replace("'", "\\'")
+            filters.append(f"lut3d='{escaped_path}'")
+
+        if max_height:
+            # Scale filter: keep aspect ratio, max height
+            filters.append(f"scale=w=-2:h='min(ih,{max_height})'")
 
     if filters:
         args += ["-vf", ",".join(filters)]
@@ -321,13 +330,25 @@ class TranscodeManager:
             max_height = preset["max_height"]
 
         # Validate source_path is not a network URI (SSRF protection)
-        _BLOCKED_SCHEMES = ("http://", "https://", "ftp://", "ftps://", "rtmp://", "rtsp://", "smb://")
+        _BLOCKED_SCHEMES = (
+            "http://",
+            "https://",
+            "ftp://",
+            "ftps://",
+            "rtmp://",
+            "rtsp://",
+            "smb://",
+        )
         source_lower = job.source_path.lower()
         if any(source_lower.startswith(s) for s in _BLOCKED_SCHEMES):
-            raise ValueError(f"Network URIs are not allowed as source path: {job.source_path}")
+            raise ValueError(
+                f"Network URIs are not allowed as source path: {job.source_path}"
+            )
 
         # Build FFmpeg command
-        cmd = ["ffmpeg"]
+        cmd = [settings.ffmpeg_path]
+
+        # lut3d filter is CPU-based, no GPU device needed
 
         # Add hwaccel input args ONLY when using copy codec (no filters needed)
         # If we have filters like scale, hwaccel input creates videotoolbox_vld format
@@ -355,7 +376,9 @@ class TranscodeManager:
             cmd.extend(["-codec:v:0", "copy", "-start_at_zero"])
         else:
             # Use encoder-aware codec builder (respects hw-specific bitrate control)
-            codec_args = _build_video_codec_args(self.encoder, bitrate, max_height, job.lut_path)
+            codec_args = _build_video_codec_args(
+                self.encoder, bitrate, max_height, job.lut_path
+            )
             cmd.extend(codec_args)
 
             # Force keyframes at segment boundaries (only for transcoding, not copy)
@@ -551,7 +574,9 @@ class TranscodeManager:
                 }
             )
 
-    async def _kill_process_bg(self, process: asyncio.subprocess.Process, drain_task: Optional[asyncio.Task]) -> None:
+    async def _kill_process_bg(
+        self, process: asyncio.subprocess.Process, drain_task: Optional[asyncio.Task]
+    ) -> None:
         """Kill FFmpeg process in background without blocking."""
         if drain_task:
             drain_task.cancel()

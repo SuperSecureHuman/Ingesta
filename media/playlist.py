@@ -8,6 +8,8 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
+from config import settings
+
 TICKS_PER_SECOND = 10_000_000  # C# TimeSpan.TicksPerSecond
 
 # Probe result cache to avoid re-running ffprobe on every playlist request
@@ -57,7 +59,7 @@ async def probe_media(path: str) -> MediaInfo:
         return _probe_cache[path]
 
     proc = await asyncio.create_subprocess_exec(
-        "ffprobe",
+        settings.ffprobe_path,
         "-v",
         "quiet",
         "-print_format",
