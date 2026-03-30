@@ -233,6 +233,40 @@ export function PlayerContextProvider({ children }: { children: React.ReactNode 
     }
   };
 
+  // Sync canvas size to current video resolution
+  const syncCanvasSize = () => {
+    const canvas = canvasRef.current;
+    const video = videoRef.current;
+    const gl = glRef.current;
+    if (!canvas || !video || !gl) return;
+    const w = video.videoWidth;
+    const h = video.videoHeight;
+    if (w > 0 && h > 0 && (canvas.width !== w || canvas.height !== h)) {
+      canvas.width = w;
+      canvas.height = h;
+      gl.viewport(0, 0, w, h);
+
+      // Set CSS to maintain aspect ratio when scaling to fill container
+      const container = canvas.parentElement;
+      if (container) {
+        const containerWidth = container.clientWidth;
+        const containerHeight = container.clientHeight;
+        const canvasAspect = w / h;
+        const containerAspect = containerWidth / containerHeight;
+
+        if (canvasAspect > containerAspect) {
+          // Canvas is wider, fit to width
+          canvas.style.width = '100%';
+          canvas.style.height = 'auto';
+        } else {
+          // Canvas is taller, fit to height
+          canvas.style.width = 'auto';
+          canvas.style.height = '100%';
+        }
+      }
+    }
+  };
+
   // RAF render loop
   const renderFrame = () => {
     const gl = glRef.current;
@@ -243,6 +277,8 @@ export function PlayerContextProvider({ children }: { children: React.ReactNode 
       rafRef.current = requestAnimationFrame(renderFrame);
       return;
     }
+
+    syncCanvasSize();
 
     // Upload video frame
     gl.activeTexture(gl.TEXTURE0);

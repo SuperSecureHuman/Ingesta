@@ -452,22 +452,31 @@ export default function PlayerContainer() {
       <div id="videoViewport" ref={viewportRef} className="relative flex-1 bg-black overflow-hidden">
         <video ref={videoRef} className="w-full h-full object-contain" style={{ visibility: lutMode === 'client' && activeLutId ? 'hidden' : 'visible' }} />
 
-        {/* WebGL canvas for client-side LUT */}
-        <canvas
-          ref={canvasRef}
+        {/* WebGL canvas wrapper for aspect ratio preservation */}
+        <div
           style={{
             position: 'absolute',
-            top: '50%',
-            left: '50%',
-            transform: 'translate(-50%, -50%)',
-            maxWidth: '100%',
-            maxHeight: '100%',
-            width: 'auto',
-            height: 'auto',
-            display: lutMode === 'client' && activeLutId ? 'block' : 'none',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            display: lutMode === 'client' && activeLutId ? 'flex' : 'none',
+            alignItems: 'center',
+            justifyContent: 'center',
             pointerEvents: 'none',
           }}
-        />
+        >
+          <canvas
+            ref={canvasRef}
+            style={{
+              maxWidth: '100%',
+              maxHeight: '100%',
+              width: 'auto',
+              height: 'auto',
+              pointerEvents: 'none',
+            }}
+          />
+        </div>
 
         {/* Title bar */}
         <div className={`absolute top-0 left-0 right-0 px-5 py-4 text-center bg-gradient-to-b from-black/60 to-transparent transition-opacity duration-300 ${controlsVisible ? 'opacity-100' : 'opacity-0'}`}>
