@@ -500,7 +500,12 @@ class TranscodeManager:
                     "seek_time_seconds": seek_time_seconds,
                 },
             )
-            logger.debug(f"FFmpeg command: {' '.join(cmd)}")
+            # Log FFmpeg command with special formatting
+            cmd_str = " ".join(cmd)
+            logger.info(
+                "FFmpeg command",
+                extra={"ffmpeg_command": cmd_str},
+            )
             job.active_requests = 0
 
             # Drain stderr to prevent pipe block

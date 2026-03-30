@@ -45,6 +45,28 @@ class CliFormatter(logging.Formatter):
         level_color = self.LEVEL_COLORS.get(record.levelname, "")
         timestamp = self.formatTime(record, datefmt="%H:%M:%S")
 
+        # Check if this is a special FFmpeg command log
+        if hasattr(record, "ffmpeg_command") and record.ffmpeg_command:
+            # Special formatted FFmpeg command log - break into arguments
+            cmd = record.ffmpeg_command
+            args = cmd.split()
+
+            # Format the command nicely with one argument per line
+            formatted_cmd = f"{_Colors.BOLD}{_Colors.MAGENTA}🎬 FFMPEG COMMAND:{_Colors.RESET}\n"
+            formatted_cmd += f"{_Colors.BOLD}{_Colors.CYAN}ffmpeg"
+            for i, arg in enumerate(args):
+                # Add newline every 3 args for readability
+                if (i + 1) % 3 == 0:
+                    formatted_cmd += f" \\\n  {_Colors.CYAN}{arg}{_Colors.RESET}"
+                else:
+                    formatted_cmd += f" {_Colors.CYAN}{arg}{_Colors.RESET}"
+            formatted_cmd += f"{_Colors.RESET}"
+
+            return (
+                f"{_Colors.DIM}{timestamp}{_Colors.RESET}\n"
+                f"{formatted_cmd}"
+            )
+
         # Build base log line
         log_line = f"{_Colors.DIM}{timestamp}{_Colors.RESET} {level_color}{record.levelname:8}{_Colors.RESET} {record.name:20} {record.getMessage()}"
 
