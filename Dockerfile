@@ -13,9 +13,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     i965-va-driver libva2 libva-drm2 libva-x11-2 libvpl2 vainfo \
     wget
 
-RUN wget https://github.com/jellyfin/jellyfin-ffmpeg/releases/download/v7.1.3-4/jellyfin-ffmpeg7_7.1.3-4-trixie_amd64.deb
+RUN wget https://github.com/jellyfin/jellyfin-ffmpeg/releases/download/v7.1.3-4/jellyfin-ffmpeg_7.1.3-4_portable_linux64-gpl.tar.xz
 
-RUN apt-get install -y ./jellyfin-ffmpeg7_7.1.3-4-trixie_amd64.deb
+RUN tar -xf jellyfin-ffmpeg_7.1.3-4_portable_linux64-gpl.tar.xz -C /app --strip-components=1 --no-same-owner
 
 RUN rm -rf /var/lib/apt/lists/*
 
@@ -38,7 +38,7 @@ COPY static ./static
 
 # Create data directory for SQLite
 RUN mkdir -p /app/data /app/media 
-# && chmod +x /app/ffmpeg /app/ffprobe
+RUN chmod +x /app/ffmpeg /app/ffprobe
 
 # Expose FastAPI port
 EXPOSE 8000
