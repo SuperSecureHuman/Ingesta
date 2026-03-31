@@ -118,9 +118,10 @@ async def probe_hardware() -> dict:
     }
 
     try:
+        ffmpeg = settings.ffmpeg_path
         # Probe hwaccels
         proc = await asyncio.create_subprocess_exec(
-            "ffmpeg",
+            ffmpeg,
             "-hwaccels",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.DEVNULL,
@@ -139,7 +140,7 @@ async def probe_hardware() -> dict:
 
         # Probe encoders for specific H.264 support
         proc = await asyncio.create_subprocess_exec(
-            "ffmpeg",
+            ffmpeg,
             "-encoders",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.DEVNULL,
