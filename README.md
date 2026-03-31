@@ -28,9 +28,12 @@ With server-side on-demand transcoding, teammates can:
 ## Planned Features
 - User roles & permissions (admin, editor, viewer)
 - Collaborative annotations and comments
-- Realtime LUT preview so that we dont look at flat footage [server side vs webgl?]
+- Tag camera / color metadata
 - Support for more formats (ProRes RAW, REDCODE, etc.)
 - Raw sub clip download (no quality loss clip downloads)
+
+## Implemented Features
+[X] Realtime LUT preview so that we dont look at flat footage [server side vs webgl?]
 
 ## Stack
 
@@ -154,22 +157,22 @@ Frontend runs at `http://localhost:3000`
 
 All settings from `.env`:
 
-| Variable | Default | Notes |
-|----------|---------|-------|
-| `MEDIA_ROOT` | (empty) | Path to media files |
-| `SEGMENT_LENGTH` | 6 | Seconds per HLS segment |
-| `DATABASE_URL` | `sqlite+aio:///./data/ingesta.db` | SQLite or PostgreSQL |
-| `MAX_CONCURRENT_STREAMS` | 10 | Parallel FFmpeg processes |
-| `SECRET_KEY` | change-me-in-production | JWT signing key |
-| `ADMIN_API_KEY` | change-me-in-production | Admin endpoint header key |
-| `ADMIN_USERNAME` | admin | Default user |
-| `ADMIN_PASSWORD` | changeme | Default password |
-| `SCANNER_INTERVAL` | 30 | Seconds between file scans |
-| `CLEANUP_INTERVAL` | 20 | Seconds between segment cleanup |
-| `WORKDIR_RETENTION_SECONDS` | 3600 | Keep work dirs 1 hour |
-| `SEGMENT_RETENTION_SECONDS` | 120 | Keep segments 2 minutes |
-| `LOG_LEVEL` | INFO | DEBUG, INFO, WARNING, ERROR |
-| `LOG_FORMAT` | auto | json, text, or auto-detect |
+| Variable                    | Default                           | Notes                           |
+|-----------------------------|-----------------------------------|---------------------------------|
+| `MEDIA_ROOT`                | (empty)                           | Path to media files             |
+| `SEGMENT_LENGTH`            | 6                                 | Seconds per HLS segment         |
+| `DATABASE_URL`              | `sqlite+aio:///./data/ingesta.db` | SQLite or PostgreSQL            |
+| `MAX_CONCURRENT_STREAMS`    | 10                                | Parallel FFmpeg processes       |
+| `SECRET_KEY`                | change-me-in-production           | JWT signing key                 |
+| `ADMIN_API_KEY`             | change-me-in-production           | Admin endpoint header key       |
+| `ADMIN_USERNAME`            | admin                             | Default user                    |
+| `ADMIN_PASSWORD`            | changeme                          | Default password                |
+| `SCANNER_INTERVAL`          | 30                                | Seconds between file scans      |
+| `CLEANUP_INTERVAL`          | 20                                | Seconds between segment cleanup |
+| `WORKDIR_RETENTION_SECONDS` | 3600                              | Keep work dirs 1 hour           |
+| `SEGMENT_RETENTION_SECONDS` | 120                               | Keep segments 2 minutes         |
+| `LOG_LEVEL`                 | INFO                              | DEBUG, INFO, WARNING, ERROR     |
+| `LOG_FORMAT`                | auto                              | json, text, or auto-detect      |
 
 
 
