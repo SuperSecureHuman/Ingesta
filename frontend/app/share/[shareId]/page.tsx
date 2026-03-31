@@ -5,7 +5,6 @@ import { useParams } from 'next/navigation';
 import Hls from 'hls.js';
 import { ShareFile, ProbeData, Capabilities } from '@/lib/types';
 import { generateUUID, formatTime, getResolutionLabel, getFileName } from '@/lib/utils';
-import { fetchCapabilities } from '@/lib/api';
 
 // INFO PANEL HELPER
 function formatInfoSection(title: string, rows: [string, string | number | null | undefined][]): string {
@@ -115,7 +114,7 @@ export default function ShareViewerPage() {
     // beforeunload beacon
     const handler = () => {
       if (sessionIdRef.current) {
-        navigator.sendBeacon(`/api/stop/${sessionIdRef.current}`, '');
+        navigator.sendBeacon(`/api/share/${shareId}/stop/${sessionIdRef.current}`, '');
       }
     };
     window.addEventListener('beforeunload', handler);
@@ -181,15 +180,18 @@ export default function ShareViewerPage() {
     if (!jwtRef.current) return;
 
     try {
-      const [probeRes, caps] = await Promise.all([
+      const [probeRes, capsRes] = await Promise.all([
         fetch(`/api/share/${shareId}/probe?path=${encodeURIComponent(filePath)}`, {
           headers: { 'Authorization': `Bearer ${jwtRef.current}` },
         }),
-        fetchCapabilities(),
+        fetch(`/api/share/${shareId}/capabilities`, {
+          headers: { 'Authorization': `Bearer ${jwtRef.current}` },
+        }),
       ]);
 
       if (!probeRes.ok) throw new Error('Probe failed');
       const probeData = await probeRes.json();
+      const caps = capsRes.ok ? await capsRes.json() : null;
       setProbeData(probeData);
       setCapabilities(caps);
     } catch (e) {
@@ -277,7 +279,10 @@ export default function ShareViewerPage() {
     }
     if (sessionIdRef.current) {
       try {
-        await fetch(`/api/stop/${sessionIdRef.current}`, { method: 'POST' });
+        await fetch(`/api/share/${shareId}/stop/${sessionIdRef.current}`, {
+          method: 'POST',
+          headers: jwtRef.current ? { 'Authorization': `Bearer ${jwtRef.current}` } : {},
+        });
       } catch (e) {
         console.warn(e);
       }
@@ -305,7 +310,10 @@ export default function ShareViewerPage() {
         hlsRef.current = null;
       }
       try {
-        await fetch(`/api/stop/${sessionIdRef.current}`, { method: 'POST' });
+        await fetch(`/api/share/${shareId}/stop/${sessionIdRef.current}`, {
+          method: 'POST',
+          headers: jwtRef.current ? { 'Authorization': `Bearer ${jwtRef.current}` } : {},
+        });
       } catch (e) {
         console.warn(e);
       }

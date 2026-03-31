@@ -167,6 +167,7 @@ def build_vod_playlist(
     path: str,
     quality: str,
     lut_id: str = None,
+    segment_base_url: str = "/api/segment",
 ) -> str:
     """Build VOD m3u8 with per-segment runtimeTicks."""
     lines = [
@@ -180,7 +181,7 @@ def build_vod_playlist(
     for seg in segments:
         lines.append(f"#EXTINF:{seg.duration_seconds:.6f}, nodesc")
         segment_url = (
-            f"/api/segment/{stream_id}/{seg.index}.ts?"
+            f"{segment_base_url}/{stream_id}/{seg.index}.ts?"
             f"runtimeTicks={seg.runtime_ticks}&"
             f"actualSegmentLengthTicks={seg.actual_length_ticks}&"
             f"path={path}&quality={quality}&segment_length={segment_length_seconds}"

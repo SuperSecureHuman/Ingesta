@@ -8,8 +8,10 @@ from pathlib import Path
 from typing import Optional
 from urllib.parse import quote, unquote
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Header
-from fastapi.responses import FileResponse, StreamingResponse
+import shutil
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Header, Request
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel
 import jwt as pyjwt
 from jwt import InvalidTokenError
@@ -19,7 +21,7 @@ import db.crud as crud
 from routes.deps import require_auth
 from routes.auth import pwd_context
 from media.playlist import probe_media
-from media.transcoder import TICKS_PER_SECOND
+from media.transcoder import TICKS_PER_SECOND, BITRATE_TIERS
 from media.thumbs import get_or_generate_thumb
 
 
@@ -349,9 +351,10 @@ async def share_playlist(
         # Compute segments
         segments = compute_equal_length_segments(duration_ticks, segment_length)
 
-        # Build playlist
+        # Build playlist with share-scoped segment URLs so auth works
         playlist_text = build_vod_playlist(
-            stream_id, segments, segment_length, quote(path), quality
+            stream_id, segments, segment_length, quote(path), quality,
+            segment_base_url=f"/api/share/{share_id}/segment",
         )
 
         return StreamingResponse(
@@ -588,3 +591,45 @@ async def share_download(
         raise
     except Exception as e:
         raise HTTPException(400, str(e))
+
+
+@router.get("/{share_id}/capabilities")
+async def share_capabilities(
+    share_id: str,
+    request: Request,
+    token: dict = Depends(get_token_payload),
+):
+    """Return server capabilities for share viewers (same data as /api/capabilities)."""
+    if token["share_id"] != share_id:
+        raise HTTPException(403, "Token mismatch")
+    return JSONResponse(
+        content={
+            "hardware": request.app.state.hardware,
+            "bitrate_tiers": BITRATE_TIERS,
+        },
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
+
+
+@router.post("/{share_id}/stop/{stream_id}")
+async def share_stop(
+    share_id: str,
+    stream_id: str,
+    request: Request,
+    token: dict = Depends(get_token_payload),
+):
+    """Stop a transcoding session started by a share viewer."""
+    if token["share_id"] != share_id:
+        raise HTTPException(403, "Token mismatch")
+
+    from routes.deps import validate_session_id
+    validate_session_id(stream_id)
+
+    manager = request.app.state.manager
+    job = manager.get_job(stream_id)
+    if job:
+        await manager.kill_ffmpeg(job, reason="stop_request")
+        manager._jobs.pop(stream_id, None)
+        manager._locks.pop(stream_id, None)
+        shutil.rmtree(job.work_dir, ignore_errors=True)
+    return {"status": "ok"}
