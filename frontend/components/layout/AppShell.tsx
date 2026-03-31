@@ -6,6 +6,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useSelection } from '@/hooks/useSelection';
 import { usePanels } from '@/hooks/usePanels';
 import { usePlayerContext } from '@/context/PlayerContext';
+import { PanelContextProvider } from '@/context/PanelContext';
 import Header from './Header';
 import Breadcrumb from './Breadcrumb';
 import AddToProjectPanel from '@/components/panels/AddToProjectPanel';
@@ -41,7 +42,7 @@ export default function AppShell({ children, libraryId, libraryName, projectId }
   }, [openPanel]);
 
   return (
-    <>
+    <PanelContextProvider openPanel={openPanel} closePanel={closePanel} activePanel={activePanel}>
       <div id="idleContainer" className="show" style={isVisible ? { display: 'none' } : undefined}>
         <Header currentUser={currentUser} onLogout={handleLogout} />
         <Breadcrumb libraryName={libraryName} />
@@ -71,6 +72,6 @@ export default function AppShell({ children, libraryId, libraryName, projectId }
         />
       </div>
       <PlayerContainer />
-    </>
+    </PanelContextProvider>
   );
 }

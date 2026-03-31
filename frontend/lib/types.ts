@@ -1,4 +1,4 @@
-export type PanelName = 'createLibrary' | 'createProject' | 'createShare' | 'shareLinks' | 'addToProject' | null;
+export type PanelName = 'createLibrary' | 'createProject' | 'createShare' | 'shareLinks' | 'addToProject' | 'sourceTags' | null;
 
 export type Role = 'admin' | 'editor' | 'viewer';
 
@@ -35,6 +35,8 @@ export interface ProjectFile {
   scan_status: 'pending' | 'done' | 'error';
   scan_error?: string | null;
   added_at: string;
+  camera: string | null;
+  lens: string | null;
 }
 
 export interface BrowseEntry {

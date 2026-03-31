@@ -37,6 +37,10 @@ CREATE TABLE IF NOT EXISTS project_files (
     scan_status TEXT DEFAULT 'pending',  -- pending | done | error
     scan_error TEXT,
 
+    -- Source tagging (camera/lens shot on)
+    camera TEXT,
+    lens TEXT,
+
     added_at TEXT NOT NULL,
 
     FOREIGN KEY (project_id) REFERENCES projects (id)
@@ -85,6 +89,16 @@ CREATE TABLE IF NOT EXISTS file_color_meta (
     log_profile     TEXT,
     source          TEXT NOT NULL DEFAULT 'auto',
     updated_at      TEXT NOT NULL
+);
+
+-- File path tags: camera/lens/lut stored by absolute path, independent of projects
+CREATE TABLE IF NOT EXISTS file_path_tags (
+    file_path     TEXT PRIMARY KEY,
+    camera        TEXT,
+    lens          TEXT,
+    lut_id        TEXT,
+    lut_intensity REAL DEFAULT 1.0,
+    updated_at    TEXT NOT NULL
 );
 
 -- File LUT preferences: saved LUT selection and intensity per file

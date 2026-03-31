@@ -175,7 +175,8 @@ async def add_project_file(
     file_size: int,
     mtime: float,
 ) -> Optional[str]:
-    """Add a file to a project. Returns the file ID, or None if already present."""
+    """Add a file to a project. Returns the file ID, or None if already present.
+    Inherits camera/lens from any other project_files row with the same path."""
     db = get_db()
     existing = await db.fetchone(
         "SELECT id FROM project_files WHERE project_id = ? AND file_path = ?",
@@ -184,15 +185,28 @@ async def add_project_file(
     if existing:
         return None
 
+    # Inherit camera/lens from file_path_tags (canonical source) or fallback to existing project_files row
+    tag_row = await db.fetchone(
+        "SELECT camera, lens FROM file_path_tags WHERE file_path = ?",
+        (file_path,),
+    )
+    if not tag_row:
+        tag_row = await db.fetchone(
+            "SELECT camera, lens FROM project_files WHERE file_path = ? AND (camera IS NOT NULL OR lens IS NOT NULL) LIMIT 1",
+            (file_path,),
+        )
+    inherited_camera = tag_row[0] if tag_row else None
+    inherited_lens = tag_row[1] if tag_row else None
+
     file_id = _new_uuid()
     added_at = _now_iso()
     await db.execute(
         """
         INSERT INTO project_files
-        (id, project_id, file_path, file_size, mtime, scan_status, added_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        (id, project_id, file_path, file_size, mtime, scan_status, added_at, camera, lens)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (file_id, project_id, file_path, file_size, mtime, "pending", added_at),
+        (file_id, project_id, file_path, file_size, mtime, "pending", added_at, inherited_camera, inherited_lens),
     )
     return file_id
 
@@ -234,7 +248,8 @@ async def get_project_files(project_id: str) -> List[Dict[str, Any]]:
     rows = await db.fetch(
         """
         SELECT id, project_id, file_path, file_size, mtime, duration_seconds,
-               width, height, bitrate, video_codec, scan_status, scan_error, added_at
+               width, height, bitrate, video_codec, scan_status, scan_error, added_at,
+               camera, lens
         FROM project_files WHERE project_id = ? ORDER BY added_at
         """,
         (project_id,),
@@ -255,6 +270,8 @@ async def get_project_files(project_id: str) -> List[Dict[str, Any]]:
             "scan_status": row[10],
             "scan_error": row[11],
             "added_at": row[12],
+            "camera": row[13],
+            "lens": row[14],
         }
         for row in rows
     ]
@@ -371,6 +388,94 @@ async def delete_project_files_by_ids(file_ids: List[str]) -> int:
         tuple(file_ids),
     )
     return len(file_ids)
+
+
+async def update_file_source_tags(file_id: str, camera: Optional[str], lens: Optional[str]) -> bool:
+    """Update camera and lens on ALL project_files rows sharing the same file_path (cross-project sync),
+    and upsert into file_path_tags as the canonical source of truth."""
+    db = get_db()
+    row = await db.fetchone("SELECT file_path FROM project_files WHERE id = ?", (file_id,))
+    if not row:
+        return False
+    file_path = row[0]
+    updated_at = _now_iso()
+    await db.execute(
+        "UPDATE project_files SET camera = ?, lens = ? WHERE file_path = ?",
+        (camera, lens, file_path),
+    )
+    await db.execute(
+        """
+        INSERT INTO file_path_tags (file_path, camera, lens, updated_at)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(file_path) DO UPDATE SET camera = excluded.camera, lens = excluded.lens, updated_at = excluded.updated_at
+        """,
+        (file_path, camera, lens, updated_at),
+    )
+    return True
+
+
+async def upsert_file_path_tags(
+    file_path: str,
+    camera: Optional[str],
+    lens: Optional[str],
+    lut_id: Optional[str] = None,
+    lut_intensity: float = 1.0,
+) -> bool:
+    """Upsert camera/lens/lut into file_path_tags and sync any existing project_files rows."""
+    db = get_db()
+    updated_at = _now_iso()
+    await db.execute(
+        """
+        INSERT INTO file_path_tags (file_path, camera, lens, lut_id, lut_intensity, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(file_path) DO UPDATE SET
+            camera        = excluded.camera,
+            lens          = excluded.lens,
+            lut_id        = excluded.lut_id,
+            lut_intensity = excluded.lut_intensity,
+            updated_at    = excluded.updated_at
+        """,
+        (file_path, camera, lens, lut_id, lut_intensity, updated_at),
+    )
+    await db.execute(
+        "UPDATE project_files SET camera = ?, lens = ? WHERE file_path = ?",
+        (camera, lens, file_path),
+    )
+    return True
+
+
+async def get_source_tags_by_paths(paths: List[str]) -> Dict[str, Dict[str, Any]]:
+    """Return {file_path: {camera, lens, lut_id, lut_intensity}} for the given paths from file_path_tags."""
+    if not paths:
+        return {}
+    db = get_db()
+    placeholders = ",".join("?" * len(paths))
+    rows = await db.fetch(
+        f"SELECT file_path, camera, lens, lut_id, lut_intensity FROM file_path_tags WHERE file_path IN ({placeholders}) AND (camera IS NOT NULL OR lens IS NOT NULL OR lut_id IS NOT NULL)",
+        tuple(paths),
+    )
+    return {
+        row[0]: {"camera": row[1], "lens": row[2], "lut_id": row[3], "lut_intensity": row[4]}
+        for row in rows
+    }
+
+
+async def get_distinct_cameras() -> List[str]:
+    """Return distinct non-null camera values across all project_files, sorted."""
+    db = get_db()
+    rows = await db.fetch(
+        "SELECT DISTINCT camera FROM project_files WHERE camera IS NOT NULL ORDER BY camera"
+    )
+    return [row[0] for row in rows]
+
+
+async def get_distinct_lenses() -> List[str]:
+    """Return distinct non-null lens values across all project_files, sorted."""
+    db = get_db()
+    rows = await db.fetch(
+        "SELECT DISTINCT lens FROM project_files WHERE lens IS NOT NULL ORDER BY lens"
+    )
+    return [row[0] for row in rows]
 
 
 # ============================================================================

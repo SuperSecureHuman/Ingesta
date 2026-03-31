@@ -11,6 +11,9 @@ interface FileCardProps {
   onPlay: (path: string) => void;
   onSelectionChange: (path: string, type: 'file' | 'folder', selected: boolean) => void;
   onFolderOpen?: (path: string) => void;
+  camera?: string | null;
+  lens?: string | null;
+  onTagClick?: (path: string) => void;
 }
 
 function FileCard({
@@ -19,11 +22,14 @@ function FileCard({
   onPlay,
   onSelectionChange,
   onFolderOpen,
+  camera,
+  lens,
+  onTagClick,
 }: FileCardProps) {
   const isFolderOrVideo = entry.is_dir || entry.is_video;
 
   if (!isFolderOrVideo) {
-    return null; // Skip non-video non-dir entries
+    return null;
   }
 
   const handleCheckboxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -33,16 +39,12 @@ function FileCard({
   };
 
   const handleCardClick = (e: React.MouseEvent) => {
-    // Don't trigger play if clicking on checkbox
-    if ((e.target as HTMLElement).tagName === 'INPUT') {
-      return;
-    }
-    // Open folder if it's a directory
+    if ((e.target as HTMLElement).tagName === 'INPUT') return;
+    if ((e.target as HTMLElement).closest('button')) return;
     if (entry.is_dir) {
       onFolderOpen?.(entry.path);
       return;
     }
-    // Play on video files
     if (entry.is_video) {
       onPlay(entry.path);
     }
@@ -62,6 +64,18 @@ function FileCard({
         onChange={handleCheckboxChange}
       />
 
+      {entry.is_video && onTagClick && (
+        <div className="card-actions">
+          <button
+            className="icon-btn"
+            title="Source tags"
+            onClick={(e) => { e.stopPropagation(); onTagClick(entry.path); }}
+          >
+            🏷
+          </button>
+        </div>
+      )}
+
       {entry.is_dir ? (
         <div className="card-placeholder">📁</div>
       ) : (
@@ -80,6 +94,21 @@ function FileCard({
 
       <div className="card-title">{entry.name}</div>
       <div className="card-meta">{entry.is_dir ? 'Folder' : 'Video file'}</div>
+
+      {entry.is_video && (camera || lens) && (
+        <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', padding: '4px 8px 2px' }}>
+          {camera && (
+            <span style={{ fontSize: '11px', background: '#2a2a2a', border: '1px solid #444', borderRadius: '3px', padding: '1px 5px', color: '#bbb' }}>
+              {camera}
+            </span>
+          )}
+          {lens && (
+            <span style={{ fontSize: '11px', background: '#2a2a2a', border: '1px solid #444', borderRadius: '3px', padding: '1px 5px', color: '#bbb' }}>
+              {lens}
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 }

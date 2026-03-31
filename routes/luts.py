@@ -3,7 +3,7 @@ LUT (Look-Up Table) endpoints: browse, serve, and manage color profiles.
 """
 
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
@@ -48,6 +48,54 @@ async def get_lut_file(lut_id: str, _auth: dict = Depends(require_role('viewer')
         raise HTTPException(status_code=404, detail="LUT file missing from disk")
 
     return FileResponse(file_path, media_type="text/plain", filename=file_path.name)
+
+
+class SourceTagUpdate(BaseModel):
+    """Request body for updating file source tags."""
+    camera: Optional[str] = None
+    lens: Optional[str] = None
+
+
+class SourceTagsByPathsRequest(BaseModel):
+    """Request body for batch source-tag lookup by file paths."""
+    paths: List[str]
+
+
+class PathTagUpdate(BaseModel):
+    """Request body for setting camera/lens/lut by file path (library view)."""
+    path: str
+    camera: Optional[str] = None
+    lens: Optional[str] = None
+    lut_id: Optional[str] = None
+    lut_intensity: float = 1.0
+
+
+@router.get("/api/files/cameras")
+async def list_cameras(_auth: dict = Depends(require_role('viewer'))):
+    """Return distinct camera values recorded across all project files."""
+    cameras = await crud.get_distinct_cameras()
+    return {"cameras": cameras}
+
+
+@router.get("/api/files/lenses")
+async def list_lenses(_auth: dict = Depends(require_role('viewer'))):
+    """Return distinct lens values recorded across all project files."""
+    lenses = await crud.get_distinct_lenses()
+    return {"lenses": lenses}
+
+
+@router.post("/api/files/source-tags-by-paths")
+async def source_tags_by_paths(body: SourceTagsByPathsRequest, _auth: dict = Depends(require_role('viewer'))):
+    """Batch lookup of camera/lens tags by file path. Returns {path: {camera, lens}}."""
+    tags = await crud.get_source_tags_by_paths(body.paths)
+    return {"tags": tags}
+
+
+@router.put("/api/path-tags")
+async def put_path_tags(body: PathTagUpdate, _auth: dict = Depends(require_role('editor'))):
+    """Set camera/lens/lut for a file by path. Updates file_path_tags and syncs all project_files rows."""
+    await crud.upsert_file_path_tags(body.path, body.camera, body.lens, body.lut_id, body.lut_intensity)
+    return {"path": body.path, "camera": body.camera, "lens": body.lens, "lut_id": body.lut_id, "lut_intensity": body.lut_intensity}
 
 
 @router.get("/api/files/{file_id}/color-meta")
@@ -107,3 +155,10 @@ async def put_lut_pref(file_id: str, body: LutPrefUpdate, _auth: dict = Depends(
     # Upsert preference
     result = await crud.upsert_file_lut_pref(file_id, body.lut_id, body.intensity)
     return result
+
+
+@router.put("/api/files/{file_id}/source-tags")
+async def put_source_tags(file_id: str, body: SourceTagUpdate, _auth: dict = Depends(require_role('editor'))):
+    """Update camera and lens source tags for a file. Pass null to clear."""
+    await crud.update_file_source_tags(file_id, body.camera, body.lens)
+    return {"file_id": file_id, "camera": body.camera, "lens": body.lens}
