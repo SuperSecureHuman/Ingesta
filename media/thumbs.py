@@ -9,6 +9,11 @@ import os
 from pathlib import Path
 from typing import Optional
 
+from config import settings
+from logger import get_logger
+
+logger = get_logger(__name__)
+
 THUMB_DIR = Path(os.getenv("THUMB_DIR", "/tmp/hls_thumbs"))
 
 
@@ -32,7 +37,7 @@ async def extract_frame(
     Returns:
         True if extraction succeeded (output file exists), False otherwise.
     """
-    cmd = ["ffmpeg"]
+    cmd = [settings.ffmpeg_path]
 
     if fast:
         cmd.extend(["-skip_frame", "nokey"])
@@ -60,11 +65,28 @@ async def extract_frame(
         proc = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.PIPE,
         )
-        await asyncio.wait_for(proc.wait(), timeout=10.0)
-        return output_path.exists()
-    except (asyncio.TimeoutError, OSError):
+        try:
+            _, stderr = await asyncio.wait_for(proc.communicate(), timeout=10.0)
+        except asyncio.TimeoutError:
+            proc.kill()
+            logger.warning("Thumbnail extraction timed out", extra={"path": source_path})
+            return False
+        if not output_path.exists():
+            logger.warning(
+                "Thumbnail extraction failed",
+                extra={
+                    "path": source_path,
+                    "offset": offset_sec,
+                    "returncode": proc.returncode,
+                    "stderr": stderr.decode("utf-8", errors="replace").strip(),
+                },
+            )
+            return False
+        return True
+    except OSError as e:
+        logger.error("Failed to launch ffmpeg for thumbnail", extra={"path": source_path, "error": str(e)})
         return False
 
 

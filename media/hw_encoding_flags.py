@@ -22,10 +22,11 @@ def build_hwaccel_input_args(encoder: str) -> list[str]:
         return [
             "-init_hw_device",
             "vaapi=va:/dev/dri/renderD128,driver=iHD",
-            "-init_hw_device",
-            "qsv=qs@va",
-            "-filter_hw_device",
-            "qs",
+            # TODO: Find what this does in jellyfin that falis in this version
+            # "-init_hw_device",
+            # "qsv=qs@va",
+            # "-filter_hw_device",
+            # "qs",
             "-hwaccel",
             "vaapi",
             "-hwaccel_output_format",
@@ -112,11 +113,15 @@ def build_video_codec_args(
         if max_height:
             # Use hardware-accelerated scaler based on encoder
             if encoder == "h264_qsv":
-                filters.append(f"scale_vaapi=w=-2:h='min(ih,{max_height})':format=nv12:extra_hw_frames=24")
+                filters.append(
+                    f"scale_vaapi=w=-2:h='min(ih,{max_height})':format=nv12:extra_hw_frames=24"
+                )
                 # Map VAAPI output to QSV
                 filters.append("hwmap=derive_device=qsv,format=qsv")
             elif encoder == "h264_vaapi":
-                filters.append(f"scale_vaapi=w=-2:h='min(ih,{max_height})':format=nv12:extra_hw_frames=24")
+                filters.append(
+                    f"scale_vaapi=w=-2:h='min(ih,{max_height})':format=nv12:extra_hw_frames=24"
+                )
             else:
                 # Software scale for other encoders
                 filters.append(f"scale=w=-2:h='min(ih,{max_height})'")
