@@ -1,8 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { apiFetch } from '@/lib/api';
 import { Library, Project } from '@/lib/types';
+import { slugify } from '@/lib/utils';
 import { useToast } from '@/context/ToastContext';
 import { useAppContext } from '@/context/AppContext';
 import { usePanels } from '@/hooks/usePanels';
@@ -15,8 +17,9 @@ import CreateProjectPanel from '@/components/panels/CreateProjectPanel';
 export default function HomeView() {
   const [libraries, setLibraries] = useState<Library[]>([]);
   const [loading, setLoading] = useState(true);
+  const router = useRouter();
   const { showToast } = useToast();
-  const { setCurrentView, setCurrentLibraryId, setCurrentLibrary, setCurrentProjectId, setProjects, projects } = useAppContext();
+  const { setProjects, projects } = useAppContext();
   const { activePanel, openPanel, closePanel } = usePanels();
 
   useEffect(() => {
@@ -46,16 +49,11 @@ export default function HomeView() {
   };
 
   const handleSelectLibrary = (lib: Library) => {
-    setCurrentLibraryId(lib.id);
-    setCurrentLibrary(lib);
-    setCurrentProjectId(null);
-    setCurrentView('library');
+    router.push(`/library/${slugify(lib.name)}`);
   };
 
   const handleSelectProject = (projId: string) => {
-    setCurrentProjectId(projId);
-    setCurrentLibraryId(null);
-    setCurrentView('project');
+    router.push(`/project/${projId}`);
   };
 
   const handleDeleteLibrary = async (libId: string) => {

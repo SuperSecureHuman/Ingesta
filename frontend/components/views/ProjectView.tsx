@@ -1,21 +1,22 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { apiFetch } from '@/lib/api';
 import { ProjectFile, PanelName } from '@/lib/types';
 import { getFileName } from '@/lib/utils';
 import { useToast } from '@/context/ToastContext';
-import { useAppContext } from '@/context/AppContext';
 import { usePlayerContext } from '@/context/PlayerContext';
 import ConfirmOverlay from '@/components/ui/ConfirmOverlay';
 import Spinner from '@/components/ui/Spinner';
 
 interface ProjectViewProps {
-  onOpenPanel: (panel: PanelName) => void;
+  projectId: string;
+  onOpenPanel?: (panel: PanelName) => void;
 }
 
-export default function ProjectView({ onOpenPanel }: ProjectViewProps) {
-  const { currentProjectId, setCurrentView } = useAppContext();
+export default function ProjectView({ projectId, onOpenPanel }: ProjectViewProps) {
+  const router = useRouter();
   const { showToast } = useToast();
   const { startPlayback } = usePlayerContext();
   const [loading, setLoading] = useState(true);
@@ -24,21 +25,16 @@ export default function ProjectView({ onOpenPanel }: ProjectViewProps) {
   const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
-    if (!currentProjectId) {
-      setCurrentView('home');
-      return;
-    }
     loadProjectFiles();
-  }, [currentProjectId]);
+  }, [projectId]);
 
   const loadProjectFiles = async () => {
-    if (!currentProjectId) return;
     try {
       setLoading(true);
-      const res = await apiFetch(`/api/projects/${currentProjectId}`);
+      const res = await apiFetch(`/api/projects/${projectId}`);
       if (!res.ok) {
         showToast('Failed to load project', 'error');
-        setCurrentView('home');
+        router.replace('/');
         return;
       }
 
@@ -52,11 +48,9 @@ export default function ProjectView({ onOpenPanel }: ProjectViewProps) {
   };
 
   const handleDeleteProject = async () => {
-    if (!currentProjectId) return;
-
     try {
       setDeleting(true);
-      const res = await apiFetch(`/api/projects/${currentProjectId}`, {
+      const res = await apiFetch(`/api/projects/${projectId}`, {
         method: 'DELETE',
       });
 
@@ -65,7 +59,7 @@ export default function ProjectView({ onOpenPanel }: ProjectViewProps) {
       }
 
       showToast('Project deleted', 'success');
-      setCurrentView('home');
+      router.push('/');
     } catch (e) {
       showToast(`${e}`, 'error');
     } finally {
@@ -91,13 +85,13 @@ export default function ProjectView({ onOpenPanel }: ProjectViewProps) {
       <div className="library-toolbar">
         <button
           className="btn btn-primary btn-sm"
-          onClick={() => onOpenPanel('createShare')}
+          onClick={() => onOpenPanel?.('createShare')}
         >
           Create Share
         </button>
         <button
           className="btn btn-secondary btn-sm"
-          onClick={() => onOpenPanel('shareLinks')}
+          onClick={() => onOpenPanel?.('shareLinks')}
         >
           Share Links
         </button>

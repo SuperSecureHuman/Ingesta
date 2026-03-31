@@ -1,4 +1,3 @@
-export type ViewName = 'home' | 'library' | 'project';
 export type PanelName = 'createLibrary' | 'createProject' | 'createShare' | 'shareLinks' | 'addToProject' | null;
 
 export interface User {

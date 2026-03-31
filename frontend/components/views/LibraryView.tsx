@@ -1,10 +1,11 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { apiFetch } from '@/lib/api';
-import { BrowseResult, PanelName, SelectionItem } from '@/lib/types';
+import { Library, BrowseResult, PanelName, SelectionItem } from '@/lib/types';
+import { slugify } from '@/lib/utils';
 import { useToast } from '@/context/ToastContext';
-import { useAppContext } from '@/context/AppContext';
 import { usePlayerContext } from '@/context/PlayerContext';
 import { useSelection } from '@/hooks/useSelection';
 import Spinner from '@/components/ui/Spinner';
@@ -12,47 +13,81 @@ import FileCard from '@/components/cards/FileCard';
 import SelectionToolbar from '@/components/ui/SelectionToolbar';
 
 interface LibraryViewProps {
-  onOpenPanel: (panelName: PanelName) => void;
+  librarySlug: string;
+  folderPath: string[];
+  onOpenPanel?: (panelName: PanelName) => void;
+  onLibraryResolved?: (libraryId: string, libraryName: string) => void;
+}
+
+// Strip the library root_path prefix and return relative URL segments.
+// e.g. root="/media/lib", abs="/media/lib/fpv/day1" → ["fpv", "day1"]
+function toUrlSegments(absolutePath: string, rootPath: string): string[] {
+  if (absolutePath === rootPath) return [];
+  const prefix = rootPath.endsWith('/') ? rootPath : rootPath + '/';
+  const relative = absolutePath.startsWith(prefix)
+    ? absolutePath.slice(prefix.length)
+    : absolutePath;
+  return relative.split('/').filter(Boolean);
+}
+
+// Reconstruct absolute path from root + relative segments.
+function toAbsolutePath(rootPath: string, segments: string[]): string {
+  if (segments.length === 0) return rootPath;
+  return rootPath + '/' + segments.join('/');
 }
 
 export default function LibraryView({
+  librarySlug,
+  folderPath,
   onOpenPanel,
+  onLibraryResolved,
 }: LibraryViewProps) {
-  const { currentLibraryId, currentLibrary, setCurrentView } = useAppContext();
+  const router = useRouter();
   const { showToast } = useToast();
   const { startPlayback } = usePlayerContext();
   const { selectedItems, updateSelection, clearSelection } = useSelection();
+  const [library, setLibrary] = useState<Library | null>(null);
   const [loading, setLoading] = useState(true);
   const [files, setFiles] = useState<BrowseResult | null>(null);
-  const [currentPath, setCurrentPath] = useState<string>('');
 
+  // Find library by matching its slugified name
   useEffect(() => {
-    if (!currentLibraryId || !currentLibrary) {
-      setCurrentView('home');
-      return;
-    }
-    // Initialize to root path
-    setCurrentPath(currentLibrary.root_path);
-    loadLibraryFiles(currentLibrary.root_path);
-  }, [currentLibraryId, currentLibrary, setCurrentView]);
+    apiFetch('/api/libraries')
+      .then((res) => res.json())
+      .then((data) => {
+        const found = (data.libraries as Library[]).find(
+          (l) => slugify(l.name) === librarySlug
+        );
+        if (!found) {
+          router.replace('/');
+          return;
+        }
+        setLibrary(found);
+        onLibraryResolved?.(found.id, found.name);
+      })
+      .catch(() => router.replace('/'));
+  }, [librarySlug]);
+
+  // Reload files whenever library resolves or folderPath changes
+  useEffect(() => {
+    if (!library) return;
+    const absolutePath = toAbsolutePath(library.root_path, folderPath);
+    loadLibraryFiles(absolutePath);
+  }, [library, folderPath.join('/')]);
 
   const loadLibraryFiles = async (path: string) => {
-    if (!currentLibraryId || !currentLibrary) return;
+    if (!library) return;
     try {
       setLoading(true);
-
-      // Browse the given path
       const browseRes = await apiFetch(
-        `/api/libraries/${currentLibraryId}/browse?path=${encodeURIComponent(path)}`
+        `/api/libraries/${library.id}/browse?path=${encodeURIComponent(path)}`
       );
       if (!browseRes.ok) {
         showToast('Failed to load files', 'error');
         return;
       }
-
       const browseData = await browseRes.json();
       setFiles(browseData);
-      setCurrentPath(path);
     } catch (e) {
       showToast(`Error: ${e}`, 'error');
     } finally {
@@ -60,19 +95,27 @@ export default function LibraryView({
     }
   };
 
-  const handleFolderOpen = (folderPath: string) => {
-    loadLibraryFiles(folderPath);
+  const handleFolderOpen = (absoluteFolderPath: string) => {
+    if (!library) return;
+    const segments = toUrlSegments(absoluteFolderPath, library.root_path);
+    const url = segments.length
+      ? `/library/${librarySlug}/${segments.map(encodeURIComponent).join('/')}`
+      : `/library/${librarySlug}`;
+    router.push(url);
   };
 
   const handleNavigateBack = () => {
-    if (files?.parent) {
-      loadLibraryFiles(files.parent);
-    }
+    if (!library || !files?.parent) return;
+    const segments = toUrlSegments(files.parent, library.root_path);
+    const url = segments.length
+      ? `/library/${librarySlug}/${segments.map(encodeURIComponent).join('/')}`
+      : `/library/${librarySlug}`;
+    router.push(url);
   };
 
   const handleAddEntireLibrary = () => {
     clearSelection();
-    onOpenPanel('addToProject');
+    onOpenPanel?.('addToProject');
   };
 
   const handleFilePlay = useCallback((path: string) => {
@@ -100,7 +143,7 @@ export default function LibraryView({
     <div>
       <div className="section-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          {currentPath && currentPath !== currentLibrary?.root_path && (
+          {files.parent !== null && (
             <button className="btn btn-sm" onClick={handleNavigateBack}>
               ← Back
             </button>
@@ -131,7 +174,7 @@ export default function LibraryView({
       </div>
       <SelectionToolbar
         count={selectedItems.size}
-        onAddToProject={() => onOpenPanel('addToProject')}
+        onAddToProject={() => onOpenPanel?.('addToProject')}
         onClear={clearSelection}
       />
     </div>

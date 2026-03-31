@@ -66,3 +66,10 @@ export function getResolutionLabel(height: number): string {
 export function getFileName(path: string): string {
   return path.split('/').pop() || path;
 }
+
+export function slugify(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+}

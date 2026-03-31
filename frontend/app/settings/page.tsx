@@ -1,15 +1,15 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import LoginForm from '@/components/auth/LoginForm';
-import AppShell from '@/components/layout/AppShell';
-import HomeView from '@/components/views/HomeView';
-import { PlayerContextProvider } from '@/context/PlayerContext';
-import { LutContextProvider } from '@/context/LutContext';
+import { useRouter } from 'next/navigation';
 import { useAppContext } from '@/context/AppContext';
 import { useAuth } from '@/hooks/useAuth';
+import AppShell from '@/components/layout/AppShell';
+import { PlayerContextProvider } from '@/context/PlayerContext';
+import { LutContextProvider } from '@/context/LutContext';
 
-export default function Home() {
+export default function SettingsPage() {
+  const router = useRouter();
   const { currentUser, setCurrentUser } = useAppContext();
   const { checkAuth } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
@@ -19,11 +19,13 @@ export default function Home() {
       const user = await checkAuth();
       if (user) {
         setCurrentUser(user);
+      } else {
+        router.replace('/');
       }
       setIsLoading(false);
     };
     initAuth();
-  }, [checkAuth, setCurrentUser]);
+  }, []);
 
   if (isLoading) {
     return (
@@ -33,15 +35,16 @@ export default function Home() {
     );
   }
 
-  if (!currentUser) {
-    return <LoginForm onLoginSuccess={setCurrentUser} />;
-  }
+  if (!currentUser) return null;
 
   return (
     <LutContextProvider>
       <PlayerContextProvider>
         <AppShell>
-          <HomeView />
+          <div style={{ padding: '40px' }}>
+            <h2>Settings</h2>
+            <p style={{ color: 'var(--color-muted)' }}>Coming soon.</p>
+          </div>
         </AppShell>
       </PlayerContextProvider>
     </LutContextProvider>

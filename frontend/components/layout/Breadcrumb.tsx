@@ -1,39 +1,56 @@
 'use client';
 
-import { useAppContext } from '@/context/AppContext';
+import Link from 'next/link';
+import { usePathname, useParams } from 'next/navigation';
 
-export default function Breadcrumb() {
-  const { currentView, setCurrentView, currentLibrary } = useAppContext();
+interface BreadcrumbProps {
+  libraryName?: string;
+}
 
-  const handleHomeClick = () => {
-    setCurrentView('home');
-  };
+export default function Breadcrumb({ libraryName }: BreadcrumbProps) {
+  const pathname = usePathname();
+  const params = useParams();
+
+  const isHome = pathname === '/';
+  const librarySlug = params.librarySlug as string | undefined;
+  const folderSegments = (params.folderPath as string[] | undefined) ?? [];
+
+  if (isHome) {
+    return <div className="breadcrumb"><span>Home</span></div>;
+  }
 
   return (
     <div className="breadcrumb">
-      {currentView === 'home' ? (
-        <span>Home</span>
-      ) : (
+      <Link href="/">Home</Link>
+
+      {librarySlug && (
         <>
-          <a onClick={handleHomeClick} style={{ cursor: 'pointer' }}>
-            Home
-          </a>
           <span> › </span>
-          {currentView === 'library' ? (
-            <>
-              <span>Libraries</span>
-              {currentLibrary && (
-                <>
-                  <span> › </span>
-                  <span>{currentLibrary.name}</span>
-                </>
-              )}
-            </>
-          ) : (
-            <span>Projects</span>
-          )}
+          <Link href={`/library/${librarySlug}`}>
+            {libraryName ?? librarySlug}
+          </Link>
+          {folderSegments.map((segment, i) => {
+            const href = `/library/${librarySlug}/${folderSegments
+              .slice(0, i + 1)
+              .map(encodeURIComponent)
+              .join('/')}`;
+            const isLast = i === folderSegments.length - 1;
+            return (
+              <span key={href}>
+                <span> › </span>
+                {isLast ? (
+                  <span>{decodeURIComponent(segment)}</span>
+                ) : (
+                  <Link href={href}>{decodeURIComponent(segment)}</Link>
+                )}
+              </span>
+            );
+          })}
         </>
       )}
+
+      {pathname.startsWith('/project/') && <><span> › </span><span>Project</span></>}
+      {pathname.startsWith('/settings') && <><span> › </span><span>Settings</span></>}
     </div>
   );
 }

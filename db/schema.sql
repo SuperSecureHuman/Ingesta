@@ -4,7 +4,7 @@
 -- Libraries: named roots pointing to filesystem directories
 CREATE TABLE IF NOT EXISTS libraries (
     id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
+    name TEXT NOT NULL UNIQUE COLLATE NOCASE,
     root_path TEXT NOT NULL,
     created_at TEXT NOT NULL
 );

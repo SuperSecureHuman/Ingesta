@@ -26,11 +26,16 @@ def _new_uuid() -> str:
 
 
 async def create_library(name: str, root_path: str) -> str:
-    """Create a new library. Returns the library ID."""
+    """Create a new library. Returns the library ID. Raises ValueError on duplicate name."""
+    db = get_db()
+    existing = await db.fetchone(
+        "SELECT id FROM libraries WHERE LOWER(name) = LOWER(?)", (name,)
+    )
+    if existing:
+        raise ValueError(f"A library named '{name}' already exists")
+
     library_id = _new_uuid()
     created_at = _now_iso()
-
-    db = get_db()
     await db.execute(
         "INSERT INTO libraries (id, name, root_path, created_at) VALUES (?, ?, ?, ?)",
         (library_id, name, root_path, created_at),

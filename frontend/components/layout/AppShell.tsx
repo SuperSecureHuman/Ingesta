@@ -8,16 +8,20 @@ import { usePanels } from '@/hooks/usePanels';
 import { usePlayerContext } from '@/context/PlayerContext';
 import Header from './Header';
 import Breadcrumb from './Breadcrumb';
-import HomeView from '@/components/views/HomeView';
-import LibraryView from '@/components/views/LibraryView';
-import ProjectView from '@/components/views/ProjectView';
 import AddToProjectPanel from '@/components/panels/AddToProjectPanel';
 import CreateSharePanel from '@/components/panels/CreateSharePanel';
 import ShareLinksPanel from '@/components/panels/ShareLinksPanel';
 import PlayerContainer from '@/components/player/PlayerContainer';
 
-export default function AppShell() {
-  const { currentView, currentUser, currentLibraryId, currentProjectId } = useAppContext();
+interface AppShellProps {
+  children: React.ReactNode;
+  libraryId?: string;
+  libraryName?: string;
+  projectId?: string;
+}
+
+export default function AppShell({ children, libraryId, libraryName, projectId }: AppShellProps) {
+  const { currentUser } = useAppContext();
   const { isVisible } = usePlayerContext();
   const { logout } = useAuth();
   const { selectedItems, clearSelection } = useSelection();
@@ -40,15 +44,9 @@ export default function AppShell() {
     <>
       <div id="idleContainer" className="show" style={isVisible ? { display: 'none' } : undefined}>
         <Header currentUser={currentUser} onLogout={handleLogout} />
-        <Breadcrumb />
+        <Breadcrumb libraryName={libraryName} />
         <main id="mainContent">
-          {currentView === 'home' && <HomeView />}
-          {currentView === 'library' && (
-            <LibraryView
-              onOpenPanel={openPanel}
-            />
-          )}
-          {currentView === 'project' && <ProjectView onOpenPanel={openPanel} />}
+          {children}
         </main>
 
         <AddToProjectPanel
@@ -56,20 +54,20 @@ export default function AppShell() {
           onClose={closePanel}
           onSuccess={handleAddSuccess}
           selectedItems={selectedItems}
-          currentLibraryId={currentLibraryId}
+          currentLibraryId={libraryId ?? null}
         />
 
         <CreateSharePanel
           isOpen={activePanel === 'createShare'}
           onClose={closePanel}
-          currentProjectId={currentProjectId}
+          currentProjectId={projectId ?? null}
           onOpenShareLinks={handleOpenShareLinks}
         />
 
         <ShareLinksPanel
           isOpen={activePanel === 'shareLinks'}
           onClose={closePanel}
-          currentProjectId={currentProjectId}
+          currentProjectId={projectId ?? null}
         />
       </div>
       <PlayerContainer />

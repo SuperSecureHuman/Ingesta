@@ -61,7 +61,10 @@ async def create_library(
     if not root.is_dir():
         raise HTTPException(400, "root_path must be a directory")
 
-    library_id = await crud.create_library(req.name, str(root))
+    try:
+        library_id = await crud.create_library(req.name, str(root))
+    except ValueError as e:
+        raise HTTPException(409, str(e))
     return {"id": library_id, "name": req.name, "root_path": str(root)}
 
 
