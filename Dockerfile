@@ -15,7 +15,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 RUN wget https://github.com/jellyfin/jellyfin-ffmpeg/releases/download/v7.1.3-4/jellyfin-ffmpeg_7.1.3-4_portable_linux64-gpl.tar.xz
 
-RUN tar -xf jellyfin-ffmpeg_7.1.3-4_portable_linux64-gpl.tar.xz -C /app --strip-components=1 --no-same-owner
+RUN tar -xf jellyfin-ffmpeg_7.1.3-4_portable_linux64-gpl.tar.xz -C /app
 
 RUN rm -rf /var/lib/apt/lists/*
 
