@@ -9,7 +9,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libva-drm2 \
     libdrm2 \
     intel-gpu-tools \
-    intel-media-va-driver mesa-va-drivers i965-va-driver libva2 libva-drm2 libva-x11-2 libvpl2 vainfo
+    intel-media-va-driver mesa-va-drivers \
+    i965-va-driver libva2 libva-drm2 libva-x11-2 libvpl2 vainfo \
+    wget
 
 RUN wget https://github.com/jellyfin/jellyfin-ffmpeg/releases/download/v7.1.3-4/jellyfin-ffmpeg7_7.1.3-4-trixie_amd64.deb
 
