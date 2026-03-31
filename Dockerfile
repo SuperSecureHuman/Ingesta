@@ -5,13 +5,19 @@ WORKDIR /app
 
 # Install system dependencies (ffmpeg + Intel QSV/VAAPI support)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ffmpeg \
     libva2 \
     libva-drm2 \
     libdrm2 \
     intel-gpu-tools \
-    intel-media-va-driver mesa-va-drivers i965-va-driver libva2 libva-drm2 libva-x11-2 libvpl2 vainfo \
-    && rm -rf /var/lib/apt/lists/*
+    intel-media-va-driver mesa-va-drivers i965-va-driver libva2 libva-drm2 libva-x11-2 libvpl2 vainfo
+
+RUN wget https://github.com/jellyfin/jellyfin-ffmpeg/releases/download/v7.1.3-4/jellyfin-ffmpeg7_7.1.3-4-trixie_amd64.deb
+
+RUN apt-get install -y ./jellyfin-ffmpeg7_7.1.3-4-trixie_amd64.deb
+
+RUN rm -rf /var/lib/apt/lists/*
+
+RUN apt-get clean
 
 # Copy requirements and install Python dependencies
 COPY requirements.txt .
