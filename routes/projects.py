@@ -12,7 +12,7 @@ from pydantic import BaseModel
 
 from config import settings
 import db.crud as crud
-from routes.deps import require_auth, MEDIA_ROOT
+from routes.deps import require_auth, require_role, MEDIA_ROOT
 from routes.utils import async_rglob
 
 
@@ -35,7 +35,7 @@ class AddFilesRequest(BaseModel):
 @router.get("")
 async def list_projects(
     library_id: Optional[str] = None,
-    _auth: str = Depends(require_auth),
+    _auth: dict = Depends(require_role('viewer')),
 ):
     """List all projects, optionally filtered by library."""
     projects = await crud.get_projects(library_id=library_id)
@@ -45,7 +45,7 @@ async def list_projects(
 @router.post("")
 async def create_project(
     req: CreateProjectRequest,
-    _auth: str = Depends(require_auth),
+    _auth: dict = Depends(require_role('editor')),
 ):
     """Create a new project."""
     # If library_id is provided, verify it exists
@@ -61,7 +61,7 @@ async def create_project(
 @router.get("/{project_id}")
 async def get_project(
     project_id: str,
-    _auth: str = Depends(require_auth),
+    _auth: dict = Depends(require_role('viewer')),
 ):
     """Get project details and file list with metadata."""
     project = await crud.get_project(project_id)
@@ -79,7 +79,7 @@ async def get_project(
 async def add_files_to_project(
     project_id: str,
     req: AddFilesRequest,
-    _auth: str = Depends(require_auth),
+    _auth: dict = Depends(require_role('editor')),
 ):
     """Add files to a project (paths are marked as pending scan)."""
     project = await crud.get_project(project_id)
@@ -146,7 +146,7 @@ async def add_files_to_project(
 async def remove_files_from_project(
     project_id: str,
     req: AddFilesRequest,
-    _auth: str = Depends(require_auth),
+    _auth: dict = Depends(require_role('editor')),
 ):
     """Remove files from a project."""
     project = await crud.get_project(project_id)
@@ -187,7 +187,7 @@ async def remove_files_from_project(
 @router.delete("/{project_id}")
 async def delete_project(
     project_id: str,
-    _auth: str = Depends(require_auth),
+    _auth: dict = Depends(require_role('editor')),
 ):
     """Delete a project and all its files."""
     project = await crud.get_project(project_id)
@@ -228,7 +228,7 @@ class BulkAddLibraryRequest(BaseModel):
 async def add_folder_to_project(
     project_id: str,
     req: BulkAddFolderRequest,
-    _auth: str = Depends(require_auth),
+    _auth: dict = Depends(require_role('editor')),
 ):
     """Add all video files from a folder (recursively) to a project."""
     project = await crud.get_project(project_id)
@@ -293,7 +293,7 @@ async def add_folder_to_project(
 async def add_library_to_project(
     project_id: str,
     req: BulkAddLibraryRequest,
-    _auth: str = Depends(require_auth),
+    _auth: dict = Depends(require_role('editor')),
 ):
     """Add all video files from a library (recursively) to a project."""
     project = await crud.get_project(project_id)

@@ -1,16 +1,19 @@
 import { useCallback } from 'react';
 import { apiFetch } from '@/lib/api';
 import { useToast } from '@/context/ToastContext';
+import { useAppContext } from '@/context/AppContext';
+import { User } from '@/lib/types';
 
 export function useAuth() {
   const { showToast } = useToast();
+  const { currentUser } = useAppContext();
 
-  const checkAuth = useCallback(async (): Promise<string | null> => {
+  const checkAuth = useCallback(async (): Promise<User | null> => {
     try {
       const res = await apiFetch('/api/auth/me');
       if (res.ok) {
         const data = await res.json();
-        return data.username;
+        return { username: data.username, role: data.role };
       }
       return null;
     } catch (e) {
@@ -19,7 +22,7 @@ export function useAuth() {
   }, []);
 
   const login = useCallback(
-    async (username: string, password: string): Promise<string | null> => {
+    async (username: string, password: string): Promise<User | null> => {
       try {
         const res = await apiFetch('/api/auth/login', {
           method: 'POST',
@@ -34,7 +37,7 @@ export function useAuth() {
 
         const data = await res.json();
         showToast('Logged in successfully', 'success');
-        return data.username;
+        return { username: data.username, role: data.role };
       } catch (e) {
         showToast(`Network error: ${e}`, 'error');
         return null;
@@ -52,5 +55,18 @@ export function useAuth() {
     }
   }, [showToast]);
 
-  return { checkAuth, login, logout };
+  const isAdmin = useCallback((): boolean => {
+    return currentUser?.role === 'admin';
+  }, [currentUser]);
+
+  const canEdit = useCallback((_libraryId?: string): boolean => {
+    if (!currentUser) return false;
+    return currentUser.role === 'admin' || currentUser.role === 'editor';
+  }, [currentUser]);
+
+  const isViewer = useCallback((): boolean => {
+    return currentUser?.role === 'viewer';
+  }, [currentUser]);
+
+  return { checkAuth, login, logout, isAdmin, canEdit, isViewer };
 }

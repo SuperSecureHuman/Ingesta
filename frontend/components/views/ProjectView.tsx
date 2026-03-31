@@ -7,6 +7,7 @@ import { ProjectFile, PanelName } from '@/lib/types';
 import { getFileName } from '@/lib/utils';
 import { useToast } from '@/context/ToastContext';
 import { usePlayerContext } from '@/context/PlayerContext';
+import { useAuth } from '@/hooks/useAuth';
 import ConfirmOverlay from '@/components/ui/ConfirmOverlay';
 import Spinner from '@/components/ui/Spinner';
 
@@ -19,6 +20,7 @@ export default function ProjectView({ projectId, onOpenPanel }: ProjectViewProps
   const router = useRouter();
   const { showToast } = useToast();
   const { startPlayback } = usePlayerContext();
+  const { canEdit } = useAuth();
   const [loading, setLoading] = useState(true);
   const [files, setFiles] = useState<ProjectFile[]>([]);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -95,12 +97,14 @@ export default function ProjectView({ projectId, onOpenPanel }: ProjectViewProps
         >
           Share Links
         </button>
-        <button
-          className="btn btn-danger btn-sm"
-          onClick={() => setShowDeleteConfirm(true)}
-        >
-          Delete Project
-        </button>
+        {canEdit() && (
+          <button
+            className="btn btn-danger btn-sm"
+            onClick={() => setShowDeleteConfirm(true)}
+          >
+            Delete Project
+          </button>
+        )}
       </div>
       <div className="grid">
         {files.length === 0 ? (

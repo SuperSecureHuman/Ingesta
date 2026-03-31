@@ -7,6 +7,7 @@ import { Library, Project } from '@/lib/types';
 import { slugify } from '@/lib/utils';
 import { useToast } from '@/context/ToastContext';
 import { useAppContext } from '@/context/AppContext';
+import { useAuth } from '@/hooks/useAuth';
 import { usePanels } from '@/hooks/usePanels';
 import LibraryCard from '@/components/cards/LibraryCard';
 import ProjectCard from '@/components/cards/ProjectCard';
@@ -21,6 +22,7 @@ export default function HomeView() {
   const { showToast } = useToast();
   const { setProjects, projects } = useAppContext();
   const { activePanel, openPanel, closePanel } = usePanels();
+  const { isAdmin, canEdit } = useAuth();
 
   useEffect(() => {
     loadData();
@@ -96,12 +98,14 @@ export default function HomeView() {
     <div>
       <div className="section-header">
         <h2>Libraries</h2>
-        <button
-          className="btn btn-primary btn-sm"
-          onClick={() => openPanel('createLibrary')}
-        >
-          + New Library
-        </button>
+        {isAdmin() && (
+          <button
+            className="btn btn-primary btn-sm"
+            onClick={() => openPanel('createLibrary')}
+          >
+            + New Library
+          </button>
+        )}
       </div>
       <div className="grid">
         {libraries.length === 0 ? (
@@ -118,7 +122,7 @@ export default function HomeView() {
               key={lib.id}
               library={lib}
               onSelect={() => handleSelectLibrary(lib)}
-              onDelete={handleDeleteLibrary}
+              onDelete={isAdmin() ? handleDeleteLibrary : undefined}
             />
           ))
         )}
@@ -126,12 +130,14 @@ export default function HomeView() {
 
       <div className="section-header">
         <h2>Projects</h2>
-        <button
-          className="btn btn-primary btn-sm"
-          onClick={() => openPanel('createProject')}
-        >
-          + New Project
-        </button>
+        {canEdit() && (
+          <button
+            className="btn btn-primary btn-sm"
+            onClick={() => openPanel('createProject')}
+          >
+            + New Project
+          </button>
+        )}
       </div>
       <div className="grid">
         {projects.length === 0 ? (
@@ -148,29 +154,33 @@ export default function HomeView() {
               key={proj.id}
               project={proj}
               onSelect={() => handleSelectProject(proj.id)}
-              onDelete={handleDeleteProject}
+              onDelete={canEdit() ? handleDeleteProject : undefined}
             />
           ))
         )}
       </div>
 
-      <CreateLibraryPanel
-        isOpen={activePanel === 'createLibrary'}
-        onClose={closePanel}
-        onSuccess={() => {
-          closePanel();
-          loadData();
-        }}
-      />
+      {isAdmin() && (
+        <CreateLibraryPanel
+          isOpen={activePanel === 'createLibrary'}
+          onClose={closePanel}
+          onSuccess={() => {
+            closePanel();
+            loadData();
+          }}
+        />
+      )}
 
-      <CreateProjectPanel
-        isOpen={activePanel === 'createProject'}
-        onClose={closePanel}
-        onSuccess={() => {
-          closePanel();
-          loadData();
-        }}
-      />
+      {canEdit() && (
+        <CreateProjectPanel
+          isOpen={activePanel === 'createProject'}
+          onClose={closePanel}
+          onSuccess={() => {
+            closePanel();
+            loadData();
+          }}
+        />
+      )}
     </div>
   );
 }

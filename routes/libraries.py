@@ -11,7 +11,7 @@ from pydantic import BaseModel
 
 from config import settings
 import db.crud as crud
-from routes.deps import require_auth
+from routes.deps import require_auth, require_role, require_library_access
 from routes.utils import async_iterdir
 
 
@@ -42,7 +42,7 @@ def validate_path_in_root(path: str, root_path: str) -> Path:
 
 
 @router.get("")
-async def list_libraries(_auth: str = Depends(require_auth)):
+async def list_libraries(_auth: dict = Depends(require_role('viewer'))):
     """List all libraries."""
     libraries = await crud.get_libraries()
     return {"libraries": libraries}
@@ -51,7 +51,7 @@ async def list_libraries(_auth: str = Depends(require_auth)):
 @router.post("", status_code=201)
 async def create_library(
     req: CreateLibraryRequest,
-    _auth: str = Depends(require_auth),
+    _auth: dict = Depends(require_role('admin')),
 ):
     """Create a new library."""
     # Validate root_path exists and is a directory
@@ -71,7 +71,7 @@ async def create_library(
 @router.get("/{library_id}")
 async def get_library(
     library_id: str,
-    _auth: str = Depends(require_auth),
+    _auth: dict = Depends(require_role('viewer')),
 ):
     """Get a single library's details."""
     library = await crud.get_library(library_id)
@@ -83,7 +83,7 @@ async def get_library(
 @router.delete("/{library_id}")
 async def delete_library(
     library_id: str,
-    _auth: str = Depends(require_auth),
+    _auth: dict = Depends(require_role('admin')),
 ):
     """Delete a library."""
     library = await crud.get_library(library_id)
@@ -98,7 +98,7 @@ async def delete_library(
 async def browse_library(
     library_id: str,
     path: str = Query("/"),
-    _auth: str = Depends(require_auth),
+    _auth: dict = Depends(require_library_access('viewer')),
 ):
     """Browse files in a library (scoped to library's root_path)."""
     library = await crud.get_library(library_id)

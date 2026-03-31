@@ -7,6 +7,7 @@ import { useAuth } from '@/hooks/useAuth';
 import AppShell from '@/components/layout/AppShell';
 import { PlayerContextProvider } from '@/context/PlayerContext';
 import { LutContextProvider } from '@/context/LutContext';
+import SettingsView from '@/components/views/SettingsView';
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -19,8 +20,13 @@ export default function SettingsPage() {
       const user = await checkAuth();
       if (user) {
         setCurrentUser(user);
+        if (user.role !== 'admin') {
+          router.replace('/');
+          return;
+        }
       } else {
         router.replace('/');
+        return;
       }
       setIsLoading(false);
     };
@@ -41,10 +47,7 @@ export default function SettingsPage() {
     <LutContextProvider>
       <PlayerContextProvider>
         <AppShell>
-          <div style={{ padding: '40px' }}>
-            <h2>Settings</h2>
-            <p style={{ color: 'var(--color-muted)' }}>Coming soon.</p>
-          </div>
+          <SettingsView />
         </AppShell>
       </PlayerContextProvider>
     </LutContextProvider>

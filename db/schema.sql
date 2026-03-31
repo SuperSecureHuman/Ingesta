@@ -106,3 +106,16 @@ CREATE INDEX IF NOT EXISTS idx_users_username ON users (username);
 CREATE INDEX IF NOT EXISTS idx_luts_camera ON luts (camera);
 CREATE INDEX IF NOT EXISTS idx_luts_log_profile ON luts (log_profile);
 CREATE INDEX IF NOT EXISTS idx_file_color_meta_source ON file_color_meta (source);
+
+-- Per-library permission overrides (overrides global role for a specific library)
+CREATE TABLE IF NOT EXISTS library_permissions (
+    id         TEXT PRIMARY KEY,
+    user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    library_id TEXT NOT NULL REFERENCES libraries(id) ON DELETE CASCADE,
+    role       TEXT NOT NULL CHECK(role IN ('editor', 'viewer')),
+    created_at TEXT NOT NULL,
+    UNIQUE(user_id, library_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_lib_perms_user_id ON library_permissions (user_id);
+CREATE INDEX IF NOT EXISTS idx_lib_perms_library_id ON library_permissions (library_id);

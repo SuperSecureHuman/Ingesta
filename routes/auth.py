@@ -33,13 +33,15 @@ class LoginRequest(BaseModel):
 
 
 class LoginResponse(BaseModel):
-    """Login response with username."""
+    """Login response with username and role."""
     username: str
+    role: str
 
 
 class MeResponse(BaseModel):
     """Current user info."""
     username: str
+    role: str
 
 
 def hash_password(password: str) -> str:
@@ -52,13 +54,14 @@ def verify_password(plain: str, hashed: str) -> bool:
     return pwd_context.verify(plain, hashed)
 
 
-def create_session_token(user_id: str, username: str) -> str:
+def create_session_token(user_id: str, username: str, role: str) -> str:
     """Create a JWT session token."""
     now = datetime.now(timezone.utc)
     expires = now + timedelta(hours=TOKEN_EXPIRE_HOURS)
     payload = {
         "user_id": user_id,
         "username": username,
+        "role": role,
         "exp": int(expires.timestamp()),
     }
     token = pyjwt.encode(payload, settings.secret_key, algorithm=ALGORITHM)
@@ -88,7 +91,7 @@ async def login(req: LoginRequest, response: Response):
     if not user or not verify_password(req.password, user["password_hash"]):
         raise HTTPException(401, "Invalid username or password")
 
-    token = create_session_token(user["id"], user["username"])
+    token = create_session_token(user["id"], user["username"], user["role"])
 
     response.set_cookie(
         "session",
@@ -102,6 +105,7 @@ async def login(req: LoginRequest, response: Response):
 
     return LoginResponse(
         username=user["username"],
+        role=user["role"],
     )
 
 
@@ -115,4 +119,4 @@ async def logout(response: Response):
 @router.get("/me")
 async def get_me(payload: dict = Depends(get_session_payload)):
     """Get current user from session."""
-    return MeResponse(username=payload["username"])
+    return MeResponse(username=payload["username"], role=payload.get("role", "viewer"))

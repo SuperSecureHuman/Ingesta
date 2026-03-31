@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 import db.crud as crud
-from routes.deps import require_auth
+from routes.deps import require_role
 
 router = APIRouter(tags=["luts"])
 
@@ -30,14 +30,14 @@ class LutPrefUpdate(BaseModel):
 
 
 @router.get("/api/luts")
-async def list_luts(_auth: str = Depends(require_auth)):
+async def list_luts(_auth: dict = Depends(require_role('viewer'))):
     """List all available LUTs."""
     luts = await crud.get_all_luts()
     return {"luts": luts}
 
 
 @router.get("/api/luts/{lut_id}/file")
-async def get_lut_file(lut_id: str, _auth: str = Depends(require_auth)):
+async def get_lut_file(lut_id: str, _auth: dict = Depends(require_role('viewer'))):
     """Stream a .cube LUT file."""
     lut = await crud.get_lut(lut_id)
     if not lut:
@@ -51,7 +51,7 @@ async def get_lut_file(lut_id: str, _auth: str = Depends(require_auth)):
 
 
 @router.get("/api/files/{file_id}/color-meta")
-async def get_color_meta(file_id: str, _auth: str = Depends(require_auth)):
+async def get_color_meta(file_id: str, _auth: dict = Depends(require_role('viewer'))):
     """Get detected and/or manual color metadata for a file."""
     meta = await crud.get_file_color_meta(file_id)
     if not meta:
@@ -60,7 +60,7 @@ async def get_color_meta(file_id: str, _auth: str = Depends(require_auth)):
 
 
 @router.put("/api/files/{file_id}/color-meta")
-async def put_color_meta(file_id: str, body: ColorMetaUpdate, _auth: str = Depends(require_auth)):
+async def put_color_meta(file_id: str, body: ColorMetaUpdate, _auth: dict = Depends(require_role('editor'))):
     """Update (manual override) color metadata for a file."""
     update_dict = body.model_dump(exclude_none=True)
     if not update_dict:
@@ -83,7 +83,7 @@ async def put_color_meta(file_id: str, body: ColorMetaUpdate, _auth: str = Depen
 
 
 @router.get("/api/files/{file_id}/lut-pref")
-async def get_lut_pref(file_id: str, _auth: str = Depends(require_auth)):
+async def get_lut_pref(file_id: str, _auth: dict = Depends(require_role('viewer'))):
     """Get saved LUT preference for a file."""
     pref = await crud.get_file_lut_pref(file_id)
     if not pref:
@@ -92,7 +92,7 @@ async def get_lut_pref(file_id: str, _auth: str = Depends(require_auth)):
 
 
 @router.put("/api/files/{file_id}/lut-pref")
-async def put_lut_pref(file_id: str, body: LutPrefUpdate, _auth: str = Depends(require_auth)):
+async def put_lut_pref(file_id: str, body: LutPrefUpdate, _auth: dict = Depends(require_role('editor'))):
     """Update LUT preference (selection + intensity) for a file. Pass lut_id=null to delete."""
     if body.lut_id is None:
         # Delete the preference

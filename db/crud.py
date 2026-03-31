@@ -464,15 +464,15 @@ async def delete_share(share_id: str) -> bool:
 # ============================================================================
 
 
-async def create_user(username: str, password_hash: str) -> str:
+async def create_user(username: str, password_hash: str, role: str = 'viewer') -> str:
     """Create a new user. Returns the user ID."""
     user_id = _new_uuid()
     created_at = _now_iso()
 
     db = get_db()
     await db.execute(
-        "INSERT INTO users (id, username, password_hash, created_at) VALUES (?, ?, ?, ?)",
-        (user_id, username, password_hash, created_at),
+        "INSERT INTO users (id, username, password_hash, created_at, role) VALUES (?, ?, ?, ?, ?)",
+        (user_id, username, password_hash, created_at, role),
     )
     return user_id
 
@@ -481,7 +481,7 @@ async def get_user(user_id: str) -> Optional[Dict[str, Any]]:
     """Get user by ID."""
     db = get_db()
     row = await db.fetchone(
-        "SELECT id, username, password_hash, created_at FROM users WHERE id = ?",
+        "SELECT id, username, password_hash, created_at, role FROM users WHERE id = ?",
         (user_id,),
     )
     if not row:
@@ -491,6 +491,7 @@ async def get_user(user_id: str) -> Optional[Dict[str, Any]]:
         "username": row[1],
         "password_hash": row[2],
         "created_at": row[3],
+        "role": row[4],
     }
 
 
@@ -498,7 +499,7 @@ async def get_user_by_username(username: str) -> Optional[Dict[str, Any]]:
     """Get user by username."""
     db = get_db()
     row = await db.fetchone(
-        "SELECT id, username, password_hash, created_at FROM users WHERE username = ?",
+        "SELECT id, username, password_hash, created_at, role FROM users WHERE username = ?",
         (username,),
     )
     if not row:
@@ -508,6 +509,7 @@ async def get_user_by_username(username: str) -> Optional[Dict[str, Any]]:
         "username": row[1],
         "password_hash": row[2],
         "created_at": row[3],
+        "role": row[4],
     }
 
 
@@ -516,6 +518,107 @@ async def user_exists() -> bool:
     db = get_db()
     row = await db.fetchone("SELECT COUNT(*) FROM users")
     return row[0] > 0 if row else False
+
+
+async def get_all_users() -> List[Dict[str, Any]]:
+    """Get all users (excludes password_hash)."""
+    db = get_db()
+    rows = await db.fetch(
+        "SELECT id, username, created_at, role FROM users ORDER BY created_at"
+    )
+    return [
+        {"id": row[0], "username": row[1], "created_at": row[2], "role": row[3]}
+        for row in rows
+    ]
+
+
+async def update_user_role(user_id: str, role: str) -> None:
+    """Update a user's global role."""
+    db = get_db()
+    await db.execute("UPDATE users SET role = ? WHERE id = ?", (role, user_id))
+
+
+async def update_user_password(user_id: str, password_hash: str) -> None:
+    """Update a user's password hash."""
+    db = get_db()
+    await db.execute("UPDATE users SET password_hash = ? WHERE id = ?", (password_hash, user_id))
+
+
+async def delete_user(user_id: str) -> None:
+    """Delete a user."""
+    db = get_db()
+    await db.execute("DELETE FROM users WHERE id = ?", (user_id,))
+
+
+# ============================================================================
+# LIBRARY PERMISSIONS
+# ============================================================================
+
+
+async def set_library_permission(user_id: str, library_id: str, role: str) -> None:
+    """Upsert a per-library permission override for a user."""
+    perm_id = _new_uuid()
+    created_at = _now_iso()
+    db = get_db()
+    await db.execute(
+        """
+        INSERT INTO library_permissions (id, user_id, library_id, role, created_at)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(user_id, library_id) DO UPDATE SET role = excluded.role
+        """,
+        (perm_id, user_id, library_id, role, created_at),
+    )
+
+
+async def delete_library_permission(user_id: str, library_id: str) -> None:
+    """Remove a per-library permission override."""
+    db = get_db()
+    await db.execute(
+        "DELETE FROM library_permissions WHERE user_id = ? AND library_id = ?",
+        (user_id, library_id),
+    )
+
+
+async def get_library_permissions_for_user(user_id: str) -> List[Dict[str, Any]]:
+    """Get all library permission overrides for a user."""
+    db = get_db()
+    rows = await db.fetch(
+        "SELECT id, library_id, role, created_at FROM library_permissions WHERE user_id = ?",
+        (user_id,),
+    )
+    return [
+        {"id": row[0], "library_id": row[1], "role": row[2], "created_at": row[3]}
+        for row in rows
+    ]
+
+
+async def get_library_permission(user_id: str, library_id: str) -> Optional[Dict[str, Any]]:
+    """Get a single per-library permission override."""
+    db = get_db()
+    row = await db.fetchone(
+        "SELECT id, user_id, library_id, role, created_at FROM library_permissions WHERE user_id = ? AND library_id = ?",
+        (user_id, library_id),
+    )
+    if not row:
+        return None
+    return {"id": row[0], "user_id": row[1], "library_id": row[2], "role": row[3], "created_at": row[4]}
+
+
+async def get_effective_role(user_id: str, library_id: str) -> str:
+    """Return the effective role for a user on a specific library.
+
+    Admin global role always wins. Otherwise, a library-specific override
+    takes precedence over the user's global role.
+    """
+    user = await get_user(user_id)
+    if not user:
+        return 'viewer'
+    if user['role'] == 'admin':
+        return 'admin'
+    perm = await get_library_permission(user_id, library_id)
+    if perm:
+        return perm['role']
+    return user['role']
 
 
 # ============================================================================

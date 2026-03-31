@@ -8,6 +8,7 @@ import { slugify } from '@/lib/utils';
 import { useToast } from '@/context/ToastContext';
 import { usePlayerContext } from '@/context/PlayerContext';
 import { useSelection } from '@/hooks/useSelection';
+import { useAuth } from '@/hooks/useAuth';
 import Spinner from '@/components/ui/Spinner';
 import FileCard from '@/components/cards/FileCard';
 import SelectionToolbar from '@/components/ui/SelectionToolbar';
@@ -46,6 +47,7 @@ export default function LibraryView({
   const { showToast } = useToast();
   const { startPlayback } = usePlayerContext();
   const { selectedItems, updateSelection, clearSelection } = useSelection();
+  const { canEdit } = useAuth();
   const [library, setLibrary] = useState<Library | null>(null);
   const [loading, setLoading] = useState(true);
   const [files, setFiles] = useState<BrowseResult | null>(null);
@@ -150,9 +152,11 @@ export default function LibraryView({
           )}
           <h2>Library Files</h2>
         </div>
-        <button className="btn btn-primary btn-sm" onClick={handleAddEntireLibrary}>
-          Add Entire Library to Project
-        </button>
+        {canEdit() && (
+          <button className="btn btn-primary btn-sm" onClick={handleAddEntireLibrary}>
+            Add Entire Library to Project
+          </button>
+        )}
       </div>
       <div className="grid">
         {files.entries.length === 0 ? (
@@ -172,11 +176,13 @@ export default function LibraryView({
           ))
         )}
       </div>
-      <SelectionToolbar
-        count={selectedItems.size}
-        onAddToProject={() => onOpenPanel?.('addToProject')}
-        onClear={clearSelection}
-      />
+      {canEdit() && (
+        <SelectionToolbar
+          count={selectedItems.size}
+          onAddToProject={() => onOpenPanel?.('addToProject')}
+          onClear={clearSelection}
+        />
+      )}
     </div>
   );
 }

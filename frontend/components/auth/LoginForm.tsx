@@ -2,9 +2,10 @@
 
 import { useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
+import { User } from '@/lib/types';
 
 interface LoginFormProps {
-  onLoginSuccess: (username: string) => void;
+  onLoginSuccess: (user: User) => void;
 }
 
 export default function LoginForm({ onLoginSuccess }: LoginFormProps) {

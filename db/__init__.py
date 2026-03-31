@@ -11,6 +11,8 @@ from typing import Any, List, Optional, Tuple
 import aiosqlite
 import asyncpg
 
+from config import settings
+
 
 class Database:
     """
@@ -164,8 +166,25 @@ async def init_db(database_url: str) -> Database:
     with open(schema_path, "r") as f:
         schema = f.read()
     await _db.executescript(schema)
+    await run_migrations(_db)
 
     return _db
+
+
+async def run_migrations(db: Database) -> None:
+    """Apply incremental migrations that cannot be in schema.sql safely."""
+    # Migration 001: add role column to users
+    try:
+        await db.execute("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'viewer'")
+    except Exception as e:
+        if "duplicate column" not in str(e).lower() and "already exists" not in str(e).lower():
+            raise
+
+    # Migration 002: ensure configured admin username has admin role (fixes existing DBs after migration)
+    await db.execute(
+        "UPDATE users SET role = 'admin' WHERE username = ? AND role = 'viewer'",
+        (settings.admin_username,),
+    )
 
 
 async def close_db() -> None:

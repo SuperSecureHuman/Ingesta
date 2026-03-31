@@ -25,7 +25,7 @@ from media.transcoder import (
     select_encoder,
 )
 from routes.auth import pwd_context
-from routes import libraries, projects, shares, auth, stream, debug, luts
+from routes import libraries, projects, shares, auth, stream, debug, luts, admin
 from scripts.seed_luts import seed_luts
 
 # Initialize logging
@@ -148,7 +148,7 @@ async def lifespan(app: FastAPI):
     if not await crud.user_exists():
         logger.info(f"Creating default user '{settings.admin_username}'")
         password_hash = pwd_context.hash(settings.admin_password)
-        await crud.create_user(settings.admin_username, password_hash)
+        await crud.create_user(settings.admin_username, password_hash, role='admin')
         if settings.admin_password == "changeme":
             logger.warning(
                 "Default user created with default password 'changeme'. Please change this in production."
@@ -220,6 +220,7 @@ app.include_router(shares.router)
 app.include_router(stream.router)
 app.include_router(luts.router)
 app.include_router(debug.router)
+app.include_router(admin.router)
 
 
 if __name__ == "__main__":
