@@ -4,7 +4,7 @@ import React, { createContext, useContext, useState, useRef, useEffect, useMemo 
 import Hls from 'hls.js';
 import { ProbeData, Capabilities, TranscodeStats } from '@/lib/types';
 import { generateUUID } from '@/lib/utils';
-import { fetchCapabilities } from '@/lib/api';
+import { fetchCapabilities, apiFetch } from '@/lib/api';
 import { parseCube } from '@/lib/parseCube';
 import { vertexShaderSrc, fragmentShaderSrc } from '@/lib/lutShader';
 import { useLutContext } from './LutContext';
@@ -18,7 +18,7 @@ interface PlayerContextType {
   transcodeStats: TranscodeStats;
   videoRef: React.RefObject<HTMLVideoElement | null>;
   canvasRef: React.RefObject<HTMLCanvasElement | null>;
-  startPlayback: (filePath: string, seekTime?: number) => Promise<void>;
+  startPlayback: (filePath: string, seekTime?: number, fileId?: string) => Promise<void>;
   stopPlayback: () => void;
   changeQuality: (key: string) => Promise<void>;
   changeLut: (lutId: string | null) => Promise<void>;
@@ -56,7 +56,28 @@ export function PlayerContextProvider({ children }: { children: React.ReactNode 
   const lutSizeLocRef = useRef<WebGLUniformLocation | null>(null);
   const lutStrengthLocRef = useRef<WebGLUniformLocation | null>(null);
 
-  const { lutMode, activeLutId, lutStrength } = useLutContext();
+  const { lutMode, activeLutId, lutStrength, setFileLutPref } = useLutContext();
+
+  // Fetch lut-pref by path whenever the active file changes
+  useEffect(() => {
+    if (!filePath) {
+      setFileLutPref(null);
+      return;
+    }
+    let cancelled = false;
+    apiFetch('/api/files/source-tags-by-paths', {
+      method: 'POST',
+      body: JSON.stringify({ paths: [filePath] }),
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!cancelled) {
+          setFileLutPref(data?.tags?.[filePath]?.lut_id ?? null);
+        }
+      })
+      .catch(() => { if (!cancelled) setFileLutPref(null); });
+    return () => { cancelled = true; };
+  }, [filePath]);
 
   // Sync lutStrengthRef to LutContext lutStrength
   useEffect(() => {
@@ -301,7 +322,7 @@ export function PlayerContextProvider({ children }: { children: React.ReactNode 
   };
 
   // Start playback
-  const startPlayback = async (newFilePath: string, seekTime = 0) => {
+  const startPlayback = async (newFilePath: string, seekTime = 0, fileId?: string) => {
     if (!videoRef.current) return;
 
     const sid = generateUUID();

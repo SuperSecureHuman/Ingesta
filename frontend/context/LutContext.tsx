@@ -14,6 +14,8 @@ interface LutContextType {
   setLutMode: (mode: 'client' | 'server') => void;
   lutStrength: number;
   setLutStrength: (strength: number) => void;
+  fileLutPref: string | null;
+  setFileLutPref: (id: string | null) => void;
 }
 
 const LutContext = createContext<LutContextType | undefined>(undefined);
@@ -24,6 +26,7 @@ export function LutContextProvider({ children }: { children: React.ReactNode }) 
   const [isLoading, setIsLoading] = useState(false);
   const [lutMode, setLutMode] = useState<'client' | 'server'>('client');
   const [lutStrength, setLutStrength] = useState<number>(1.0);
+  const [fileLutPref, setFileLutPref] = useState<string | null>(null);
 
   // Fetch available LUTs on mount
   useEffect(() => {
@@ -64,8 +67,10 @@ export function LutContextProvider({ children }: { children: React.ReactNode }) 
       setLutMode,
       lutStrength,
       setLutStrength,
+      fileLutPref,
+      setFileLutPref,
     }),
-    [availableLuts, activeLutId, isLoading, lutMode, lutStrength]
+    [availableLuts, activeLutId, isLoading, lutMode, lutStrength, fileLutPref]
   );
 
   return (

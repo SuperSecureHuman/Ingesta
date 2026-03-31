@@ -101,6 +101,7 @@ export interface LutEntry {
   log_profile: string;
   lut_type: string;
   file_path: string;
+  folder: string;
 }
 
 export interface SelectionItem {

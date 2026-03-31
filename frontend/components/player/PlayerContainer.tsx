@@ -83,7 +83,7 @@ export default function PlayerContainer() {
     changeLut,
   } = usePlayerContext();
 
-  const { availableLuts, activeLutId, lutMode, setLutMode, lutStrength, setLutStrength, applyLut, clearLut } = useLutContext();
+  const { availableLuts, activeLutId, lutMode, setLutMode, lutStrength, setLutStrength, applyLut, clearLut, fileLutPref } = useLutContext();
 
   // Local state
   const [isPlaying, setIsPlaying] = useState(false);
@@ -756,31 +756,77 @@ export default function PlayerContainer() {
                   )}
 
                   {/* LUT Selection */}
-                  <div
-                    onClick={() => {
-                      clearLut();
-                      changeLut(null);
-                      setLutDropdownOpen(false);
-                    }}
-                    className="px-3 py-2.5 cursor-pointer text-xs text-gray-400 hover:bg-gray-800 border-b border-gray-800"
-                  >
-                    None
-                  </div>
-                  {availableLuts.map((lut) => (
-                    <div
-                      key={lut.id}
-                      onClick={() => {
-                        applyLut(lut.id);
-                        changeLut(lut.id);
-                        setLutDropdownOpen(false);
-                      }}
-                      className={`px-3 py-2.5 cursor-pointer text-xs border-b border-gray-800 last:border-0 hover:bg-gray-800 ${
-                        activeLutId === lut.id ? 'text-amber-400' : 'text-gray-100'
-                      }`}
-                    >
-                      {lut.name}
-                    </div>
-                  ))}
+                  {(() => {
+                    const FOLDER_LABELS: Record<string, string> = {
+                      dji: 'DJI',
+                      nlog: 'N-Log',
+                      creative: 'Creative',
+                    };
+                    const folderSegmentLabel = (seg: string) =>
+                      FOLDER_LABELS[seg] ?? seg.charAt(0).toUpperCase() + seg.slice(1);
+                    const folderLabel = (f: string) =>
+                      f.split('/').map(folderSegmentLabel).join(' / ');
+
+                    const lutsByFolder = availableLuts.reduce<Record<string, typeof availableLuts>>((acc, lut) => {
+                      const key = lut.folder || 'other';
+                      (acc[key] ??= []).push(lut);
+                      return acc;
+                    }, {});
+
+                    const preferredLut = fileLutPref ? availableLuts.find(l => l.id === fileLutPref) : null;
+
+                    return (
+                      <>
+                        {preferredLut && (
+                          <>
+                            <div className="px-3 py-1 text-xs text-gray-500 font-semibold uppercase tracking-wider bg-gray-800/60 border-b border-gray-800 select-none">
+                              ★ Preferred
+                            </div>
+                            <div
+                              onClick={() => {
+                                applyLut(preferredLut.id);
+                                changeLut(preferredLut.id);
+                                setLutDropdownOpen(false);
+                              }}
+                              className={`px-3 pl-5 py-2.5 cursor-pointer text-xs border-b border-gray-800 hover:bg-gray-800 ${activeLutId === preferredLut.id ? 'text-amber-400' : 'text-gray-100'}`}
+                            >
+                              {activeLutId === preferredLut.id ? '✓ ' : ''}{preferredLut.name}
+                            </div>
+                          </>
+                        )}
+                        <div
+                          onClick={() => {
+                            clearLut();
+                            changeLut(null);
+                            setLutDropdownOpen(false);
+                          }}
+                          className="px-3 py-2.5 cursor-pointer text-xs text-gray-400 hover:bg-gray-800 border-b border-gray-800"
+                        >
+                          None
+                        </div>
+                        {Object.entries(lutsByFolder).sort(([a], [b]) => a.localeCompare(b)).map(([folder, luts]) => (
+                          <React.Fragment key={folder}>
+                            <div className="px-3 py-1 text-xs text-gray-500 font-semibold uppercase tracking-wider bg-gray-800/60 border-b border-gray-800 select-none">
+                              {folderLabel(folder)}
+                            </div>
+                            {luts.map((lut) => (
+                              <div
+                                key={lut.id}
+                                onClick={() => {
+                                  applyLut(lut.id);
+                                  changeLut(lut.id);
+                                  setLutDropdownOpen(false);
+                                }}
+                                className={`px-3 pl-5 py-2.5 cursor-pointer text-xs border-b border-gray-800 last:border-0 hover:bg-gray-800 ${activeLutId === lut.id ? 'text-amber-400' : 'text-gray-100'}`}
+                              >
+                                {activeLutId === lut.id ? '✓ ' : ''}{lut.name}
+                              </div>
+                            ))}
+                          </React.Fragment>
+                        ))}
+                      </>
+                    );
+                  })()}
                 </div>
               )}
             </div>

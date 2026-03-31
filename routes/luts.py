@@ -29,11 +29,22 @@ class LutPrefUpdate(BaseModel):
     intensity: float = 1.0
 
 
+def _extract_folder(file_path: str) -> str:
+    parts = Path(file_path).parts
+    try:
+        idx = parts.index("luts")
+        # Everything between "luts/" and the filename (exclude the filename itself)
+        sub = parts[idx + 1:-1]
+        return "/".join(sub) if sub else "other"
+    except ValueError:
+        return "other"
+
+
 @router.get("/api/luts")
 async def list_luts(_auth: dict = Depends(require_role('viewer'))):
     """List all available LUTs."""
     luts = await crud.get_all_luts()
-    return {"luts": luts}
+    return {"luts": [{**lut, "folder": _extract_folder(lut["file_path"])} for lut in luts]}
 
 
 @router.get("/api/luts/{lut_id}/file")

@@ -80,8 +80,8 @@ export default function ProjectView({ projectId }: ProjectViewProps) {
     }
   };
 
-  const handleFilePlay = (filePath: string) => {
-    startPlayback(filePath);
+  const handleFilePlay = (filePath: string, fileId: string) => {
+    startPlayback(filePath, 0, fileId);
   };
 
   const handleTagSaved = (updatedFiles: ProjectFile[]) => {
@@ -217,7 +217,7 @@ export default function ProjectView({ projectId }: ProjectViewProps) {
                   className="card-image"
                   loading="lazy"
                   decoding="async"
-                  onClick={() => handleFilePlay(file.file_path)}
+                  onClick={() => handleFilePlay(file.file_path, file.id)}
                   onError={(e) => {
                     const fallbackSvg = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='120'%3E%3Crect fill='%231a1a1a' width='200' height='120'/%3E%3Ctext x='50%25' y='50%25' fill='%23666' text-anchor='middle' dy='.3em' font-size='14'%3E%F0%9F%8E%A5%3C/text%3E%3C/svg%3E`;
                     (e.target as HTMLImageElement).src = fallbackSvg;

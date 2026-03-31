@@ -167,6 +167,13 @@ async def lifespan(app: FastAPI):
     logger.info("Seeding LUT catalogue")
     await seed_luts()
 
+    logger.info("Pruning missing LUT files from catalogue")
+    all_luts = await crud.get_all_luts()
+    missing_ids = [lut["id"] for lut in all_luts if not Path(lut["file_path"]).exists()]
+    if missing_ids:
+        removed = await crud.delete_luts_by_ids(missing_ids)
+        logger.info(f"Removed {removed} LUT record(s) whose files no longer exist on disk")
+
     logger.info("Probing hardware")
     shutil.rmtree("/tmp/hls_srv", ignore_errors=True)
     hw = await probe_hardware()

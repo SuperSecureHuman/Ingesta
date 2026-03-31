@@ -797,6 +797,16 @@ async def upsert_lut(
     return id
 
 
+async def delete_luts_by_ids(lut_ids: List[str]) -> int:
+    """Delete LUTs by a list of IDs. Returns the number of rows deleted."""
+    if not lut_ids:
+        return 0
+    db = get_db()
+    placeholders = ",".join("?" * len(lut_ids))
+    await db.execute(f"DELETE FROM luts WHERE id IN ({placeholders})", tuple(lut_ids))
+    return len(lut_ids)
+
+
 # ============================================================================
 # FILE COLOR METADATA
 # ============================================================================
