@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { apiFetch } from '@/lib/api';
 import { useToast } from '@/context/ToastContext';
 import PanelShell from './PanelShell';
+import FsBrowserModal from '@/components/ui/FsBrowserModal';
 
 interface CreateLibraryPanelProps {
   isOpen: boolean;
@@ -20,6 +21,7 @@ export default function CreateLibraryPanel({
   const [path, setPath] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showBrowser, setShowBrowser] = useState(false);
   const { showToast } = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -88,15 +90,28 @@ export default function CreateLibraryPanel({
         />
       </div>
       <div className="form-group">
-        <label htmlFor="libPath">Root Path</label>
-        <input
-          type="text"
-          id="libPath"
-          placeholder="e.g., /media/footage"
-          value={path}
-          onChange={(e) => setPath(e.target.value)}
-        />
+        <label>Root Path</label>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <span style={{
+            flex: 1, padding: '8px', background: 'var(--bg-secondary)',
+            border: '1px solid var(--border)', borderRadius: '4px',
+            color: path ? 'var(--text-primary)' : 'var(--text-muted)',
+            fontSize: '14px', wordBreak: 'break-all',
+          }}>
+            {path || 'No folder selected'}
+          </span>
+          <button type="button" className="btn btn-secondary"
+                  onClick={() => setShowBrowser(true)}>
+            Browse…
+          </button>
+        </div>
       </div>
+      {showBrowser && (
+        <FsBrowserModal
+          onSelect={(p) => { setPath(p); setShowBrowser(false); }}
+          onClose={() => setShowBrowser(false)}
+        />
+      )}
     </PanelShell>
   );
 }

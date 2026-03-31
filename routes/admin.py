@@ -2,9 +2,11 @@
 Admin API endpoints (/api/admin). All endpoints require admin role.
 """
 
+from pathlib import Path
+import os
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 import db.crud as crud
@@ -112,3 +114,28 @@ async def delete_permission(user_id: str, library_id: str):
     """Remove a per-library permission override."""
     await crud.delete_library_permission(user_id, library_id)
     return {"status": "deleted"}
+
+
+@router.get("/fs-browse", dependencies=[_require_admin])
+async def fs_browse(path: str = Query("/")):
+    """Browse server filesystem directories (admin only). No MEDIA_ROOT restriction."""
+    p = Path(os.path.normpath(os.path.abspath(path)))
+    if not p.exists() or not p.is_dir():
+        raise HTTPException(status_code=400, detail=f"Path not found or not a directory: {path}")
+    entries = []
+    try:
+        for entry in sorted(p.iterdir(), key=lambda e: e.name.lower()):
+            if not entry.is_dir():
+                continue
+            try:
+                entry.stat()
+                entries.append({"name": entry.name, "path": str(entry), "is_dir": True})
+            except PermissionError:
+                pass
+    except PermissionError:
+        raise HTTPException(status_code=400, detail=f"Permission denied: {path}")
+    return {
+        "path": str(p),
+        "parent": str(p.parent) if p != p.parent else None,
+        "entries": entries,
+    }
