@@ -20,6 +20,20 @@ import { Slider } from '@/components/ui/slider';
 import FileCard from '@/components/cards/FileCard';
 import SelectionToolbar from '@/components/custom/SelectionToolbar';
 import PanelShell from '@/components/panels/PanelShell';
+import { motion } from 'framer-motion';
+
+const gridContainer = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.04 } },
+};
+
+const gridItem = {
+  hidden: { opacity: 0, y: 16, scale: 0.97 },
+  show: {
+    opacity: 1, y: 0, scale: 1,
+    transition: { duration: 0.22, ease: [0.25, 0.1, 0.25, 1] as [number, number, number, number] },
+  },
+};
 
 interface LibraryViewProps {
   librarySlug: string;
@@ -364,8 +378,8 @@ export default function LibraryView({
     openPanel('addToProject');
   };
 
-  const handleFilePlay = useCallback((path: string) => {
-    startPlayback(path);
+  const handleFilePlay = useCallback((path: string, rect?: DOMRect) => {
+    startPlayback(path, 0, undefined, rect);
   }, [startPlayback]);
 
   const handleSelectionChange = useCallback((path: string, type: 'file' | 'folder', selected: boolean) => {
@@ -402,34 +416,35 @@ export default function LibraryView({
           </Button>
         )}
       </div>
-      <div className="grid-cards">
+      <motion.div key={files?.path ?? 'empty'} className="grid-cards" variants={gridContainer} initial="hidden" animate="show">
         {files.entries.length === 0 ? (
           <div style={{ gridColumn: '1/-1', color: '#666', padding: '20px' }}>
             No files in this library.
           </div>
         ) : (
-          files.entries.map((entry) => (
-            <FileCard
-              key={entry.path}
-              entry={entry}
-              isSelected={selectedItems.has(entry.path)}
-              onPlay={handleFilePlay}
-              onSelectionChange={handleSelectionChange}
-              onFolderOpen={handleFolderOpen}
-              camera={sourceTags[entry.path]?.camera ?? null}
-              lens={sourceTags[entry.path]?.lens ?? null}
-              onTagClick={canEdit() ? handleTagClick : undefined}
-              tags={entry.is_video ? (annotationsByPath[entry.path]?.tags ?? []) : undefined}
-              rating={entry.is_video ? (annotationsByPath[entry.path]?.rating ?? null) : undefined}
-              allDistinctTags={allDistinctTags}
-              canEditAnnotations={canEdit()}
-              onAddTag={canEdit() ? handleAddTag : undefined}
-              onRemoveTag={canEdit() ? handleRemoveTag : undefined}
-              onSetRating={canEdit() ? handleSetRating : undefined}
-            />
+          files.entries.filter((e) => e.is_dir || e.is_video).map((entry) => (
+            <motion.div key={entry.path} variants={gridItem}>
+              <FileCard
+                entry={entry}
+                isSelected={selectedItems.has(entry.path)}
+                onPlay={handleFilePlay}
+                onSelectionChange={handleSelectionChange}
+                onFolderOpen={handleFolderOpen}
+                camera={sourceTags[entry.path]?.camera ?? null}
+                lens={sourceTags[entry.path]?.lens ?? null}
+                onTagClick={canEdit() ? handleTagClick : undefined}
+                tags={entry.is_video ? (annotationsByPath[entry.path]?.tags ?? []) : undefined}
+                rating={entry.is_video ? (annotationsByPath[entry.path]?.rating ?? null) : undefined}
+                allDistinctTags={allDistinctTags}
+                canEditAnnotations={canEdit()}
+                onAddTag={canEdit() ? handleAddTag : undefined}
+                onRemoveTag={canEdit() ? handleRemoveTag : undefined}
+                onSetRating={canEdit() ? handleSetRating : undefined}
+              />
+            </motion.div>
           ))
         )}
-      </div>
+      </motion.div>
       {canEdit() && (
         <SelectionToolbar
           count={selectedItems.size}

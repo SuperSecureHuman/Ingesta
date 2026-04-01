@@ -15,6 +15,20 @@ import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import CreateLibraryPanel from '@/components/panels/CreateLibraryPanel';
 import CreateProjectPanel from '@/components/panels/CreateProjectPanel';
+import { motion } from 'framer-motion';
+
+const gridContainer = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.04 } },
+};
+
+const gridItem = {
+  hidden: { opacity: 0, y: 16, scale: 0.97 },
+  show: {
+    opacity: 1, y: 0, scale: 1,
+    transition: { duration: 0.22, ease: [0.25, 0.1, 0.25, 1] as [number, number, number, number] },
+  },
+};
 
 export default function HomeView() {
   const [libraries, setLibraries] = useState<Library[]>([]);
@@ -105,7 +119,7 @@ export default function HomeView() {
           </Button>
         )}
       </div>
-      <div className="grid-cards">
+      <motion.div key={`libs-${libraries.length}`} className="grid-cards" variants={gridContainer} initial="hidden" animate="show">
         {libraries.length === 0 ? (
           <div style={{ gridColumn: '1/-1', display: 'flex', justifyContent: 'center', padding: '40px', textAlign: 'center' }}>
             <div>
@@ -116,15 +130,16 @@ export default function HomeView() {
           </div>
         ) : (
           libraries.map((lib) => (
-            <LibraryCard
-              key={lib.id}
-              library={lib}
-              onSelect={() => handleSelectLibrary(lib)}
-              onDelete={isAdmin() ? handleDeleteLibrary : undefined}
-            />
+            <motion.div key={lib.id} variants={gridItem}>
+              <LibraryCard
+                library={lib}
+                onSelect={() => handleSelectLibrary(lib)}
+                onDelete={isAdmin() ? handleDeleteLibrary : undefined}
+              />
+            </motion.div>
           ))
         )}
-      </div>
+      </motion.div>
 
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-semibold">Projects</h2>
@@ -134,7 +149,7 @@ export default function HomeView() {
           </Button>
         )}
       </div>
-      <div className="grid-cards">
+      <motion.div key={`projs-${projects.length}`} className="grid-cards" variants={gridContainer} initial="hidden" animate="show">
         {projects.length === 0 ? (
           <div style={{ gridColumn: '1/-1', display: 'flex', justifyContent: 'center', padding: '40px', textAlign: 'center' }}>
             <div>
@@ -145,15 +160,16 @@ export default function HomeView() {
           </div>
         ) : (
           projects.map((proj) => (
-            <ProjectCard
-              key={proj.id}
-              project={proj}
-              onSelect={() => handleSelectProject(proj.id)}
-              onDelete={canEdit() ? handleDeleteProject : undefined}
-            />
+            <motion.div key={proj.id} variants={gridItem}>
+              <ProjectCard
+                project={proj}
+                onSelect={() => handleSelectProject(proj.id)}
+                onDelete={canEdit() ? handleDeleteProject : undefined}
+              />
+            </motion.div>
           ))
         )}
-      </div>
+      </motion.div>
 
       {isAdmin() && (
         <CreateLibraryPanel

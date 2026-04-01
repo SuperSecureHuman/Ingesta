@@ -6,6 +6,7 @@ import { SelectionProvider } from '@/context/SelectionContext';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { Toaster } from '@/components/ui/sonner';
 import ConditionalLayout from '@/components/layout/ConditionalLayout';
+import PageTransition from '@/components/layout/PageTransition';
 
 const geistSans = localFont({
   src: './fonts/GeistVF.woff',
@@ -30,7 +31,7 @@ export default function RootLayout({
           <SelectionProvider>
             <TooltipProvider delay={300}>
               <ConditionalLayout>
-                {children}
+                <PageTransition>{children}</PageTransition>
               </ConditionalLayout>
             </TooltipProvider>
           </SelectionProvider>

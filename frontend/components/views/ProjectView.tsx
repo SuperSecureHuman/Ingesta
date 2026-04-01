@@ -16,6 +16,20 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import ConfirmOverlay from '@/components/custom/ConfirmOverlay';
 import SourceTagPanel from '@/components/panels/SourceTagPanel';
+import { motion } from 'framer-motion';
+
+const gridContainer = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.04 } },
+};
+
+const gridItem = {
+  hidden: { opacity: 0, y: 16, scale: 0.97 },
+  show: {
+    opacity: 1, y: 0, scale: 1,
+    transition: { duration: 0.22, ease: [0.25, 0.1, 0.25, 1] as [number, number, number, number] },
+  },
+};
 
 interface ProjectViewProps {
   projectId: string;
@@ -104,8 +118,8 @@ export default function ProjectView({ projectId }: ProjectViewProps) {
     }
   };
 
-  const handleFilePlay = (filePath: string, fileId: string) => {
-    startPlayback(filePath, 0, fileId);
+  const handleFilePlay = (filePath: string, fileId: string, sourceRect?: DOMRect) => {
+    startPlayback(filePath, 0, fileId, sourceRect);
   };
 
   const handleTagSaved = (updatedFiles: ProjectFile[]) => {
@@ -267,7 +281,7 @@ export default function ProjectView({ projectId }: ProjectViewProps) {
         </div>
       )}
 
-      <div className="grid-cards">
+      <motion.div key={`files-${files.length}`} className="grid-cards" variants={gridContainer} initial="hidden" animate="show">
         {files.length === 0 ? (
           <div style={{ gridColumn: '1/-1', color: '#666', padding: '20px' }}>
             No files in this project.
@@ -289,14 +303,18 @@ export default function ProjectView({ projectId }: ProjectViewProps) {
             const displayRating = hoveredStar || currentRating;
 
             return (
+              <motion.div key={file.id} variants={gridItem}>
               <div
-                key={file.id}
                 className={`group relative overflow-hidden cursor-pointer rounded-lg border bg-card
                   transition-[transform,box-shadow,border-color] duration-200 ease-out will-change-transform
                   hover:-translate-y-0.5 hover:scale-[1.012] hover:border-primary/40
                   hover:shadow-[0_0_0_1px_hsl(var(--primary)/0.3),0_8px_24px_rgba(0,0,0,0.4)]
                   active:translate-y-0 active:scale-[0.99] active:duration-75
                   ${isSelected ? 'border-primary/60 ring-1 ring-primary/40' : 'border-border'}`}
+                onClick={(e) => {
+                  if ((e.target as HTMLElement).closest('button,input,label')) return;
+                  handleFilePlay(file.file_path, file.id, (e.currentTarget as HTMLElement).getBoundingClientRect());
+                }}
               >
                 {canEdit() && (
                   <div className="absolute top-2 left-2 z-10">
@@ -329,11 +347,10 @@ export default function ProjectView({ projectId }: ProjectViewProps) {
                     className="w-full h-full object-cover"
                     loading="lazy"
                     decoding="async"
-                    onClick={() => handleFilePlay(file.file_path, file.id)}
                     onError={(e) => { (e.target as HTMLImageElement).src = fallbackSvg; }}
                   />
                 </div>
-                <div className="px-3 py-2" onClick={() => handleFilePlay(file.file_path, file.id)}>
+                <div className="px-3 py-2">
                   <div className="font-medium text-sm truncate">{getFileName(file.file_path)}</div>
                   <div className="text-xs text-muted-foreground mt-0.5">
                     {file.scan_status === 'done' && file.duration_seconds ? (
@@ -459,10 +476,11 @@ export default function ProjectView({ projectId }: ProjectViewProps) {
                   </div>
                 </div>
               </div>
+              </motion.div>
             );
           })
         )}
-      </div>
+      </motion.div>
 
       {/* Selection toolbar */}
       {canEdit() && selectedIds.size > 0 && (

@@ -89,3 +89,32 @@
 @media (max-width: 768px) {
   .grid-cards { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
 }
+
+/* ─── Thumbnail skeleton ───────────────────────────────────────────────────── */
+.card-image-skeleton {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, var(--color-surface) 25%, var(--color-surface-2) 50%, var(--color-surface) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s ease infinite;
+}
+
+@keyframes skeleton-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ─── Button micro-interactions ────────────────────────────────────────────── */
+.btn {
+  transition: transform 120ms ease, background-color 150ms ease, opacity 150ms ease;
+}
+.btn:hover  { transform: scale(1.03); }
+.btn:active { transform: scale(0.97); transition-duration: 60ms; }
+
+/* ─── Breadcrumb link transition ───────────────────────────────────────────── */
+.breadcrumb-link {
+  transition: color 150ms ease;
+}
+.breadcrumb-link:hover {
+  color: var(--color-text);
+}

@@ -20,7 +20,7 @@ function StarIcon({ filled, className }: { filled: boolean; className?: string }
 interface FileCardProps {
   entry: BrowseEntry;
   isSelected: boolean;
-  onPlay: (path: string) => void;
+  onPlay: (path: string, sourceRect?: DOMRect) => void;
   onSelectionChange: (path: string, type: 'file' | 'folder', selected: boolean) => void;
   onFolderOpen?: (path: string) => void;
   camera?: string | null;
@@ -58,6 +58,7 @@ function FileCard({
   const [tagInput, setTagInput] = useState('');
   const [tagExpanded, setTagExpanded] = useState(false);
   const [hoverStar, setHoverStar] = useState(0);
+  const [imgLoaded, setImgLoaded] = useState(false);
   const tagInputRef = useRef<HTMLInputElement>(null);
 
   if (!isFolderOrVideo) return null;
@@ -71,7 +72,7 @@ function FileCard({
     if ((e.target as HTMLElement).tagName === 'INPUT') return;
     if ((e.target as HTMLElement).closest('button')) return;
     if (entry.is_dir) { onFolderOpen?.(entry.path); return; }
-    if (entry.is_video) onPlay(entry.path);
+    if (entry.is_video) onPlay(entry.path, (e.currentTarget as HTMLElement).getBoundingClientRect());
   };
 
   const suggestions = tagInput
@@ -139,12 +140,14 @@ function FileCard({
         </div>
       ) : (
         <div className="aspect-video rounded-t-lg overflow-hidden bg-zinc-900 relative">
+          {!imgLoaded && <div className="card-image-skeleton" />}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={`/api/thumb?path=${encodeURIComponent(entry.path)}&w=200`}
-            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.04]"
+            className={`w-full h-full object-cover transition-[transform,opacity] duration-300 group-hover:scale-[1.04] ${imgLoaded ? 'opacity-100' : 'opacity-0'}`}
             alt={entry.name}
-            onError={(e) => { (e.target as HTMLImageElement).src = FALLBACK_SVG; }}
+            onLoad={() => setImgLoaded(true)}
+            onError={(e) => { (e.target as HTMLImageElement).src = FALLBACK_SVG; setImgLoaded(true); }}
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center">
             <div className="rounded-full bg-black/50 backdrop-blur-sm p-2.5">

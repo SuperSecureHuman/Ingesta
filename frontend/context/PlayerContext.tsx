@@ -13,13 +13,14 @@ type FetchFn = (url: string, init?: RequestInit) => Promise<Response>;
 interface PlayerContextType {
   isVisible: boolean;
   filePath: string | null;
+  sourceRect: DOMRect | null;
   quality: string;
   probeData: ProbeData | null;
   capabilities: Capabilities | null;
   transcodeStats: TranscodeStats;
   videoRef: React.RefObject<HTMLVideoElement | null>;
   canvasRef: React.RefObject<HTMLCanvasElement | null>;
-  startPlayback: (filePath: string, seekTime?: number, fileId?: string) => Promise<void>;
+  startPlayback: (filePath: string, seekTime?: number, fileId?: string, sourceRect?: DOMRect) => Promise<void>;
   stopPlayback: () => void;
   changeQuality: (key: string) => Promise<void>;
   changeLut: (lutId: string | null) => Promise<void>;
@@ -44,6 +45,7 @@ export function PlayerContextProvider({
 
   const [isVisible, setIsVisible] = useState(false);
   const [filePath, setFilePath] = useState<string | null>(null);
+  const [sourceRect, setSourceRect] = useState<DOMRect | null>(null);
   const [quality, setQuality] = useState('source');
   const [probeData, setProbeData] = useState<ProbeData | null>(null);
   const [capabilities, setCapabilities] = useState<Capabilities | null>(null);
@@ -120,13 +122,14 @@ export function PlayerContextProvider({
   };
 
   // Start playback
-  const startPlayback = async (newFilePath: string, seekTime = 0, fileId?: string) => {
+  const startPlayback = async (newFilePath: string, seekTime = 0, fileId?: string, rect?: DOMRect) => {
     if (!videoRef.current) return;
 
     const sid = generateUUID();
     sessionIdRef.current = sid;
     playbackStartTimeRef.current = Date.now();
     setFilePath(newFilePath);
+    if (rect) setSourceRect(rect);
     setIsVisible(true);
 
     try {
@@ -288,6 +291,7 @@ export function PlayerContextProvider({
 
     setIsVisible(false);
     setFilePath(null);
+    setSourceRect(null);
     setProbeData(null);
     setTranscodeStats({});
     probedFilePathRef.current = null;
@@ -390,6 +394,7 @@ export function PlayerContextProvider({
     () => ({
       isVisible,
       filePath,
+      sourceRect,
       quality,
       probeData,
       capabilities,
@@ -404,6 +409,7 @@ export function PlayerContextProvider({
     [
       isVisible,
       filePath,
+      sourceRect,
       quality,
       probeData,
       capabilities,

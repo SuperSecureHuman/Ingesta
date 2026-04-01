@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { motion, useAnimation } from 'framer-motion';
 import { usePlayerContext } from '@/context/PlayerContext';
 import { useLutContext } from '@/context/LutContext';
 import { formatTime, getResolutionLabel } from '@/lib/utils';
@@ -64,7 +65,7 @@ const IconMarker = ({ className }: { className?: string }) => (
 
 export default function PlayerContainer() {
   const {
-    isVisible, filePath, quality, probeData, capabilities, transcodeStats,
+    isVisible, filePath, sourceRect, quality, probeData, capabilities, transcodeStats,
     videoRef, canvasRef, stopPlayback, changeQuality, changeLut,
   } = usePlayerContext();
 
@@ -109,6 +110,59 @@ export default function PlayerContainer() {
   const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const qualityRef = useRef<HTMLDivElement>(null);
   const lutRef = useRef<HTMLDivElement>(null);
+  const handleCloseRef = useRef<() => void>(() => {});
+
+  // ── Animation controls ─────────────────────────────────────────────────────
+  const controls = useAnimation();
+
+  // Helper: compute transform that makes the fullscreen overlay look like the card
+  const getCardTransform = useCallback((rect: DOMRect) => {
+    const scaleX = rect.width / window.innerWidth;
+    const scaleY = rect.height / window.innerHeight;
+    const x = rect.left + rect.width / 2 - window.innerWidth / 2;
+    const y = rect.top + rect.height / 2 - window.innerHeight / 2;
+    return { scaleX, scaleY, x, y, borderRadius: 8, opacity: 0 };
+  }, []);
+
+  // Open animation: fire when player becomes visible
+  useEffect(() => {
+    if (!isVisible) return;
+    if (sourceRect) {
+      controls.set(getCardTransform(sourceRect));
+      controls.start({ scaleX: 1, scaleY: 1, x: 0, y: 0, borderRadius: 0, opacity: 1,
+        transition: { type: 'spring', damping: 35, stiffness: 350, mass: 0.7 } });
+    } else {
+      controls.set({ scaleX: 1, scaleY: 1, x: 0, y: 0, borderRadius: 0, opacity: 0 });
+      controls.start({ opacity: 1, transition: { duration: 0.18 } });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isVisible]);
+
+  // Close: animate back to card, then teardown
+  const handleClose = useCallback(async () => {
+    if (sourceRect) {
+      await controls.start({
+        ...getCardTransform(sourceRect),
+        transition: { duration: 0.22, ease: [0.4, 0, 1, 1] },
+      });
+    } else {
+      await controls.start({ opacity: 0, transition: { duration: 0.15 } });
+    }
+    stopPlayback();
+  }, [sourceRect, controls, getCardTransform, stopPlayback]);
+
+  // Keep ref in sync so keyboard handler always sees the latest handleClose
+  useEffect(() => { handleCloseRef.current = handleClose; }, [handleClose]);
+
+  // ── Scroll lock ────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (isVisible) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => { document.body.style.overflow = ''; };
+  }, [isVisible]);
 
   // ── Sync refs ──────────────────────────────────────────────────────────────
   useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
@@ -334,7 +388,7 @@ export default function PlayerContainer() {
         case 'm': e.preventDefault(); toggleVolumeMute(); break;
         case 'i': e.preventDefault(); setInfoVisible((v) => !v); break;
         case '?': e.preventDefault(); setHelpVisible((v) => !v); break;
-        case 'escape': stopPlayback(); break;
+        case 'escape': handleCloseRef.current(); break;
         case 'arrowleft': if (video) video.currentTime = Math.max(0, video.currentTime - 10); break;
         case 'arrowright': if (video) video.currentTime = Math.min(video.duration, video.currentTime + 10); break;
       }
@@ -342,7 +396,7 @@ export default function PlayerContainer() {
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filePath, stopPlayback, videoRef]);
+  }, [filePath, videoRef]);
 
   // ── Load annotations when file opens ──────────────────────────────────────
   useEffect(() => {
@@ -449,10 +503,12 @@ export default function PlayerContainer() {
 
   // ── JSX ────────────────────────────────────────────────────────────────────
   return (
-    <div
+    <motion.div
       id="playerContainer"
       className="fixed inset-0 z-[9999] flex flex-col bg-black"
-      style={{ display: isVisible ? 'flex' : 'none' }}
+      initial={{ opacity: 0 }}
+      animate={controls}
+      style={{ pointerEvents: isVisible ? 'auto' : 'none', willChange: 'transform, opacity' }}
     >
       <div id="videoViewport" ref={viewportRef} className="relative flex-1 bg-black overflow-hidden">
         <video ref={videoRef} className="w-full h-full object-contain" style={{ visibility: lutMode === 'client' && activeLutId ? 'hidden' : 'visible' }} />
@@ -465,7 +521,7 @@ export default function PlayerContainer() {
         {/* Top bar — close + title */}
         <div className={`absolute top-0 left-0 right-0 flex items-center gap-2.5 px-3 py-2.5 bg-gradient-to-b from-black/70 to-transparent transition-opacity duration-300 ${controlsVisible ? 'opacity-100' : 'opacity-0'}`}>
           <button
-            onClick={stopPlayback}
+            onClick={handleClose}
             className="flex-shrink-0 h-7 w-7 flex items-center justify-center rounded-full bg-zinc-800/70 hover:bg-zinc-700/90 text-zinc-300 hover:text-white transition-colors"
             title="Close (Esc)"
           >
@@ -779,7 +835,8 @@ export default function PlayerContainer() {
                   {activeLutId && <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-amber-400" />}
                 </button>
                 {lutDropdownOpen && (
-                  <div className="absolute bottom-full right-0 mb-2 bg-zinc-950 border border-zinc-800 rounded-lg overflow-hidden z-50 min-w-max shadow-2xl max-h-72 overflow-y-auto">
+                  <div className="absolute bottom-full right-0 mb-2 bg-zinc-950 border border-zinc-800 rounded-lg overflow-hidden z-50 min-w-max shadow-2xl">
+                    <div className="max-h-72 overflow-y-auto [&::-webkit-scrollbar]:w-[3px] [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-zinc-700 [&::-webkit-scrollbar-thumb]:rounded-full">
                     {/* Mode pills */}
                     <div className="flex gap-1 p-2 border-b border-zinc-800">
                       {(['client', 'server'] as const).map((mode) => (
@@ -836,6 +893,7 @@ export default function PlayerContainer() {
                         </>
                       );
                     })()}
+                    </div>
                   </div>
                 )}
               </div>
@@ -915,6 +973,6 @@ export default function PlayerContainer() {
           </div>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }
