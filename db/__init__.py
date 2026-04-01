@@ -161,6 +161,18 @@ async def init_db(database_url: str) -> Database:
     _db = Database(database_url)
     await _db.connect()
 
+    # Pre-migration: drop old annotation tables (file_id keyed) before schema runs.
+    # schema.sql has CREATE TABLE IF NOT EXISTS with file_path column; if the old
+    # table already exists with file_id, the index CREATE would fail.
+    try:
+        cols = await _db.fetch("PRAGMA table_info(file_tags)")
+        col_names = [c[1] for c in cols]
+        if col_names and 'file_id' in col_names:
+            for tbl in ('file_tags', 'file_comments', 'file_markers'):
+                await _db.execute(f"DROP TABLE IF EXISTS {tbl}")
+    except Exception:
+        pass
+
     # Load and execute schema
     schema_path = Path(__file__).parent / "schema.sql"
     with open(schema_path, "r") as f:
@@ -185,6 +197,58 @@ async def run_migrations(db: Database) -> None:
         "UPDATE users SET role = 'admin' WHERE username = ? AND role = 'viewer'",
         (settings.admin_username,),
     )
+
+    # Migration 003: add rating column to project_files
+    try:
+        await db.execute("ALTER TABLE project_files ADD COLUMN rating INTEGER")
+    except Exception as e:
+        if "duplicate column" not in str(e).lower() and "already exists" not in str(e).lower():
+            raise
+
+    # Migration 004: convert annotation tables from file_id FK to file_path keying.
+    # Also introduces file_ratings table. Safe to run on empty tables (new feature).
+    try:
+        cols = await db.fetch("PRAGMA table_info(file_tags)")
+        col_names = [c[1] for c in cols]
+        if col_names and 'file_id' in col_names:
+            await db.execute("DROP TABLE IF EXISTS file_tags")
+            await db.execute("DROP TABLE IF EXISTS file_comments")
+            await db.execute("DROP TABLE IF EXISTS file_markers")
+            await db.executescript("""
+                CREATE TABLE IF NOT EXISTS file_tags (
+                  id TEXT PRIMARY KEY,
+                  file_path TEXT NOT NULL,
+                  tag TEXT NOT NULL,
+                  created_at TEXT NOT NULL,
+                  UNIQUE(file_path, tag)
+                );
+                CREATE INDEX IF NOT EXISTS idx_file_tags_file_path ON file_tags(file_path);
+                CREATE TABLE IF NOT EXISTS file_ratings (
+                  file_path TEXT PRIMARY KEY,
+                  rating INTEGER NOT NULL,
+                  updated_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS file_comments (
+                  id TEXT PRIMARY KEY,
+                  file_path TEXT NOT NULL,
+                  body TEXT NOT NULL,
+                  timestamp_seconds REAL,
+                  created_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_file_comments_file_path ON file_comments(file_path);
+                CREATE TABLE IF NOT EXISTS file_markers (
+                  id TEXT PRIMARY KEY,
+                  file_path TEXT NOT NULL,
+                  timestamp_seconds REAL NOT NULL,
+                  label TEXT NOT NULL,
+                  color TEXT NOT NULL DEFAULT '#f59e0b',
+                  created_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_file_markers_file_path ON file_markers(file_path)
+            """)
+    except Exception as e:
+        if "already exists" not in str(e).lower():
+            raise
 
 
 async def close_db() -> None:

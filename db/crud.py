@@ -926,3 +926,296 @@ async def get_lut_file_path(lut_id: str) -> Optional[str]:
     )
     return row[0] if row else None
 
+
+# ── Annotation CRUD (Feature 5) — keyed by file_path ─────────────────────────
+
+# Tags
+
+async def get_file_tags(file_path: str) -> List[str]:
+    """Get all tags for a file."""
+    db = get_db()
+    rows = await db.fetch(
+        "SELECT tag FROM file_tags WHERE file_path = ? ORDER BY created_at",
+        (file_path,),
+    )
+    return [row[0] for row in rows]
+
+
+async def add_file_tag(file_path: str, tag: str) -> Dict[str, Any]:
+    """Add a tag to a file. Idempotent — returns existing record if tag already exists."""
+    db = get_db()
+    now = _now_iso()
+    existing = await db.fetchone(
+        "SELECT id, tag, created_at FROM file_tags WHERE file_path = ? AND tag = ?",
+        (file_path, tag),
+    )
+    if existing:
+        return {"id": existing[0], "tag": existing[1], "created_at": existing[2]}
+    tag_id = str(uuid.uuid4())
+    await db.execute(
+        "INSERT INTO file_tags (id, file_path, tag, created_at) VALUES (?, ?, ?, ?)",
+        (tag_id, file_path, tag, now),
+    )
+    return {"id": tag_id, "tag": tag, "created_at": now}
+
+
+async def remove_file_tag(file_path: str, tag: str) -> bool:
+    """Remove a tag from a file. Returns True if it existed."""
+    db = get_db()
+    existing = await db.fetchone(
+        "SELECT id FROM file_tags WHERE file_path = ? AND tag = ?",
+        (file_path, tag),
+    )
+    if not existing:
+        return False
+    await db.execute(
+        "DELETE FROM file_tags WHERE file_path = ? AND tag = ?",
+        (file_path, tag),
+    )
+    return True
+
+
+async def get_distinct_tags() -> List[str]:
+    """Get all distinct tags across all files (for autocomplete)."""
+    db = get_db()
+    rows = await db.fetch("SELECT DISTINCT tag FROM file_tags ORDER BY tag")
+    return [row[0] for row in rows]
+
+
+# Rating
+
+async def get_file_rating(file_path: str) -> Optional[int]:
+    """Get rating (1-5) for a file, or None if unrated."""
+    db = get_db()
+    row = await db.fetchone(
+        "SELECT rating FROM file_ratings WHERE file_path = ?",
+        (file_path,),
+    )
+    return row[0] if row else None
+
+
+async def set_file_rating(file_path: str, rating: Optional[int]) -> bool:
+    """Set or clear rating (1-5) for a file by path."""
+    db = get_db()
+    if rating is None:
+        await db.execute("DELETE FROM file_ratings WHERE file_path = ?", (file_path,))
+    else:
+        now = _now_iso()
+        await db.execute(
+            "INSERT INTO file_ratings (file_path, rating, updated_at) VALUES (?, ?, ?) "
+            "ON CONFLICT(file_path) DO UPDATE SET rating = excluded.rating, updated_at = excluded.updated_at",
+            (file_path, rating, now),
+        )
+    return True
+
+
+# Comments
+
+async def get_file_comments(file_path: str) -> List[Dict[str, Any]]:
+    """Get all comments for a file, ordered by created_at."""
+    db = get_db()
+    rows = await db.fetch(
+        "SELECT id, body, timestamp_seconds, created_at FROM file_comments WHERE file_path = ? ORDER BY created_at",
+        (file_path,),
+    )
+    return [
+        {"id": row[0], "body": row[1], "timestamp_seconds": row[2], "created_at": row[3]}
+        for row in rows
+    ]
+
+
+async def add_file_comment(file_path: str, body: str, timestamp_seconds: Optional[float]) -> Dict[str, Any]:
+    """Add a comment to a file."""
+    db = get_db()
+    comment_id = str(uuid.uuid4())
+    now = _now_iso()
+    await db.execute(
+        "INSERT INTO file_comments (id, file_path, body, timestamp_seconds, created_at) VALUES (?, ?, ?, ?, ?)",
+        (comment_id, file_path, body, timestamp_seconds, now),
+    )
+    return {"id": comment_id, "body": body, "timestamp_seconds": timestamp_seconds, "created_at": now}
+
+
+async def delete_file_comment(comment_id: str) -> bool:
+    """Delete a comment. Returns True if it existed."""
+    db = get_db()
+    existing = await db.fetchone("SELECT id FROM file_comments WHERE id = ?", (comment_id,))
+    if not existing:
+        return False
+    await db.execute("DELETE FROM file_comments WHERE id = ?", (comment_id,))
+    return True
+
+
+# Markers
+
+async def get_file_markers(file_path: str) -> List[Dict[str, Any]]:
+    """Get all markers for a file, ordered by timestamp."""
+    db = get_db()
+    rows = await db.fetch(
+        "SELECT id, timestamp_seconds, label, color, created_at FROM file_markers WHERE file_path = ? ORDER BY timestamp_seconds",
+        (file_path,),
+    )
+    return [
+        {"id": row[0], "timestamp_seconds": row[1], "label": row[2], "color": row[3], "created_at": row[4]}
+        for row in rows
+    ]
+
+
+async def add_file_marker(file_path: str, timestamp_seconds: float, label: str, color: str) -> Dict[str, Any]:
+    """Add a timeline marker to a file."""
+    db = get_db()
+    marker_id = str(uuid.uuid4())
+    now = _now_iso()
+    await db.execute(
+        "INSERT INTO file_markers (id, file_path, timestamp_seconds, label, color, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+        (marker_id, file_path, timestamp_seconds, label, color, now),
+    )
+    return {"id": marker_id, "timestamp_seconds": timestamp_seconds, "label": label, "color": color, "created_at": now}
+
+
+async def delete_file_marker(marker_id: str) -> bool:
+    """Delete a marker. Returns True if it existed."""
+    db = get_db()
+    existing = await db.fetchone("SELECT id FROM file_markers WHERE id = ?", (marker_id,))
+    if not existing:
+        return False
+    await db.execute("DELETE FROM file_markers WHERE id = ?", (marker_id,))
+    return True
+
+
+async def update_file_marker(marker_id: str, label: str, color: str) -> Optional[Dict[str, Any]]:
+    """Update label and color of a marker. Returns updated record or None if not found."""
+    db = get_db()
+    existing = await db.fetchone(
+        "SELECT id, timestamp_seconds, created_at FROM file_markers WHERE id = ?",
+        (marker_id,),
+    )
+    if not existing:
+        return None
+    await db.execute(
+        "UPDATE file_markers SET label = ?, color = ? WHERE id = ?",
+        (label, color, marker_id),
+    )
+    return {"id": existing[0], "timestamp_seconds": existing[1], "label": label, "color": color, "created_at": existing[2]}
+
+
+# Batch loaders (avoid N+1 in project endpoint) — JOIN via file_path
+
+async def get_tags_for_files(file_ids: List[str]) -> Dict[str, List[str]]:
+    """Batch-load tags for multiple project_file ids. Returns {file_id: [tag, ...]}."""
+    if not file_ids:
+        return {}
+    db = get_db()
+    placeholders = ",".join("?" * len(file_ids))
+    rows = await db.fetch(
+        f"SELECT pf.id, ft.tag FROM project_files pf "
+        f"LEFT JOIN file_tags ft ON ft.file_path = pf.file_path "
+        f"WHERE pf.id IN ({placeholders}) ORDER BY ft.created_at",
+        tuple(file_ids),
+    )
+    result: Dict[str, List[str]] = {fid: [] for fid in file_ids}
+    for row in rows:
+        if row[1] is not None:
+            result[row[0]].append(row[1])
+    return result
+
+
+async def get_ratings_for_files(file_ids: List[str]) -> Dict[str, Optional[int]]:
+    """Batch-load ratings for multiple project_file ids. Returns {file_id: rating|None}."""
+    if not file_ids:
+        return {}
+    db = get_db()
+    placeholders = ",".join("?" * len(file_ids))
+    rows = await db.fetch(
+        f"SELECT pf.id, fr.rating FROM project_files pf "
+        f"LEFT JOIN file_ratings fr ON fr.file_path = pf.file_path "
+        f"WHERE pf.id IN ({placeholders})",
+        tuple(file_ids),
+    )
+    result: Dict[str, Optional[int]] = {fid: None for fid in file_ids}
+    for row in rows:
+        result[row[0]] = row[1]
+    return result
+
+
+async def get_comments_for_files(file_ids: List[str]) -> Dict[str, List[Dict[str, Any]]]:
+    """Batch-load comments for multiple project_file ids. Returns {file_id: [comment, ...]}."""
+    if not file_ids:
+        return {}
+    db = get_db()
+    placeholders = ",".join("?" * len(file_ids))
+    rows = await db.fetch(
+        f"SELECT pf.id, fc.id, fc.body, fc.timestamp_seconds, fc.created_at "
+        f"FROM project_files pf "
+        f"LEFT JOIN file_comments fc ON fc.file_path = pf.file_path "
+        f"WHERE pf.id IN ({placeholders}) ORDER BY fc.created_at",
+        tuple(file_ids),
+    )
+    result: Dict[str, List[Dict[str, Any]]] = {fid: [] for fid in file_ids}
+    for row in rows:
+        if row[1] is not None:
+            result[row[0]].append({"id": row[1], "body": row[2], "timestamp_seconds": row[3], "created_at": row[4]})
+    return result
+
+
+async def get_markers_for_files(file_ids: List[str]) -> Dict[str, List[Dict[str, Any]]]:
+    """Batch-load markers for multiple project_file ids. Returns {file_id: [marker, ...]}."""
+    if not file_ids:
+        return {}
+    db = get_db()
+    placeholders = ",".join("?" * len(file_ids))
+    rows = await db.fetch(
+        f"SELECT pf.id, fm.id, fm.timestamp_seconds, fm.label, fm.color, fm.created_at "
+        f"FROM project_files pf "
+        f"LEFT JOIN file_markers fm ON fm.file_path = pf.file_path "
+        f"WHERE pf.id IN ({placeholders}) ORDER BY fm.timestamp_seconds",
+        tuple(file_ids),
+    )
+    result: Dict[str, List[Dict[str, Any]]] = {fid: [] for fid in file_ids}
+    for row in rows:
+        if row[1] is not None:
+            result[row[0]].append({"id": row[1], "timestamp_seconds": row[2], "label": row[3], "color": row[4], "created_at": row[5]})
+    return result
+
+
+async def get_annotations_for_paths(file_paths: List[str]) -> Dict[str, Dict[str, Any]]:
+    """Batch-load all annotations (tags, rating, comments, markers) for a list of paths.
+    Returns {file_path: {tags, rating, comments, markers}}."""
+    if not file_paths:
+        return {}
+    db = get_db()
+    placeholders = ",".join("?" * len(file_paths))
+    params = tuple(file_paths)
+
+    tag_rows = await db.fetch(
+        f"SELECT file_path, tag FROM file_tags WHERE file_path IN ({placeholders}) ORDER BY created_at",
+        params,
+    )
+    rating_rows = await db.fetch(
+        f"SELECT file_path, rating FROM file_ratings WHERE file_path IN ({placeholders})",
+        params,
+    )
+    comment_rows = await db.fetch(
+        f"SELECT file_path, id, body, timestamp_seconds, created_at FROM file_comments WHERE file_path IN ({placeholders}) ORDER BY created_at",
+        params,
+    )
+    marker_rows = await db.fetch(
+        f"SELECT file_path, id, timestamp_seconds, label, color, created_at FROM file_markers WHERE file_path IN ({placeholders}) ORDER BY timestamp_seconds",
+        params,
+    )
+
+    result: Dict[str, Dict[str, Any]] = {
+        p: {"tags": [], "rating": None, "comments": [], "markers": []}
+        for p in file_paths
+    }
+    for row in tag_rows:
+        result[row[0]]["tags"].append(row[1])
+    for row in rating_rows:
+        result[row[0]]["rating"] = row[1]
+    for row in comment_rows:
+        result[row[0]]["comments"].append({"id": row[1], "body": row[2], "timestamp_seconds": row[3], "created_at": row[4]})
+    for row in marker_rows:
+        result[row[0]]["markers"].append({"id": row[1], "timestamp_seconds": row[2], "label": row[3], "color": row[4], "created_at": row[5]})
+    return result
+
+

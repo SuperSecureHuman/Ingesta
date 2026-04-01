@@ -4,6 +4,9 @@ import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { usePlayerContext } from '@/context/PlayerContext';
 import { useLutContext } from '@/context/LutContext';
 import { formatTime, getResolutionLabel } from '@/lib/utils';
+import { apiFetch } from '@/lib/api';
+import { useAuth } from '@/hooks/useAuth';
+import { FileComment, FileMarker } from '@/lib/types';
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
 
@@ -50,6 +53,12 @@ const IconLUT = ({ className }: { className?: string }) => (
     <circle cx="12" cy="14" r="4" opacity="0.7" />
   </svg>
 );
+const IconComment = ({ className }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/></svg>
+);
+const IconMarker = ({ className }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+);
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -60,6 +69,7 @@ export default function PlayerContainer() {
   } = usePlayerContext();
 
   const { availableLuts, activeLutId, lutMode, setLutMode, lutStrength, setLutStrength, applyLut, clearLut, fileLutPref } = useLutContext();
+  const { canEdit } = useAuth();
 
   // ── State ──────────────────────────────────────────────────────────────────
   const [isPlaying, setIsPlaying] = useState(false);
@@ -79,6 +89,16 @@ export default function PlayerContainer() {
   const [isBuffering, setIsBuffering] = useState(false);
   const [playPauseFlash, setPlayPauseFlash] = useState<'play' | 'pause' | null>(null);
   const [seekTooltip, setSeekTooltip] = useState<{ pct: number; time: string } | null>(null);
+
+  // ── Annotation state ───────────────────────────────────────────────────────
+  const [commentsOpen, setCommentsOpen] = useState(false);
+  const [comments, setComments] = useState<FileComment[]>([]);
+  const [newCommentBody, setNewCommentBody] = useState('');
+  const [markers, setMarkers] = useState<FileMarker[]>([]);
+  const [addingMarker, setAddingMarker] = useState(false);
+  const [markerForm, setMarkerForm] = useState({ label: '', color: '#f59e0b' });
+  const [markerContextMenu, setMarkerContextMenu] = useState<{ markerId: string; x: number; y: number } | null>(null);
+  const [duration, setDuration] = useState(0);
 
   // ── Refs ───────────────────────────────────────────────────────────────────
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -324,6 +344,72 @@ export default function PlayerContainer() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filePath, stopPlayback, videoRef]);
 
+  // ── Load annotations when file opens ──────────────────────────────────────
+  useEffect(() => {
+    if (!filePath) {
+      setComments([]);
+      setMarkers([]);
+      setCommentsOpen(false);
+      return;
+    }
+    const q = `?path=${encodeURIComponent(filePath)}`;
+    apiFetch(`/api/path-annotations/file/comments${q}`).then((r) => r.ok ? r.json() : []).then(setComments).catch(() => {});
+    apiFetch(`/api/path-annotations/file/markers${q}`).then((r) => r.ok ? r.json() : []).then(setMarkers).catch(() => {});
+  }, [filePath]);
+
+  // Track video duration for marker positioning
+  useEffect(() => {
+    if (!videoRef.current) return;
+    const video = videoRef.current;
+    const onMeta = () => setDuration(video.duration || 0);
+    video.addEventListener('loadedmetadata', onMeta);
+    return () => video.removeEventListener('loadedmetadata', onMeta);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Annotation handlers ────────────────────────────────────────────────────
+  const addComment = async (timestampSeconds: number | null) => {
+    if (!filePath || !newCommentBody.trim()) return;
+    const body = newCommentBody.trim();
+    setNewCommentBody('');
+    const res = await apiFetch(`/api/path-annotations/file/comments?path=${encodeURIComponent(filePath)}`, {
+      method: 'POST',
+      body: JSON.stringify({ body, timestamp_seconds: timestampSeconds }),
+    });
+    if (res.ok) {
+      const comment: FileComment = await res.json();
+      setComments((prev) => [...prev, comment]);
+    }
+  };
+
+  const deleteComment = async (commentId: string) => {
+    if (!filePath) return;
+    setComments((prev) => prev.filter((c) => c.id !== commentId));
+    await apiFetch(`/api/path-annotations/file/comments/${commentId}`, { method: 'DELETE' });
+  };
+
+  const submitMarker = async () => {
+    if (!filePath || !markerForm.label.trim() || !videoRef.current) return;
+    const ts = videoRef.current.currentTime;
+    const res = await apiFetch(`/api/path-annotations/file/markers?path=${encodeURIComponent(filePath)}`, {
+      method: 'POST',
+      body: JSON.stringify({ timestamp_seconds: ts, label: markerForm.label.trim(), color: markerForm.color }),
+    });
+    if (res.ok) {
+      const marker: FileMarker = await res.json();
+      setMarkers((prev) => [...prev, marker]);
+    }
+    setAddingMarker(false);
+    setMarkerForm({ label: '', color: '#f59e0b' });
+  };
+
+  const deleteMarker = async (markerId: string) => {
+    if (!filePath) return;
+    setMarkers((prev) => prev.filter((m) => m.id !== markerId));
+    setMarkerContextMenu(null);
+    await apiFetch(`/api/path-annotations/file/markers/${markerId}`, { method: 'DELETE' });
+  };
+
   // ── Handlers ───────────────────────────────────────────────────────────────
   const handleSeekClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!videoRef.current?.duration) return;
@@ -444,6 +530,123 @@ export default function PlayerContainer() {
           </div>
         )}
 
+        {/* ── Comments sidebar ──────────────────────────────────────────────── */}
+        {commentsOpen && filePath && (
+          <div className="absolute top-14 right-4 bottom-20 w-72 bg-zinc-950/95 backdrop-blur-sm rounded-xl border border-zinc-800 z-50 flex flex-col">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800 shrink-0">
+              <span className="text-sm font-semibold text-zinc-100">Comments</span>
+              <button onClick={() => setCommentsOpen(false)} className="text-zinc-500 hover:text-zinc-200 transition-colors">✕</button>
+            </div>
+            <div className="flex-1 overflow-y-auto px-3 py-2 space-y-2 text-xs">
+              {comments.length === 0 && <p className="text-zinc-500 text-center py-4">No comments yet.</p>}
+              {/* General comments */}
+              {comments.filter((c) => c.timestamp_seconds === null).length > 0 && (
+                <div>
+                  <div className="text-[10px] text-zinc-600 font-semibold uppercase tracking-wider mb-1">General</div>
+                  {comments.filter((c) => c.timestamp_seconds === null).map((c) => (
+                    <div key={c.id} className="flex items-start gap-1 group/c py-1 border-b border-zinc-800/50">
+                      <span className="flex-1 text-zinc-300 break-words">{c.body}</span>
+                      {canEdit() && (
+                        <button onClick={() => deleteComment(c.id)} className="shrink-0 text-zinc-600 hover:text-red-400 opacity-0 group-hover/c:opacity-100 transition-opacity">✕</button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {/* Timestamped comments */}
+              {comments.filter((c) => c.timestamp_seconds !== null).sort((a, b) => (a.timestamp_seconds ?? 0) - (b.timestamp_seconds ?? 0)).map((c) => (
+                <div key={c.id} className="group/c py-1 border-b border-zinc-800/50">
+                  <button
+                    className="text-[10px] text-amber-400/80 hover:text-amber-400 font-mono mb-0.5 block"
+                    onClick={() => { if (videoRef.current && c.timestamp_seconds !== null) videoRef.current.currentTime = c.timestamp_seconds; }}
+                  >
+                    At {formatTime(c.timestamp_seconds ?? 0)}
+                  </button>
+                  <div className="flex items-start gap-1">
+                    <span className="flex-1 text-zinc-300 break-words">{c.body}</span>
+                    {canEdit() && (
+                      <button onClick={() => deleteComment(c.id)} className="shrink-0 text-zinc-600 hover:text-red-400 opacity-0 group-hover/c:opacity-100 transition-opacity">✕</button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+            {canEdit() && (
+              <div className="shrink-0 border-t border-zinc-800 p-3 space-y-2">
+                <div className="flex gap-1">
+                  <input
+                    type="text"
+                    value={newCommentBody}
+                    onChange={(e) => setNewCommentBody(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') addComment(null); }}
+                    placeholder="Add general comment…"
+                    className="flex-1 h-7 px-2 text-xs bg-zinc-800 border border-zinc-700 rounded text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:border-amber-500/50"
+                  />
+                  <button
+                    onClick={() => addComment(null)}
+                    className="h-7 px-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-200 rounded text-xs transition-colors"
+                  >+</button>
+                </div>
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => addComment(videoRef.current?.currentTime ?? null)}
+                    className="flex-1 h-7 px-2 text-xs bg-zinc-800 border border-zinc-700 rounded text-zinc-400 hover:text-zinc-200 hover:border-zinc-600 transition-colors text-left truncate"
+                    title="Add comment at current playback time"
+                  >
+                    Add at {formatTime(videoRef.current?.currentTime ?? 0)}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Add marker form ───────────────────────────────────────────────── */}
+        {addingMarker && filePath && canEdit() && (
+          <div className="absolute bottom-24 right-4 bg-zinc-950/95 backdrop-blur-sm rounded-xl border border-zinc-800 z-50 p-3 w-60">
+            <div className="text-xs font-semibold text-zinc-300 mb-2">Add Marker at {formatTime(videoRef.current?.currentTime ?? 0)}</div>
+            <input
+              type="text"
+              value={markerForm.label}
+              onChange={(e) => setMarkerForm((p) => ({ ...p, label: e.target.value }))}
+              onKeyDown={(e) => { if (e.key === 'Enter') submitMarker(); if (e.key === 'Escape') setAddingMarker(false); }}
+              placeholder="Label…"
+              className="w-full h-7 px-2 text-xs bg-zinc-800 border border-zinc-700 rounded text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:border-amber-500/50 mb-2"
+              autoFocus
+            />
+            <div className="flex gap-1.5 mb-2">
+              {['#f59e0b', '#ef4444', '#22c55e', '#3b82f6', '#f8fafc'].map((c) => (
+                <button
+                  key={c}
+                  className={`w-5 h-5 rounded-full border-2 transition-all ${markerForm.color === c ? 'border-white scale-110' : 'border-transparent'}`}
+                  style={{ backgroundColor: c }}
+                  onClick={() => setMarkerForm((p) => ({ ...p, color: c }))}
+                />
+              ))}
+            </div>
+            <div className="flex gap-1">
+              <button onClick={submitMarker} className="flex-1 h-7 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-semibold rounded text-xs transition-colors">Add</button>
+              <button onClick={() => setAddingMarker(false)} className="h-7 px-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 rounded text-xs transition-colors">Cancel</button>
+            </div>
+          </div>
+        )}
+
+        {/* ── Marker context menu ───────────────────────────────────────────── */}
+        {markerContextMenu && (
+          <div
+            className="fixed bg-zinc-900 border border-zinc-700 rounded shadow-lg z-[10000] py-1"
+            style={{ left: markerContextMenu.x, top: markerContextMenu.y }}
+            onMouseLeave={() => setMarkerContextMenu(null)}
+          >
+            <button
+              className="w-full px-4 py-1.5 text-xs text-red-400 hover:bg-zinc-800 text-left transition-colors"
+              onClick={() => deleteMarker(markerContextMenu.markerId)}
+            >
+              Delete marker
+            </button>
+          </div>
+        )}
+
         {/* ── Controls bar ──────────────────────────────────────────────────── */}
         <div className={`absolute bottom-0 left-0 right-0 bg-zinc-950/55 backdrop-blur-md border-t border-primary/[0.07] [background-image:linear-gradient(to_top,hsl(var(--primary)/0.03),transparent)] px-4 pt-2 pb-3 transition-opacity duration-300 ${controlsVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
 
@@ -470,6 +673,36 @@ export default function PlayerContainer() {
                 {seekTooltip.time}
               </div>
             )}
+            {/* Marker ticks */}
+            {duration > 0 && markers.map((m) => (
+              <div
+                key={m.id}
+                className="absolute top-0 bottom-0 w-0.5 z-10 cursor-pointer"
+                style={{ left: `${(m.timestamp_seconds / duration) * 100}%`, backgroundColor: m.color }}
+                title={m.label}
+                onClick={(e) => { e.stopPropagation(); if (videoRef.current) videoRef.current.currentTime = m.timestamp_seconds; }}
+                onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setMarkerContextMenu({ markerId: m.id, x: e.clientX, y: e.clientY }); }}
+              />
+            ))}
+            {/* Timestamped comment ticks */}
+            {duration > 0 && comments.filter((c) => c.timestamp_seconds !== null).map((c) => (
+              <div
+                key={c.id}
+                className="absolute z-10 cursor-pointer"
+                style={{
+                  left: `${((c.timestamp_seconds ?? 0) / duration) * 100}%`,
+                  top: '50%',
+                  transform: 'translate(-50%, -50%)',
+                  width: 0,
+                  height: 0,
+                  borderLeft: '4px solid transparent',
+                  borderRight: '4px solid transparent',
+                  borderBottom: '7px solid #a1a1aa',
+                }}
+                title={c.body}
+                onClick={(e) => { e.stopPropagation(); if (videoRef.current && c.timestamp_seconds !== null) videoRef.current.currentTime = c.timestamp_seconds; }}
+              />
+            ))}
           </div>
 
           {/* Button row */}
@@ -637,6 +870,29 @@ export default function PlayerContainer() {
                   </div>
                 )}
               </div>
+
+              {/* Comments toggle */}
+              {filePath && (
+                <button
+                  onClick={() => setCommentsOpen((v) => !v)}
+                  className={`w-8 h-8 flex items-center justify-center rounded transition-colors relative ${commentsOpen ? 'text-amber-400' : 'text-zinc-400 hover:text-white'}`}
+                  title="Comments"
+                >
+                  <IconComment className="w-5 h-5" />
+                  {comments.length > 0 && <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-amber-400" />}
+                </button>
+              )}
+
+              {/* Add marker (editor only) */}
+              {filePath && canEdit() && (
+                <button
+                  onClick={() => setAddingMarker((v) => !v)}
+                  className={`w-8 h-8 flex items-center justify-center rounded transition-colors ${addingMarker ? 'text-amber-400' : 'text-zinc-400 hover:text-white'}`}
+                  title="Add marker"
+                >
+                  <IconMarker className="w-5 h-5" />
+                </button>
+              )}
 
               {/* Info toggle */}
               <button

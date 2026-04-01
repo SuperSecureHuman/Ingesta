@@ -37,6 +37,25 @@ export interface ProjectFile {
   added_at: string;
   camera: string | null;
   lens: string | null;
+  rating: number | null;
+  tags: string[];
+  comments: FileComment[];
+  markers: FileMarker[];
+}
+
+export interface FileComment {
+  id: string;
+  body: string;
+  timestamp_seconds: number | null;
+  created_at: string;
+}
+
+export interface FileMarker {
+  id: string;
+  timestamp_seconds: number;
+  label: string;
+  color: string;
+  created_at: string;
 }
 
 export interface BrowseEntry {

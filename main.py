@@ -25,7 +25,7 @@ from media.transcoder import (
     select_encoder,
 )
 from routes.auth import pwd_context
-from routes import libraries, projects, shares, auth, stream, debug, luts, admin
+from routes import libraries, projects, shares, auth, stream, debug, luts, admin, annotations
 from scripts.seed_luts import seed_luts
 
 # Initialize logging
@@ -226,6 +226,8 @@ app.include_router(projects.router)
 app.include_router(shares.router)
 app.include_router(stream.router)
 app.include_router(luts.router)
+app.include_router(annotations.router)
+app.include_router(annotations.file_router)
 app.include_router(debug.router)
 app.include_router(admin.router)
 

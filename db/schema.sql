@@ -133,3 +133,38 @@ CREATE TABLE IF NOT EXISTS library_permissions (
 
 CREATE INDEX IF NOT EXISTS idx_lib_perms_user_id ON library_permissions (user_id);
 CREATE INDEX IF NOT EXISTS idx_lib_perms_library_id ON library_permissions (library_id);
+
+-- Annotation tables (Feature 5) — keyed by file_path for cross-project/library consistency
+CREATE TABLE IF NOT EXISTS file_tags (
+  id TEXT PRIMARY KEY,
+  file_path TEXT NOT NULL,
+  tag TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE(file_path, tag)
+);
+CREATE INDEX IF NOT EXISTS idx_file_tags_file_path ON file_tags(file_path);
+
+CREATE TABLE IF NOT EXISTS file_ratings (
+  file_path TEXT PRIMARY KEY,
+  rating INTEGER NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS file_comments (
+  id TEXT PRIMARY KEY,
+  file_path TEXT NOT NULL,
+  body TEXT NOT NULL,
+  timestamp_seconds REAL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_file_comments_file_path ON file_comments(file_path);
+
+CREATE TABLE IF NOT EXISTS file_markers (
+  id TEXT PRIMARY KEY,
+  file_path TEXT NOT NULL,
+  timestamp_seconds REAL NOT NULL,
+  label TEXT NOT NULL,
+  color TEXT NOT NULL DEFAULT '#f59e0b',
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_file_markers_file_path ON file_markers(file_path);

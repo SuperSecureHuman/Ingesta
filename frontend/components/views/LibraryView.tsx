@@ -121,6 +121,8 @@ export default function LibraryView({
   const [loading, setLoading] = useState(true);
   const [files, setFiles] = useState<BrowseResult | null>(null);
   const [sourceTags, setSourceTags] = useState<Record<string, { camera: string | null; lens: string | null }>>({});
+  const [annotationsByPath, setAnnotationsByPath] = useState<Record<string, { tags: string[]; rating: number | null }>>({});
+  const [allDistinctTags, setAllDistinctTags] = useState<string[]>([]);
 
   // Path tag panel state
   const [tagPaths, setTagPaths] = useState<string[]>([]);  // 1 = single, >1 = bulk
@@ -178,8 +180,29 @@ export default function LibraryView({
         })
           .then((r) => r.ok ? r.json() : { tags: {} })
           .then((data) => setSourceTags(data.tags ?? {}));
+
+        apiFetch('/api/path-annotations/batch', {
+          method: 'POST',
+          body: JSON.stringify({ paths: videoPaths }),
+        })
+          .then((r) => r.ok ? r.json() : {})
+          .then((data: Record<string, { tags?: string[]; rating?: number | null }>) => {
+            const byPath: Record<string, { tags: string[]; rating: number | null }> = {};
+            for (const p of videoPaths) {
+              byPath[p] = {
+                tags: data[p]?.tags ?? [],
+                rating: data[p]?.rating ?? null,
+              };
+            }
+            setAnnotationsByPath(byPath);
+          });
+
+        apiFetch('/api/path-annotations/tags')
+          .then((r) => r.ok ? r.json() : [])
+          .then((data) => setAllDistinctTags(Array.isArray(data) ? data : []));
       } else {
         setSourceTags({});
+        setAnnotationsByPath({});
       }
     } catch (e) {
       toast.error(`Error: ${e}`);
@@ -262,6 +285,62 @@ export default function LibraryView({
     }
   };
 
+  const handleAddTag = useCallback(async (path: string, tag: string) => {
+    setAnnotationsByPath((prev) => ({
+      ...prev,
+      [path]: { ...prev[path], tags: [...(prev[path]?.tags ?? []), tag] },
+    }));
+    setAllDistinctTags((prev) => prev.includes(tag) ? prev : [...prev, tag]);
+    const res = await apiFetch(`/api/path-annotations/file/tags?path=${encodeURIComponent(path)}`, {
+      method: 'POST',
+      body: JSON.stringify({ tag }),
+    });
+    if (!res.ok) {
+      setAnnotationsByPath((prev) => ({
+        ...prev,
+        [path]: { ...prev[path], tags: (prev[path]?.tags ?? []).filter((t) => t !== tag) },
+      }));
+      toast.error('Failed to add tag');
+    }
+  }, []);
+
+  const handleRemoveTag = useCallback(async (path: string, tag: string) => {
+    setAnnotationsByPath((prev) => ({
+      ...prev,
+      [path]: { ...prev[path], tags: (prev[path]?.tags ?? []).filter((t) => t !== tag) },
+    }));
+    const res = await apiFetch(
+      `/api/path-annotations/file/tags/${encodeURIComponent(tag)}?path=${encodeURIComponent(path)}`,
+      { method: 'DELETE' }
+    );
+    if (!res.ok) {
+      setAnnotationsByPath((prev) => ({
+        ...prev,
+        [path]: { ...prev[path], tags: [...(prev[path]?.tags ?? []), tag] },
+      }));
+      toast.error('Failed to remove tag');
+    }
+  }, []);
+
+  const handleSetRating = useCallback(async (path: string, rating: number | null) => {
+    const prev = annotationsByPath[path]?.rating ?? null;
+    setAnnotationsByPath((prevState) => ({
+      ...prevState,
+      [path]: { ...prevState[path], rating },
+    }));
+    const res = await apiFetch(`/api/path-annotations/file/rating?path=${encodeURIComponent(path)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ rating }),
+    });
+    if (!res.ok) {
+      setAnnotationsByPath((prevState) => ({
+        ...prevState,
+        [path]: { ...prevState[path], rating: prev },
+      }));
+      toast.error('Failed to set rating');
+    }
+  }, [annotationsByPath]);
+
   const handleFolderOpen = (absoluteFolderPath: string) => {
     if (!library) return;
     const segments = toUrlSegments(absoluteFolderPath, library.root_path);
@@ -340,6 +419,13 @@ export default function LibraryView({
               camera={sourceTags[entry.path]?.camera ?? null}
               lens={sourceTags[entry.path]?.lens ?? null}
               onTagClick={canEdit() ? handleTagClick : undefined}
+              tags={entry.is_video ? (annotationsByPath[entry.path]?.tags ?? []) : undefined}
+              rating={entry.is_video ? (annotationsByPath[entry.path]?.rating ?? null) : undefined}
+              allDistinctTags={allDistinctTags}
+              canEditAnnotations={canEdit()}
+              onAddTag={canEdit() ? handleAddTag : undefined}
+              onRemoveTag={canEdit() ? handleRemoveTag : undefined}
+              onSetRating={canEdit() ? handleSetRating : undefined}
             />
           ))
         )}

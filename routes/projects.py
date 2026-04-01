@@ -69,6 +69,18 @@ async def get_project(
         raise HTTPException(404, "Project not found")
 
     files = await crud.get_project_files(project_id)
+    if files:
+        file_ids = [f["id"] for f in files]
+        tags_map = await crud.get_tags_for_files(file_ids)
+        ratings_map = await crud.get_ratings_for_files(file_ids)
+        comments_map = await crud.get_comments_for_files(file_ids)
+        markers_map = await crud.get_markers_for_files(file_ids)
+        for f in files:
+            fid = f["id"]
+            f["tags"] = tags_map.get(fid, [])
+            f["rating"] = ratings_map.get(fid)
+            f["comments"] = comments_map.get(fid, [])
+            f["markers"] = markers_map.get(fid, [])
     return {
         "project": project,
         "files": files,
