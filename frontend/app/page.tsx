@@ -1,13 +1,42 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import LoginForm from '@/components/auth/LoginForm';
-import AppShell from '@/components/layout/AppShell';
 import HomeView from '@/components/views/HomeView';
 import { PlayerContextProvider } from '@/context/PlayerContext';
 import { LutContextProvider } from '@/context/LutContext';
+import { PanelContextProvider } from '@/context/PanelContext';
 import { useAppContext } from '@/context/AppContext';
 import { useAuth } from '@/hooks/useAuth';
+import { usePanels } from '@/hooks/usePanels';
+import { useSelection } from '@/hooks/useSelection';
+import PlayerContainer from '@/components/player/PlayerContainer';
+import AddToProjectPanel from '@/components/panels/AddToProjectPanel';
+
+function HomePageInner() {
+  const { activePanel, openPanel, closePanel } = usePanels();
+  const { selectedItems, clearSelection } = useSelection();
+
+  const handleAddSuccess = useCallback(() => {
+    clearSelection();
+  }, [clearSelection]);
+
+  return (
+    <PanelContextProvider openPanel={openPanel} closePanel={closePanel} activePanel={activePanel}>
+      <div className="p-6">
+        <HomeView />
+      </div>
+      <AddToProjectPanel
+        isOpen={activePanel === 'addToProject'}
+        onClose={closePanel}
+        onSuccess={handleAddSuccess}
+        selectedItems={selectedItems}
+        currentLibraryId={null}
+      />
+      <PlayerContainer />
+    </PanelContextProvider>
+  );
+}
 
 export default function Home() {
   const { currentUser, setCurrentUser } = useAppContext();
@@ -27,8 +56,8 @@ export default function Home() {
 
   if (isLoading) {
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
-        <div className="spinner"></div>
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
       </div>
     );
   }
@@ -40,9 +69,7 @@ export default function Home() {
   return (
     <LutContextProvider>
       <PlayerContextProvider>
-        <AppShell>
-          <HomeView />
-        </AppShell>
+        <HomePageInner />
       </PlayerContextProvider>
     </LutContextProvider>
   );

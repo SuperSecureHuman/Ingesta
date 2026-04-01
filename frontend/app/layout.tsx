@@ -1,8 +1,17 @@
 import type { Metadata } from 'next';
+import localFont from 'next/font/local';
 import './globals.css';
 import { AppContextProvider } from '@/context/AppContext';
-import { ToastProvider } from '@/context/ToastContext';
 import { SelectionProvider } from '@/context/SelectionContext';
+import { TooltipProvider } from '@/components/ui/tooltip';
+import { Toaster } from '@/components/ui/sonner';
+import ConditionalLayout from '@/components/layout/ConditionalLayout';
+
+const geistSans = localFont({
+  src: './fonts/GeistVF.woff',
+  variable: '--font-sans',
+  weight: '100 900',
+});
 
 export const metadata: Metadata = {
   title: 'Ingesta',
@@ -15,13 +24,18 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" style={{ background: '#0f0f0f' }}>
-      <body>
+    <html lang="en" className={`dark ${geistSans.variable}`}>
+      <body className="font-sans antialiased">
         <AppContextProvider>
-          <ToastProvider>
-            <SelectionProvider>{children}</SelectionProvider>
-          </ToastProvider>
+          <SelectionProvider>
+            <TooltipProvider delay={300}>
+              <ConditionalLayout>
+                {children}
+              </ConditionalLayout>
+            </TooltipProvider>
+          </SelectionProvider>
         </AppContextProvider>
+        <Toaster theme="dark" position="bottom-right" richColors />
       </body>
     </html>
   );

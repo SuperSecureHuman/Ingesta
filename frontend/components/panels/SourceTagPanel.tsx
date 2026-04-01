@@ -3,11 +3,16 @@
 import { useState, useEffect, useRef } from 'react';
 import { apiFetch, fetchLuts } from '@/lib/api';
 import { ProjectFile, LutEntry } from '@/lib/types';
-import { useToast } from '@/context/ToastContext';
+import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Slider } from '@/components/ui/slider';
 import PanelShell from './PanelShell';
 
 const LOG_PROFILES = [
-  { value: '', label: '— none —' },
+  { value: '_none', label: '— none —' },
   { value: 'rec709', label: 'Rec.709' },
   { value: 'logc3', label: 'ARRI LogC3' },
   { value: 'nlog', label: 'Nikon N-Log' },
@@ -48,9 +53,9 @@ function Combobox({ id, label, value, onChange, suggestions, placeholder }: Comb
   }, []);
 
   return (
-    <div className="form-group" ref={ref} style={{ position: 'relative' }}>
-      <label htmlFor={id}>{label}</label>
-      <input
+    <div className="space-y-1.5" ref={ref} style={{ position: 'relative' }}>
+      <Label htmlFor={id}>{label}</Label>
+      <Input
         id={id}
         type="text"
         value={value}
@@ -60,25 +65,12 @@ function Combobox({ id, label, value, onChange, suggestions, placeholder }: Comb
         autoComplete="off"
       />
       {open && filtered.length > 0 && (
-        <div style={{
-          position: 'absolute',
-          top: '100%',
-          left: 0,
-          right: 0,
-          background: '#1e1e1e',
-          border: '1px solid #444',
-          borderRadius: '4px',
-          zIndex: 100,
-          maxHeight: '160px',
-          overflowY: 'auto',
-        }}>
+        <div className="absolute top-full left-0 right-0 z-50 rounded-md border border-border bg-zinc-900 shadow-lg max-h-40 overflow-y-auto">
           {filtered.map((s) => (
             <div
               key={s}
               onMouseDown={(e) => { e.preventDefault(); onChange(s); setOpen(false); }}
-              style={{ padding: '8px 12px', cursor: 'pointer', fontSize: '13px' }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = '#2a2a2a')}
-              onMouseLeave={(e) => (e.currentTarget.style.background = '')}
+              className="px-3 py-2 text-sm cursor-pointer hover:bg-zinc-800"
             >
               {s}
             </div>
@@ -92,22 +84,19 @@ function Combobox({ id, label, value, onChange, suggestions, placeholder }: Comb
 interface SourceTagPanelProps {
   isOpen: boolean;
   onClose: () => void;
-  /** Single file or array of files for multi-select mode */
   files: ProjectFile | ProjectFile[] | null;
   onSaved?: (updatedFiles: ProjectFile[]) => void;
 }
 
 export default function SourceTagPanel({ isOpen, onClose, files, onSaved }: SourceTagPanelProps) {
-  const { showToast } = useToast();
-
   const fileList: ProjectFile[] = files === null ? [] : Array.isArray(files) ? files : [files];
   const isMulti = fileList.length > 1;
   const singleFile = !isMulti ? fileList[0] ?? null : null;
 
   const [camera, setCamera] = useState('');
   const [lens, setLens] = useState('');
-  const [logProfile, setLogProfile] = useState('');
-  const [lutId, setLutId] = useState('');
+  const [logProfile, setLogProfile] = useState('_none');
+  const [lutId, setLutId] = useState('_none');
   const [intensity, setIntensity] = useState(1.0);
 
   const [cameras, setCameras] = useState<string[]>([]);
@@ -122,11 +111,10 @@ export default function SourceTagPanel({ isOpen, onClose, files, onSaved }: Sour
     setError('');
 
     if (isMulti) {
-      // Multi-mode: start blank — user fills in what to apply
       setCamera('');
       setLens('');
-      setLogProfile('');
-      setLutId('');
+      setLogProfile('_none');
+      setLutId('_none');
       setIntensity(1.0);
     } else if (singleFile) {
       setCamera(singleFile.camera ?? '');
@@ -146,11 +134,12 @@ export default function SourceTagPanel({ isOpen, onClose, files, onSaved }: Sour
       setLenses(lensData.lenses ?? []);
       setLuts(lutsData);
       if (!isMulti) {
-        setLogProfile(colorMeta?.log_profile ?? '');
-        setLutId(lutPref?.lut_id ?? '');
+        setLogProfile(colorMeta?.log_profile ?? '_none');
+        setLutId(lutPref?.lut_id ?? '_none');
         setIntensity(lutPref?.intensity ?? 1.0);
       }
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, fileList.map((f) => f.id).join(',')]);
 
   const handleSave = async () => {
@@ -162,7 +151,6 @@ export default function SourceTagPanel({ isOpen, onClose, files, onSaved }: Sour
       const calls: Promise<Response>[] = [];
 
       for (const file of fileList) {
-        // Always save source tags
         calls.push(
           apiFetch(`/api/files/${file.id}/source-tags`, {
             method: 'PUT',
@@ -173,20 +161,20 @@ export default function SourceTagPanel({ isOpen, onClose, files, onSaved }: Sour
           })
         );
 
-        // In multi-mode only save color/lut if user explicitly set a value
-        if (!isMulti || logProfile) {
+        if (!isMulti || logProfile !== '_none') {
           calls.push(
             apiFetch(`/api/files/${file.id}/color-meta`, {
               method: 'PUT',
-              body: JSON.stringify({ log_profile: logProfile || null }),
+              body: JSON.stringify({ log_profile: logProfile === '_none' ? null : logProfile }),
             })
           );
         }
-        if (!isMulti || lutId) {
+        const resolvedLutId = lutId === '_none' ? null : lutId;
+        if (!isMulti || resolvedLutId) {
           calls.push(
             apiFetch(`/api/files/${file.id}/lut-pref`, {
               method: 'PUT',
-              body: JSON.stringify({ lut_id: lutId || null, intensity }),
+              body: JSON.stringify({ lut_id: resolvedLutId, intensity }),
             })
           );
         }
@@ -199,10 +187,7 @@ export default function SourceTagPanel({ isOpen, onClose, files, onSaved }: Sour
         throw new Error(body.detail ?? 'Save failed');
       }
 
-      showToast(
-        isMulti ? `Tags applied to ${fileList.length} files` : 'Source tags saved',
-        'success'
-      );
+      toast.success(isMulti ? `Tags applied to ${fileList.length} files` : 'Source tags saved');
       onSaved?.(
         fileList.map((f) => ({
           ...f,
@@ -214,15 +199,13 @@ export default function SourceTagPanel({ isOpen, onClose, files, onSaved }: Sour
     } catch (e) {
       const msg = `${e}`;
       setError(msg);
-      showToast(msg, 'error');
+      toast.error(msg);
     } finally {
       setSubmitting(false);
     }
   };
 
-  const multiHint = isMulti
-    ? `Applying to ${fileList.length} files. Blank fields are left unchanged.`
-    : null;
+  const resolvedLutId = lutId === '_none' ? null : lutId;
 
   return (
     <PanelShell
@@ -231,76 +214,81 @@ export default function SourceTagPanel({ isOpen, onClose, files, onSaved }: Sour
       onClose={onClose}
       error={error}
       footer={
-        <div style={{ display: 'flex', gap: '12px' }}>
-          <button className="btn btn-secondary" onClick={onClose} disabled={submitting}>
-            Cancel
-          </button>
-          <button
-            className="btn btn-primary"
-            onClick={handleSave}
-            style={{ flex: 1 }}
-            disabled={submitting}
-          >
+        <div className="flex gap-3">
+          <Button variant="outline" onClick={onClose} disabled={submitting}>Cancel</Button>
+          <Button className="flex-1" onClick={handleSave} disabled={submitting}>
             {submitting ? 'Saving...' : isMulti ? `Apply to ${fileList.length} Files` : 'Save'}
-          </button>
+          </Button>
         </div>
       }
     >
-      {multiHint && (
-        <div style={{ fontSize: '12px', color: '#888', marginBottom: '12px' }}>{multiHint}</div>
-      )}
+      <div className="space-y-4">
+        {isMulti && (
+          <p className="text-xs text-muted-foreground">
+            Applying to {fileList.length} files. Blank fields are left unchanged.
+          </p>
+        )}
 
-      <Combobox
-        id="camera"
-        label="Camera"
-        value={camera}
-        onChange={setCamera}
-        suggestions={cameras}
-        placeholder={isMulti ? 'Leave blank to keep existing' : undefined}
-      />
-      <Combobox
-        id="lens"
-        label="Lens"
-        value={lens}
-        onChange={setLens}
-        suggestions={lenses}
-        placeholder={isMulti ? 'Leave blank to keep existing' : undefined}
-      />
+        <Combobox
+          id="camera"
+          label="Camera"
+          value={camera}
+          onChange={setCamera}
+          suggestions={cameras}
+          placeholder={isMulti ? 'Leave blank to keep existing' : undefined}
+        />
+        <Combobox
+          id="lens"
+          label="Lens"
+          value={lens}
+          onChange={setLens}
+          suggestions={lenses}
+          placeholder={isMulti ? 'Leave blank to keep existing' : undefined}
+        />
 
-      <div className="form-group">
-        <label htmlFor="logProfile">Log Profile{isMulti && ' (apply to all)'}</label>
-        <select id="logProfile" value={logProfile} onChange={(e) => setLogProfile(e.target.value)}>
-          {LOG_PROFILES.map((p) => (
-            <option key={p.value} value={p.value}>{p.label}</option>
-          ))}
-        </select>
-      </div>
-
-      <div className="form-group">
-        <label htmlFor="preferredLut">Preferred LUT{isMulti && ' (apply to all)'}</label>
-        <select id="preferredLut" value={lutId} onChange={(e) => setLutId(e.target.value)}>
-          <option value="">— none —</option>
-          {luts.map((l) => (
-            <option key={l.id} value={l.id}>{l.name} ({l.camera})</option>
-          ))}
-        </select>
-      </div>
-
-      {lutId && (
-        <div className="form-group">
-          <label htmlFor="lutIntensity">LUT Intensity: {Math.round(intensity * 100)}%</label>
-          <input
-            id="lutIntensity"
-            type="range"
-            min={0}
-            max={1}
-            step={0.01}
-            value={intensity}
-            onChange={(e) => setIntensity(parseFloat(e.target.value))}
-            style={{ width: '100%' }}
-          />
+        <div className="space-y-1.5">
+          <Label>Log Profile{isMulti && ' (apply to all)'}</Label>
+          <Select value={logProfile} onValueChange={(v) => setLogProfile(v ?? '_none')}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {LOG_PROFILES.map((p) => (
+                <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
-      )}
+
+        <div className="space-y-1.5">
+          <Label>Preferred LUT{isMulti && ' (apply to all)'}</Label>
+          <Select value={lutId} onValueChange={(v) => setLutId(v ?? '_none')}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="_none">— none —</SelectItem>
+              {luts.map((l) => (
+                <SelectItem key={l.id} value={l.id}>{l.name} ({l.camera})</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {resolvedLutId && (
+          <div className="space-y-2">
+            <Label>LUT Intensity: {Math.round(intensity * 100)}%</Label>
+            <Slider
+              value={intensity}
+              onValueChange={(v) => setIntensity(v as number)}
+              min={0}
+              max={1}
+              step={0.01}
+              className="w-full"
+            />
+          </div>
+        )}
+      </div>
     </PanelShell>
   );
 }

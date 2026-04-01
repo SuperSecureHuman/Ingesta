@@ -5,15 +5,20 @@ import { useRouter } from 'next/navigation';
 import { apiFetch } from '@/lib/api';
 import { Library, BrowseResult, SelectionItem, LutEntry } from '@/lib/types';
 import { slugify } from '@/lib/utils';
-import { useToast } from '@/context/ToastContext';
+import { toast } from 'sonner';
 import { usePlayerContext } from '@/context/PlayerContext';
 import { useSelection } from '@/hooks/useSelection';
 import { useAuth } from '@/hooks/useAuth';
 import { usePanelContext } from '@/context/PanelContext';
 import { fetchLuts } from '@/lib/api';
-import Spinner from '@/components/ui/Spinner';
+import { Loader2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Slider } from '@/components/ui/slider';
 import FileCard from '@/components/cards/FileCard';
-import SelectionToolbar from '@/components/ui/SelectionToolbar';
+import SelectionToolbar from '@/components/custom/SelectionToolbar';
 import PanelShell from '@/components/panels/PanelShell';
 
 interface LibraryViewProps {
@@ -72,9 +77,9 @@ function Combobox({ id, label, value, onChange, suggestions }: ComboboxProps) {
   }, []);
 
   return (
-    <div className="form-group" ref={ref} style={{ position: 'relative' }}>
-      <label htmlFor={id}>{label}</label>
-      <input
+    <div className="space-y-1.5 mt-4" ref={ref} style={{ position: 'relative' }}>
+      <Label htmlFor={id}>{label}</Label>
+      <Input
         id={id}
         type="text"
         value={value}
@@ -107,7 +112,6 @@ export default function LibraryView({
   onLibraryResolved,
 }: LibraryViewProps) {
   const router = useRouter();
-  const { showToast } = useToast();
   const { startPlayback } = usePlayerContext();
   const { selectedItems, updateSelection, clearSelection } = useSelection();
   const { canEdit } = useAuth();
@@ -143,12 +147,14 @@ export default function LibraryView({
         onLibraryResolved?.(found.id, found.name);
       })
       .catch(() => router.replace('/'));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [librarySlug]);
 
   useEffect(() => {
     if (!library) return;
     const absolutePath = toAbsolutePath(library.root_path, folderPath);
     loadLibraryFiles(absolutePath);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [library, folderPath.join('/')]);
 
   const loadLibraryFiles = async (path: string) => {
@@ -158,7 +164,7 @@ export default function LibraryView({
       const browseRes = await apiFetch(
         `/api/libraries/${library.id}/browse?path=${encodeURIComponent(path)}`
       );
-      if (!browseRes.ok) { showToast('Failed to load files', 'error'); return; }
+      if (!browseRes.ok) { toast.error('Failed to load files'); return; }
       const browseData = await browseRes.json();
       setFiles(browseData);
 
@@ -176,7 +182,7 @@ export default function LibraryView({
         setSourceTags({});
       }
     } catch (e) {
-      showToast(`Error: ${e}`, 'error');
+      toast.error(`Error: ${e}`);
     } finally {
       setLoading(false);
     }
@@ -247,7 +253,7 @@ export default function LibraryView({
         tagPaths.forEach((p) => { next[p] = tagUpdate; });
         return next;
       });
-      showToast(tagPaths.length > 1 ? `Tags applied to ${tagPaths.length} files` : 'Tags saved', 'success');
+      toast.success(tagPaths.length > 1 ? `Tags applied to ${tagPaths.length} files` : 'Tags saved');
       setTagPaths([]);
     } catch (e) {
       setTagError(`${e}`);
@@ -290,8 +296,8 @@ export default function LibraryView({
 
   if (loading) {
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', padding: '40px' }}>
-        <Spinner />
+      <div className="flex justify-center py-10">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -302,22 +308,22 @@ export default function LibraryView({
 
   return (
     <div>
-      <div className="section-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
           {files.parent !== null && (
-            <button className="btn btn-sm" onClick={handleNavigateBack}>
+            <Button size="sm" variant="outline" onClick={handleNavigateBack}>
               ← Back
-            </button>
+            </Button>
           )}
-          <h2>Library Files</h2>
+          <h2 className="text-lg font-semibold">Library Files</h2>
         </div>
         {canEdit() && (
-          <button className="btn btn-primary btn-sm" onClick={handleAddEntireLibrary}>
+          <Button size="sm" onClick={handleAddEntireLibrary}>
             Add Entire Library to Project
-          </button>
+          </Button>
         )}
       </div>
-      <div className="grid">
+      <div className="grid-cards">
         {files.entries.length === 0 ? (
           <div style={{ gridColumn: '1/-1', color: '#666', padding: '20px' }}>
             No files in this library.
@@ -354,52 +360,54 @@ export default function LibraryView({
         onClose={() => setTagPaths([])}
         error={tagError}
         footer={
-          <div style={{ display: 'flex', gap: '12px' }}>
-            <button className="btn btn-secondary" onClick={() => setTagPaths([])} disabled={tagSubmitting}>
+          <div className="flex gap-3">
+            <Button variant="outline" onClick={() => setTagPaths([])} disabled={tagSubmitting}>
               Cancel
-            </button>
-            <button className="btn btn-primary" onClick={handleTagSave} style={{ flex: 1 }} disabled={tagSubmitting}>
+            </Button>
+            <Button className="flex-1" onClick={handleTagSave} disabled={tagSubmitting}>
               {tagSubmitting ? 'Saving...' : tagPaths.length > 1 ? `Apply to ${tagPaths.length} Files` : 'Save'}
-            </button>
+            </Button>
           </div>
         }
       >
         {tagPaths.length > 1 && (
-          <div style={{ fontSize: '12px', color: '#888', marginBottom: '12px' }}>
-            Blank fields are left unchanged.
-          </div>
+          <p className="text-xs text-muted-foreground mb-2">Blank fields are left unchanged.</p>
         )}
         <Combobox id="lib-camera" label="Camera" value={tagCamera} onChange={setTagCamera} suggestions={allCameras} />
         <Combobox id="lib-lens" label="Lens" value={tagLens} onChange={setTagLens} suggestions={allLenses} />
-        <div className="form-group">
-          <label htmlFor="lib-logProfile">Log Profile</label>
-          <select id="lib-logProfile" value={tagLogProfile} onChange={(e) => setTagLogProfile(e.target.value)}>
-            {LOG_PROFILES.map((p) => (
-              <option key={p.value} value={p.value}>{p.label}</option>
-            ))}
-          </select>
+        <div className="space-y-1.5 mt-4">
+          <Label>Log Profile</Label>
+          <Select value={tagLogProfile || '_none'} onValueChange={(v) => setTagLogProfile(v === '_none' ? '' : (v ?? ''))}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {LOG_PROFILES.map((p) => (
+                <SelectItem key={p.value} value={p.value || '_none'}>{p.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
-        <div className="form-group">
-          <label htmlFor="lib-preferredLut">Preferred LUT{tagPaths.length > 1 && ' (apply to all)'}</label>
-          <select id="lib-preferredLut" value={tagLutId} onChange={(e) => setTagLutId(e.target.value)}>
-            <option value="">— none —</option>
-            {allLuts.map((l) => (
-              <option key={l.id} value={l.id}>{l.name} ({l.camera})</option>
-            ))}
-          </select>
+        <div className="space-y-1.5 mt-4">
+          <Label>Preferred LUT{tagPaths.length > 1 && ' (apply to all)'}</Label>
+          <Select value={tagLutId || '_none'} onValueChange={(v) => setTagLutId(v === '_none' ? '' : (v ?? ''))}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="_none">— none —</SelectItem>
+              {allLuts.map((l) => (
+                <SelectItem key={l.id} value={l.id}>{l.name} ({l.camera})</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
         {tagLutId && (
-          <div className="form-group">
-            <label htmlFor="lib-lutIntensity">LUT Intensity: {Math.round(tagLutIntensity * 100)}%</label>
-            <input
-              id="lib-lutIntensity"
-              type="range"
+          <div className="space-y-2 mt-4">
+            <Label>LUT Intensity: {Math.round(tagLutIntensity * 100)}%</Label>
+            <Slider
+              value={tagLutIntensity}
+              onValueChange={(v) => setTagLutIntensity(v as number)}
               min={0}
               max={1}
               step={0.01}
-              value={tagLutIntensity}
-              onChange={(e) => setTagLutIntensity(parseFloat(e.target.value))}
-              style={{ width: '100%' }}
+              className="w-full"
             />
           </div>
         )}

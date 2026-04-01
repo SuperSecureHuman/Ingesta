@@ -1,13 +1,9 @@
 'use client';
 
-import React, { useState, useCallback } from 'react';
-import { formatTime, getFileName } from '@/lib/utils';
-
-const FALLBACK_SVG = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='120'%3E%3Crect fill='%231a1a1a' width='200' height='120'/%3E%3Ctext x='50%25' y='50%25' fill='%23666' text-anchor='middle' dy='.3em' font-size='14'%3E🎥%3C/text%3E%3C/svg%3E`;
+import React from 'react';
 
 interface SharePlayerProps {
   videoRef: React.RefObject<HTMLVideoElement>;
-  currentFilePath: string | null;
   isPlaying: boolean;
   infoVisible: boolean;
   controlsVisible: boolean;
@@ -36,7 +32,6 @@ interface SharePlayerProps {
 
 export function SharePlayer({
   videoRef,
-  currentFilePath,
   isPlaying,
   infoVisible,
   controlsVisible,

@@ -2,7 +2,10 @@
 
 import { useState } from 'react';
 import { apiFetch } from '@/lib/api';
-import { useToast } from '@/context/ToastContext';
+import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import PanelShell from './PanelShell';
 
 interface CreateSharePanelProps {
@@ -18,7 +21,6 @@ export default function CreateSharePanel({
   currentProjectId,
   onOpenShareLinks,
 }: CreateSharePanelProps) {
-  const { showToast } = useToast();
   const [password, setPassword] = useState('');
   const [expiryDays, setExpiryDays] = useState('');
   const [error, setError] = useState('');
@@ -43,21 +45,16 @@ export default function CreateSharePanel({
       setLoading(true);
       setError('');
 
-      const body: Record<string, string | number> = {
-        password,
-      };
+      const body: Record<string, string | number> = { password };
 
       if (expiryDays && expiryDays !== '') {
         body.expires_in_days = parseInt(expiryDays, 10);
       }
 
-      const res = await apiFetch(
-        `/api/share/${currentProjectId}/share`,
-        {
-          method: 'POST',
-          body: JSON.stringify(body),
-        }
-      );
+      const res = await apiFetch(`/api/share/${currentProjectId}/share`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
 
       if (!res.ok) {
         const data = await res.json();
@@ -67,16 +64,12 @@ export default function CreateSharePanel({
       const data = await res.json();
       const shareUrl = `${window.location.origin}/share/${data.share_id}`;
 
-      setShareLink({
-        url: shareUrl,
-        expiresAt: data.expires_at,
-      });
-
-      showToast('Share link created!', 'success');
+      setShareLink({ url: shareUrl, expiresAt: data.expires_at });
+      toast.success('Share link created!');
     } catch (e) {
       const msg = `${e}`;
       setError(msg);
-      showToast(msg, 'error');
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
@@ -86,9 +79,9 @@ export default function CreateSharePanel({
     if (shareLink) {
       try {
         await navigator.clipboard.writeText(shareLink.url);
-        showToast('Link copied to clipboard!', 'success');
-      } catch (e) {
-        showToast('Failed to copy link', 'error');
+        toast.success('Link copied to clipboard!');
+      } catch {
+        toast.error('Failed to copy link');
       }
     }
   };
@@ -103,103 +96,29 @@ export default function CreateSharePanel({
   };
 
   if (shareLink) {
-    // Share created overlay
     return (
-      <div
-        style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'rgba(0,0,0,0.8)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000,
-        }}
-      >
-        <div
-          style={{
-            background: '#1a1a1a',
-            border: '1px solid #333',
-            borderRadius: '8px',
-            padding: '24px',
-            maxWidth: '500px',
-            color: '#e0e0e0',
-          }}
-        >
-          <div style={{ marginBottom: '16px', fontSize: '18px', fontWeight: 'bold' }}>
-            Share Link Created
+      <PanelShell isOpen={isOpen} title="Share Link Created" onClose={handleDone}>
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <Label>Share URL</Label>
+            <Input readOnly value={shareLink.url} className="font-mono text-xs text-green-400" />
           </div>
 
-          <div style={{ marginBottom: '16px' }}>
-            <label style={{ display: 'block', marginBottom: '8px', fontSize: '12px', color: '#999' }}>
-              Share URL
-            </label>
-            <input
-              type="text"
-              readOnly
-              value={shareLink.url}
-              style={{
-                width: '100%',
-                padding: '8px 12px',
-                background: '#0d0d0d',
-                border: '1px solid #333',
-                color: '#0f0',
-                fontFamily: 'monospace',
-                fontSize: '12px',
-                borderRadius: '4px',
-                boxSizing: 'border-box',
-              }}
-            />
-          </div>
-
-          <button
-            onClick={handleCopyLink}
-            style={{
-              width: '100%',
-              padding: '8px 12px',
-              background: '#0066cc',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              marginBottom: '16px',
-              fontSize: '14px',
-              fontWeight: 'bold',
-            }}
-          >
+          <Button className="w-full" onClick={handleCopyLink}>
             Copy Link
-          </button>
+          </Button>
 
-          {shareLink.expiresAt && (
-            <div style={{ marginBottom: '16px', fontSize: '12px', color: '#999' }}>
-              Expires: {new Date(shareLink.expiresAt).toLocaleString()}
-            </div>
-          )}
+          <p className="text-xs text-muted-foreground">
+            {shareLink.expiresAt
+              ? `Expires: ${new Date(shareLink.expiresAt).toLocaleString()}`
+              : 'Never expires'}
+          </p>
 
-          {!shareLink.expiresAt && (
-            <div style={{ marginBottom: '16px', fontSize: '12px', color: '#999' }}>
-              Never expires
-            </div>
-          )}
-
-          <button
-            onClick={handleDone}
-            style={{
-              width: '100%',
-              padding: '8px 12px',
-              background: '#0066cc',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              fontSize: '14px',
-              fontWeight: 'bold',
-            }}
-          >
+          <Button variant="outline" className="w-full" onClick={handleDone}>
             Done
-          </button>
+          </Button>
         </div>
-      </div>
+      </PanelShell>
     );
   }
 
@@ -210,49 +129,40 @@ export default function CreateSharePanel({
       onClose={onClose}
       error={error}
       footer={
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <button
-            className="btn btn-secondary"
-            onClick={onClose}
-            disabled={loading}
-          >
-            Cancel
-          </button>
-          <button
-            className="btn btn-primary"
-            onClick={handleSubmit}
-            disabled={loading}
-            style={{ flex: 1 }}
-          >
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={onClose} disabled={loading}>Cancel</Button>
+          <Button className="flex-1" onClick={handleSubmit} disabled={loading}>
             {loading ? 'Creating...' : 'Create'}
-          </button>
+          </Button>
         </div>
       }
     >
-      <div className="form-group">
-        <label htmlFor="sharePassword">Password</label>
-        <input
-          type="password"
-          id="sharePassword"
-          placeholder="Share password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          autoFocus
-          disabled={loading}
-        />
-      </div>
+      <div className="space-y-4">
+        <div className="space-y-1.5">
+          <Label htmlFor="sharePassword">Password</Label>
+          <Input
+            id="sharePassword"
+            type="password"
+            placeholder="Share password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            autoFocus
+            disabled={loading}
+          />
+        </div>
 
-      <div className="form-group">
-        <label htmlFor="shareExpiry">Expires in (days, optional)</label>
-        <input
-          type="number"
-          id="shareExpiry"
-          placeholder="Leave empty for no expiry"
-          min="1"
-          value={expiryDays}
-          onChange={(e) => setExpiryDays(e.target.value)}
-          disabled={loading}
-        />
+        <div className="space-y-1.5">
+          <Label htmlFor="shareExpiry">Expires in (days, optional)</Label>
+          <Input
+            id="shareExpiry"
+            type="number"
+            placeholder="Leave empty for no expiry"
+            min="1"
+            value={expiryDays}
+            onChange={(e) => setExpiryDays(e.target.value)}
+            disabled={loading}
+          />
+        </div>
       </div>
     </PanelShell>
   );

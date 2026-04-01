@@ -2,9 +2,12 @@
 
 import { useState } from 'react';
 import { apiFetch } from '@/lib/api';
-import { useToast } from '@/context/ToastContext';
+import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import PanelShell from './PanelShell';
-import FsBrowserModal from '@/components/ui/FsBrowserModal';
+import FsBrowserModal from '@/components/custom/FsBrowserModal';
 
 interface CreateLibraryPanelProps {
   isOpen: boolean;
@@ -22,7 +25,6 @@ export default function CreateLibraryPanel({
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showBrowser, setShowBrowser] = useState(false);
-  const { showToast } = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -48,7 +50,7 @@ export default function CreateLibraryPanel({
 
       setName('');
       setPath('');
-      showToast('Library created', 'success');
+      toast.success('Library created');
       onSuccess();
     } catch (e) {
       setError(`Error: ${e}`);
@@ -64,46 +66,34 @@ export default function CreateLibraryPanel({
       onClose={onClose}
       error={error}
       footer={
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <button className="btn btn-secondary" onClick={onClose}>
-            Cancel
-          </button>
-          <button
-            className="btn btn-primary"
-            style={{ flex: 1 }}
-            onClick={handleSubmit}
-            disabled={loading}
-          >
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={onClose} disabled={loading}>Cancel</Button>
+          <Button className="flex-1" onClick={handleSubmit} disabled={loading}>
             {loading ? 'Creating...' : 'Create'}
-          </button>
+          </Button>
         </div>
       }
     >
-      <div className="form-group">
-        <label htmlFor="libName">Library Name</label>
-        <input
-          type="text"
-          id="libName"
-          placeholder="e.g., Drone Footage"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-        />
-      </div>
-      <div className="form-group">
-        <label>Root Path</label>
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          <span style={{
-            flex: 1, padding: '8px', background: 'var(--bg-secondary)',
-            border: '1px solid var(--border)', borderRadius: '4px',
-            color: path ? 'var(--text-primary)' : 'var(--text-muted)',
-            fontSize: '14px', wordBreak: 'break-all',
-          }}>
-            {path || 'No folder selected'}
-          </span>
-          <button type="button" className="btn btn-secondary"
-                  onClick={() => setShowBrowser(true)}>
-            Browse…
-          </button>
+      <div className="space-y-4">
+        <div className="space-y-1.5">
+          <Label htmlFor="libName">Library Name</Label>
+          <Input
+            id="libName"
+            placeholder="e.g., Drone Footage"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label>Root Path</Label>
+          <div className="flex gap-2 items-center">
+            <div className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm text-muted-foreground min-h-9 break-all">
+              {path || 'No folder selected'}
+            </div>
+            <Button type="button" variant="outline" size="sm" onClick={() => setShowBrowser(true)}>
+              Browse…
+            </Button>
+          </div>
         </div>
       </div>
       {showBrowser && (

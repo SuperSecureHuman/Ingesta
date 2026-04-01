@@ -29,6 +29,7 @@ export default function ShareViewerPage() {
       setJwt(stored);
       loadFiles(stored);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shareId]);
 
   const shareFetch = useCallback(
@@ -228,6 +229,7 @@ function ShareMain({
                     }`}
                   >
                     <div className="aspect-video relative bg-gray-800">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={posterUrl}
                         alt={fileName}

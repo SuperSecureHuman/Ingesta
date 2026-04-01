@@ -2,9 +2,38 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { apiFetch } from '@/lib/api';
-import { useToast } from '@/context/ToastContext';
+import { toast } from 'sonner';
 import { useAppContext } from '@/context/AppContext';
 import { Role, Library } from '@/lib/types';
+import { Loader2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
 interface AdminUser {
   id: string;
@@ -21,12 +50,14 @@ interface LibraryPermission {
 }
 
 export default function SettingsView() {
-  const { showToast } = useToast();
   const { currentUser } = useAppContext();
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [expandedPermsUser, setExpandedPermsUser] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; username: string } | null>(null);
+  const [resetTarget, setResetTarget] = useState<{ id: string; username: string } | null>(null);
+  const [newPassword, setNewPassword] = useState('');
 
   const loadUsers = useCallback(async () => {
     try {
@@ -35,166 +66,217 @@ export default function SettingsView() {
       const data = await res.json();
       setUsers(data.users);
     } catch (e) {
-      showToast(`${e}`, 'error');
+      toast.error(`${e}`);
     } finally {
       setLoading(false);
     }
-  }, [showToast]);
+  }, []);
 
   useEffect(() => {
     loadUsers();
   }, [loadUsers]);
 
-  const handleRoleChange = async (userId: string, newRole: Role) => {
+  const handleRoleChange = async (userId: string, newRole: string | null) => {
+    if (!newRole) return;
     try {
       const res = await apiFetch(`/api/admin/users/${userId}`, {
         method: 'PATCH',
         body: JSON.stringify({ role: newRole }),
       });
       if (!res.ok) throw new Error('Failed to update role');
-      showToast('Role updated', 'success');
+      toast.success('Role updated');
       await loadUsers();
     } catch (e) {
-      showToast(`${e}`, 'error');
+      toast.error(`${e}`);
     }
   };
 
-  const handleDeleteUser = async (userId: string, username: string) => {
-    if (!confirm(`Delete user "${username}"? This cannot be undone.`)) return;
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
     try {
-      const res = await apiFetch(`/api/admin/users/${userId}`, { method: 'DELETE' });
+      const res = await apiFetch(`/api/admin/users/${deleteTarget.id}`, { method: 'DELETE' });
       if (!res.ok) {
         const err = await res.json();
         throw new Error(err.detail || 'Failed to delete');
       }
-      showToast('User deleted', 'success');
+      toast.success('User deleted');
+      setDeleteTarget(null);
       await loadUsers();
     } catch (e) {
-      showToast(`${e}`, 'error');
+      toast.error(`${e}`);
     }
   };
 
-  const handleResetPassword = async (userId: string, username: string) => {
-    const newPassword = prompt(`New password for "${username}":`);
-    if (!newPassword) return;
+  const handleConfirmReset = async () => {
+    if (!resetTarget || !newPassword) return;
     try {
-      const res = await apiFetch(`/api/admin/users/${userId}`, {
+      const res = await apiFetch(`/api/admin/users/${resetTarget.id}`, {
         method: 'PATCH',
         body: JSON.stringify({ password: newPassword }),
       });
       if (!res.ok) throw new Error('Failed to reset password');
-      showToast('Password reset', 'success');
+      toast.success('Password reset');
+      setResetTarget(null);
+      setNewPassword('');
     } catch (e) {
-      showToast(`${e}`, 'error');
+      toast.error(`${e}`);
     }
   };
 
   if (loading) {
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', padding: '40px' }}>
-        <div className="spinner" />
+      <div className="flex justify-center py-10">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
 
   return (
-    <div style={{ padding: '24px' }}>
-      <div className="section-header">
-        <h2>User Management</h2>
-        <button className="btn btn-primary btn-sm" onClick={() => setShowCreateModal(true)}>
-          + New User
-        </button>
+    <div>
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-lg font-semibold">User Management</h2>
+        <Button size="sm" onClick={() => setShowCreateModal(true)}>+ New User</Button>
       </div>
 
-      <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr style={{ borderBottom: '1px solid var(--color-border)' }}>
-              <th style={{ textAlign: 'left', padding: '10px 8px', color: 'var(--color-muted)', fontSize: '13px' }}>Username</th>
-              <th style={{ textAlign: 'left', padding: '10px 8px', color: 'var(--color-muted)', fontSize: '13px' }}>Role</th>
-              <th style={{ textAlign: 'left', padding: '10px 8px', color: 'var(--color-muted)', fontSize: '13px' }}>Created</th>
-              <th style={{ textAlign: 'left', padding: '10px 8px', color: 'var(--color-muted)', fontSize: '13px' }}>Permissions</th>
-              <th style={{ textAlign: 'left', padding: '10px 8px', color: 'var(--color-muted)', fontSize: '13px' }}>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
+      <div className="overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Username</TableHead>
+              <TableHead>Role</TableHead>
+              <TableHead>Created</TableHead>
+              <TableHead>Permissions</TableHead>
+              <TableHead>Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {users.map((user) => (
               <>
-                <tr key={user.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
-                  <td style={{ padding: '10px 8px' }}>{user.username}</td>
-                  <td style={{ padding: '10px 8px' }}>
-                    <select
-                      value={user.role}
-                      onChange={(e) => handleRoleChange(user.id, e.target.value as Role)}
-                      style={{ background: 'var(--color-bg-card)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: '4px', padding: '2px 6px' }}
-                    >
-                      <option value="viewer">viewer</option>
-                      <option value="editor">editor</option>
-                      <option value="admin">admin</option>
-                    </select>
-                  </td>
-                  <td style={{ padding: '10px 8px', color: 'var(--color-muted)', fontSize: '13px' }}>
+                <TableRow key={user.id}>
+                  <TableCell>{user.username}</TableCell>
+                  <TableCell>
+                    <Select value={user.role} onValueChange={(v) => handleRoleChange(user.id, v)}>
+                      <SelectTrigger className="h-8 w-28">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="viewer">viewer</SelectItem>
+                        <SelectItem value="editor">editor</SelectItem>
+                        <SelectItem value="admin">admin</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </TableCell>
+                  <TableCell className="text-sm text-muted-foreground">
                     {new Date(user.created_at).toLocaleDateString()}
-                  </td>
-                  <td style={{ padding: '10px 8px' }}>
+                  </TableCell>
+                  <TableCell>
                     {user.role !== 'admin' && (
-                      <button
-                        className="btn btn-sm"
+                      <Button
+                        size="sm"
+                        variant="outline"
                         onClick={() => setExpandedPermsUser(expandedPermsUser === user.id ? null : user.id)}
                       >
                         Library Perms {expandedPermsUser === user.id ? '▲' : '▶'}
-                      </button>
+                      </Button>
                     )}
-                  </td>
-                  <td style={{ padding: '10px 8px', display: 'flex', gap: '6px' }}>
-                    <button
-                      className="btn btn-secondary btn-sm"
-                      onClick={() => handleResetPassword(user.id, user.username)}
-                    >
-                      Reset PW
-                    </button>
-                    <button
-                      className="btn btn-danger btn-sm"
-                      disabled={user.username === currentUser?.username}
-                      onClick={() => handleDeleteUser(user.id, user.username)}
-                    >
-                      Delete
-                    </button>
-                  </td>
-                </tr>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => { setResetTarget({ id: user.id, username: user.username }); setNewPassword(''); }}
+                      >
+                        Reset PW
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        disabled={user.username === currentUser?.username}
+                        onClick={() => setDeleteTarget({ id: user.id, username: user.username })}
+                      >
+                        Delete
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
                 {expandedPermsUser === user.id && (
-                  <tr key={`${user.id}-perms`}>
-                    <td colSpan={5} style={{ padding: '0 8px 12px 32px', background: 'var(--color-bg-card)' }}>
+                  <TableRow key={`${user.id}-perms`}>
+                    <TableCell colSpan={5} className="bg-zinc-900/50 pl-8 pb-3">
                       <LibraryPermissionsPanel userId={user.id} />
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 )}
               </>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
 
-      {showCreateModal && (
-        <CreateUserModal
-          onClose={() => setShowCreateModal(false)}
-          onSuccess={() => {
-            setShowCreateModal(false);
-            loadUsers();
-          }}
-        />
-      )}
+      {/* Delete user confirmation */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete user?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Delete &quot;{deleteTarget?.username}&quot;? This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmDelete} className="bg-destructive hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Reset password dialog */}
+      <Dialog open={!!resetTarget} onOpenChange={(open) => !open && setResetTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reset password for &quot;{resetTarget?.username}&quot;</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 pt-2">
+            <div className="space-y-1.5">
+              <Label>New password</Label>
+              <Input
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                autoFocus
+              />
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setResetTarget(null)}>Cancel</Button>
+              <Button onClick={handleConfirmReset} disabled={!newPassword}>Reset</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create user modal */}
+      <Dialog open={showCreateModal} onOpenChange={(open) => !open && setShowCreateModal(false)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>New User</DialogTitle>
+          </DialogHeader>
+          <CreateUserForm
+            onClose={() => setShowCreateModal(false)}
+            onSuccess={() => { setShowCreateModal(false); loadUsers(); }}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
 
 
 function LibraryPermissionsPanel({ userId }: { userId: string }) {
-  const { showToast } = useToast();
   const [perms, setPerms] = useState<LibraryPermission[]>([]);
   const [libraries, setLibraries] = useState<Library[]>([]);
   const [loading, setLoading] = useState(true);
-  const [newLibId, setNewLibId] = useState('');
+  const [newLibId, setNewLibId] = useState('_none');
   const [newRole, setNewRole] = useState<'editor' | 'viewer'>('viewer');
 
   const loadData = useCallback(async () => {
@@ -209,78 +291,81 @@ function LibraryPermissionsPanel({ userId }: { userId: string }) {
         setLibraries(libsData.libraries);
       }
     } catch (e) {
-      showToast(`${e}`, 'error');
+      toast.error(`${e}`);
     } finally {
       setLoading(false);
     }
-  }, [userId, showToast]);
+  }, [userId]);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
 
   const handleAdd = async () => {
-    if (!newLibId) return;
+    if (!newLibId || newLibId === '_none') return;
     try {
       const res = await apiFetch(`/api/admin/users/${userId}/permissions/${newLibId}`, {
         method: 'PUT',
         body: JSON.stringify({ role: newRole }),
       });
       if (!res.ok) throw new Error('Failed to set permission');
-      showToast('Permission set', 'success');
-      setNewLibId('');
+      toast.success('Permission set');
+      setNewLibId('_none');
       await loadData();
     } catch (e) {
-      showToast(`${e}`, 'error');
+      toast.error(`${e}`);
     }
   };
 
   const handleDelete = async (libraryId: string) => {
     try {
       await apiFetch(`/api/admin/users/${userId}/permissions/${libraryId}`, { method: 'DELETE' });
-      showToast('Permission removed', 'success');
+      toast.success('Permission removed');
       await loadData();
     } catch (e) {
-      showToast(`${e}`, 'error');
+      toast.error(`${e}`);
     }
   };
 
-  if (loading) return <div className="spinner" style={{ width: 16, height: 16 }} />;
+  const handleRoleUpdate = async (libraryId: string, role: string | null) => {
+    if (!role) return;
+    await apiFetch(`/api/admin/users/${userId}/permissions/${libraryId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ role }),
+    });
+    toast.success('Permission updated');
+    await loadData();
+  };
+
+  if (loading) return <Loader2 className="h-4 w-4 animate-spin text-muted-foreground my-2" />;
 
   const permLibIds = new Set(perms.map((p) => p.library_id));
   const availableLibs = libraries.filter((l) => !permLibIds.has(l.id));
-
   const getLibName = (libId: string) => libraries.find((l) => l.id === libId)?.name ?? libId;
 
   return (
-    <div style={{ paddingTop: '8px' }}>
+    <div className="pt-2 space-y-3">
       {perms.length === 0 ? (
-        <p style={{ color: 'var(--color-muted)', fontSize: '13px', marginBottom: '8px' }}>No library overrides.</p>
+        <p className="text-sm text-muted-foreground">No library overrides.</p>
       ) : (
-        <table style={{ marginBottom: '10px', borderCollapse: 'collapse' }}>
+        <table className="text-sm border-collapse">
           <tbody>
             {perms.map((p) => (
               <tr key={p.library_id}>
-                <td style={{ padding: '4px 12px 4px 0', fontSize: '13px' }}>{getLibName(p.library_id)}</td>
-                <td style={{ padding: '4px 12px 4px 0' }}>
-                  <select
-                    value={p.role}
-                    onChange={async (e) => {
-                      await apiFetch(`/api/admin/users/${userId}/permissions/${p.library_id}`, {
-                        method: 'PUT',
-                        body: JSON.stringify({ role: e.target.value }),
-                      });
-                      showToast('Permission updated', 'success');
-                      await loadData();
-                    }}
-                    style={{ background: 'var(--color-bg-card)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: '4px', padding: '2px 4px', fontSize: '12px' }}
-                  >
-                    <option value="viewer">viewer</option>
-                    <option value="editor">editor</option>
-                  </select>
+                <td className="pr-4 py-1">{getLibName(p.library_id)}</td>
+                <td className="pr-2 py-1">
+                  <Select value={p.role} onValueChange={(v) => handleRoleUpdate(p.library_id, v)}>
+                    <SelectTrigger className="h-7 w-24 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="viewer">viewer</SelectItem>
+                      <SelectItem value="editor">editor</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </td>
-                <td style={{ padding: '4px 0' }}>
-                  <button className="btn btn-danger btn-sm" onClick={() => handleDelete(p.library_id)}>×</button>
+                <td className="py-1">
+                  <Button size="sm" variant="destructive" className="h-7 px-2 text-xs" onClick={() => handleDelete(p.library_id)}>×</Button>
                 </td>
               </tr>
             ))}
@@ -288,28 +373,30 @@ function LibraryPermissionsPanel({ userId }: { userId: string }) {
         </table>
       )}
       {availableLibs.length > 0 && (
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          <select
-            value={newLibId}
-            onChange={(e) => setNewLibId(e.target.value)}
-            style={{ background: 'var(--color-bg-card)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: '4px', padding: '4px 8px', fontSize: '13px' }}
-          >
-            <option value="">Select library…</option>
-            {availableLibs.map((l) => (
-              <option key={l.id} value={l.id}>{l.name}</option>
-            ))}
-          </select>
-          <select
-            value={newRole}
-            onChange={(e) => setNewRole(e.target.value as 'editor' | 'viewer')}
-            style={{ background: 'var(--color-bg-card)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: '4px', padding: '4px 8px', fontSize: '13px' }}
-          >
-            <option value="viewer">viewer</option>
-            <option value="editor">editor</option>
-          </select>
-          <button className="btn btn-primary btn-sm" onClick={handleAdd} disabled={!newLibId}>
+        <div className="flex gap-2 items-center">
+          <Select value={newLibId} onValueChange={(v) => setNewLibId(v ?? '_none')}>
+            <SelectTrigger className="h-8 w-40 text-sm">
+              <SelectValue placeholder="Select library…" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="_none">Select library…</SelectItem>
+              {availableLibs.map((l) => (
+                <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={newRole} onValueChange={(v) => setNewRole((v ?? 'viewer') as 'editor' | 'viewer')}>
+            <SelectTrigger className="h-8 w-24 text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="viewer">viewer</SelectItem>
+              <SelectItem value="editor">editor</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button size="sm" onClick={handleAdd} disabled={!newLibId || newLibId === '_none'}>
             + Add
-          </button>
+          </Button>
         </div>
       )}
     </div>
@@ -317,8 +404,7 @@ function LibraryPermissionsPanel({ userId }: { userId: string }) {
 }
 
 
-function CreateUserModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
-  const { showToast } = useToast();
+function CreateUserForm({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<Role>('viewer');
@@ -337,61 +423,55 @@ function CreateUserModal({ onClose, onSuccess }: { onClose: () => void; onSucces
         const err = await res.json();
         throw new Error(err.detail || 'Failed to create user');
       }
-      showToast('User created', 'success');
+      toast.success('User created');
       onSuccess();
     } catch (e) {
-      showToast(`${e}`, 'error');
+      toast.error(`${e}`);
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <div className="confirm-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="confirm-box" style={{ minWidth: '300px' }}>
-        <h3 style={{ marginBottom: '16px' }}>New User</h3>
-        <form onSubmit={handleSubmit}>
-          <div className="form-group" style={{ marginBottom: '12px' }}>
-            <label>Username</label>
-            <input
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              required
-              autoFocus
-              style={{ width: '100%' }}
-            />
-          </div>
-          <div className="form-group" style={{ marginBottom: '12px' }}>
-            <label>Password</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              style={{ width: '100%' }}
-            />
-          </div>
-          <div className="form-group" style={{ marginBottom: '16px' }}>
-            <label>Role</label>
-            <select
-              value={role}
-              onChange={(e) => setRole(e.target.value as Role)}
-              style={{ width: '100%', background: 'var(--color-bg-card)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: '4px', padding: '6px 8px' }}
-            >
-              <option value="viewer">viewer</option>
-              <option value="editor">editor</option>
-              <option value="admin">admin</option>
-            </select>
-          </div>
-          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-            <button type="button" className="btn btn-secondary btn-sm" onClick={onClose}>Cancel</button>
-            <button type="submit" className="btn btn-primary btn-sm" disabled={saving}>
-              {saving ? 'Creating…' : 'Create'}
-            </button>
-          </div>
-        </form>
+    <form onSubmit={handleSubmit} className="space-y-4 pt-2">
+      <div className="space-y-1.5">
+        <Label>Username</Label>
+        <Input
+          type="text"
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+          required
+          autoFocus
+        />
       </div>
-    </div>
+      <div className="space-y-1.5">
+        <Label>Password</Label>
+        <Input
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          required
+        />
+      </div>
+      <div className="space-y-1.5">
+        <Label>Role</Label>
+        <Select value={role} onValueChange={(v) => setRole((v ?? 'viewer') as Role)}>
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="viewer">viewer</SelectItem>
+            <SelectItem value="editor">editor</SelectItem>
+            <SelectItem value="admin">admin</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="flex gap-2 justify-end">
+        <Button type="button" variant="outline" size="sm" onClick={onClose}>Cancel</Button>
+        <Button type="submit" size="sm" disabled={saving}>
+          {saving ? 'Creating…' : 'Create'}
+        </Button>
+      </div>
+    </form>
   );
 }

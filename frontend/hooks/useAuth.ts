@@ -1,11 +1,10 @@
 import { useCallback } from 'react';
 import { apiFetch } from '@/lib/api';
-import { useToast } from '@/context/ToastContext';
+import { toast } from 'sonner';
 import { useAppContext } from '@/context/AppContext';
 import { User } from '@/lib/types';
 
 export function useAuth() {
-  const { showToast } = useToast();
   const { currentUser } = useAppContext();
 
   const checkAuth = useCallback(async (): Promise<User | null> => {
@@ -31,29 +30,28 @@ export function useAuth() {
 
         if (!res.ok) {
           const err = await res.json();
-          showToast(err.detail || 'Login failed', 'error');
+          toast.error(err.detail || 'Login failed');
           return null;
         }
 
         const data = await res.json();
-        showToast('Logged in successfully', 'success');
+        toast.success('Logged in successfully');
         return { username: data.username, role: data.role };
       } catch (e) {
-        showToast(`Network error: ${e}`, 'error');
+        toast.error(`Network error: ${e}`);
         return null;
       }
     },
-    [showToast]
-  );
+    []);
 
   const logout = useCallback(async (): Promise<void> => {
     try {
       await apiFetch('/api/auth/logout', { method: 'POST' });
-      showToast('Logged out', 'success');
+      toast.success('Logged out');
     } catch (e) {
-      showToast(`Logout error: ${e}`, 'error');
+      toast.error(`Logout error: ${e}`);
     }
-  }, [showToast]);
+  }, []);
 
   const isAdmin = useCallback((): boolean => {
     return currentUser?.role === 'admin';

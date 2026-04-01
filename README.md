@@ -28,12 +28,13 @@ With server-side on-demand transcoding, teammates can:
 ## Planned Features
 - User roles & permissions (admin, editor, viewer)
 - Collaborative annotations and comments
-- Tag camera / color metadata
+
 - Support for more formats (ProRes RAW, REDCODE, etc.)
 - Raw sub clip download (no quality loss clip downloads)
 
 ## Implemented Features
-[X] Realtime LUT preview so that we dont look at flat footage [server side vs webgl?]
+- Realtime LUT preview so that we dont look at flat footage [server side vs webgl?]
+- Tag camera / color metadata
 
 ## Stack
 

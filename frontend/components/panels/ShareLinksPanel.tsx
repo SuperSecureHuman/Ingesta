@@ -2,7 +2,9 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { apiFetch } from '@/lib/api';
-import { useToast } from '@/context/ToastContext';
+import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import PanelShell from './PanelShell';
 
 interface Share {
@@ -23,7 +25,6 @@ export default function ShareLinksPanel({
   onClose,
   currentProjectId,
 }: ShareLinksPanelProps) {
-  const { showToast } = useToast();
   const [shares, setShares] = useState<Share[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -42,11 +43,11 @@ export default function ShareLinksPanel({
       setShares(data.shares || []);
     } catch (e) {
       setError(`${e}`);
-      showToast(`${e}`, 'error');
+      toast.error(`${e}`);
     } finally {
       setLoading(false);
     }
-  }, [currentProjectId, showToast]);
+  }, [currentProjectId]);
 
   useEffect(() => {
     if (isOpen) {
@@ -57,24 +58,20 @@ export default function ShareLinksPanel({
   const handleCopy = async (url: string) => {
     try {
       await navigator.clipboard.writeText(url);
-      showToast('Link copied to clipboard!', 'success');
-    } catch (e) {
-      showToast('Failed to copy link', 'error');
+      toast.success('Link copied to clipboard!');
+    } catch {
+      toast.error('Failed to copy link');
     }
   };
 
   const handleRevoke = async (shareId: string) => {
     try {
-      const res = await apiFetch(`/api/share/${shareId}`, {
-        method: 'DELETE',
-      });
-
+      const res = await apiFetch(`/api/share/${shareId}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Failed to revoke share');
-
-      showToast('Share revoked', 'success');
+      toast.success('Share revoked');
       await loadShares();
     } catch (e) {
-      showToast(`${e}`, 'error');
+      toast.error(`${e}`);
     }
   };
 
@@ -85,21 +82,15 @@ export default function ShareLinksPanel({
       onClose={onClose}
       error={error}
       footer={
-        <button className="btn btn-secondary" onClick={onClose} style={{ flex: 1 }}>
-          Close
-        </button>
+        <Button variant="outline" className="w-full" onClick={onClose}>Close</Button>
       }
     >
       {loading ? (
-        <div style={{ textAlign: 'center', padding: '20px', color: '#999' }}>
-          Loading shares...
-        </div>
+        <div className="text-center py-5 text-muted-foreground text-sm">Loading shares...</div>
       ) : shares.length === 0 ? (
-        <div style={{ padding: '20px', color: '#999', textAlign: 'center' }}>
-          No active shares
-        </div>
+        <div className="text-center py-5 text-muted-foreground text-sm">No active shares</div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <div className="space-y-4">
           {shares.map((share) => {
             const shareUrl = `${window.location.origin}/share/${share.id}`;
             const idPrefix = share.id.substring(0, 8) + '…';
@@ -108,56 +99,17 @@ export default function ShareLinksPanel({
               : 'Never expires';
 
             return (
-              <div
-                key={share.id}
-                style={{
-                  border: '1px solid #333',
-                  borderRadius: '4px',
-                  padding: '12px',
-                  background: '#0d0d0d',
-                }}
-              >
-                <div style={{ marginBottom: '8px', fontSize: '12px', color: '#999' }}>
-                  {idPrefix}
-                </div>
-
-                <div style={{ marginBottom: '8px', fontSize: '11px', color: '#999' }}>
-                  {expiryText}
-                </div>
-
-                <input
-                  type="text"
-                  readOnly
-                  value={shareUrl}
-                  style={{
-                    width: '100%',
-                    padding: '6px 8px',
-                    background: '#1a1a1a',
-                    border: '1px solid #333',
-                    color: '#0f0',
-                    fontFamily: 'monospace',
-                    fontSize: '11px',
-                    borderRadius: '3px',
-                    boxSizing: 'border-box',
-                    marginBottom: '8px',
-                  }}
-                />
-
-                <div style={{ display: 'flex', gap: '6px' }}>
-                  <button
-                    className="btn btn-secondary btn-sm"
-                    onClick={() => handleCopy(shareUrl)}
-                    style={{ flex: 1, fontSize: '12px' }}
-                  >
+              <div key={share.id} className="rounded-md border border-border bg-zinc-900/50 p-3 space-y-2">
+                <div className="text-xs text-muted-foreground">{idPrefix}</div>
+                <div className="text-xs text-muted-foreground">{expiryText}</div>
+                <Input readOnly value={shareUrl} className="font-mono text-xs text-green-400 h-8" />
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" className="flex-1" onClick={() => handleCopy(shareUrl)}>
                     Copy
-                  </button>
-                  <button
-                    className="btn btn-danger btn-sm"
-                    onClick={() => handleRevoke(share.id)}
-                    style={{ fontSize: '12px' }}
-                  >
+                  </Button>
+                  <Button variant="destructive" size="sm" onClick={() => handleRevoke(share.id)}>
                     Revoke
-                  </button>
+                  </Button>
                 </div>
               </div>
             );

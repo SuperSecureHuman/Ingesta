@@ -1,10 +1,13 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { apiFetch } from '@/lib/api';
-import { Project, SelectionItem } from '@/lib/types';
-import { useToast } from '@/context/ToastContext';
+import { SelectionItem } from '@/lib/types';
+import { toast } from 'sonner';
 import { useAppContext } from '@/context/AppContext';
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import PanelShell from './PanelShell';
 
 interface AddToProjectPanelProps {
@@ -22,12 +25,10 @@ export default function AddToProjectPanel({
   selectedItems,
   currentLibraryId,
 }: AddToProjectPanelProps) {
-  const { showToast } = useToast();
   const { projects } = useAppContext();
   const [targetProjectId, setTargetProjectId] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
-
 
   useEffect(() => {
     if (isOpen) {
@@ -46,7 +47,6 @@ export default function AddToProjectPanel({
     try {
       let totalAdded = 0;
 
-      // Branch 1: Add individual files
       const files = Array.from(selectedItems.values())
         .filter((item) => item.type === 'file')
         .map((item) => item.path);
@@ -61,7 +61,6 @@ export default function AddToProjectPanel({
         totalAdded += data.added || 0;
       }
 
-      // Branch 2: Add folders (one POST per folder)
       const folders = Array.from(selectedItems.values())
         .filter((item) => item.type === 'folder')
         .map((item) => item.path);
@@ -76,7 +75,6 @@ export default function AddToProjectPanel({
         totalAdded += data.added || 0;
       }
 
-      // Branch 3: Add entire library (if no items selected and library is set)
       if (selectedItems.size === 0 && currentLibraryId) {
         const res = await apiFetch(`/api/projects/${targetProjectId}/files/library`, {
           method: 'POST',
@@ -87,14 +85,14 @@ export default function AddToProjectPanel({
         totalAdded += data.added || 0;
       }
 
-      showToast(`Added ${totalAdded} files to project`, 'success');
+      toast.success(`Added ${totalAdded} files to project`);
       setError('');
       onSuccess();
       onClose();
     } catch (e) {
       const errorMsg = `${e}`;
       setError(errorMsg);
-      showToast(errorMsg, 'error');
+      toast.error(errorMsg);
     } finally {
       setSubmitting(false);
     }
@@ -107,43 +105,33 @@ export default function AddToProjectPanel({
       onClose={onClose}
       error={error}
     >
-      <div className="form-group">
-        <label htmlFor="targetProject">Select Project</label>
-        <select
-          id="targetProject"
-          value={targetProjectId}
-          onChange={(e) => {
-            setTargetProjectId(e.target.value);
-            setError('');
-          }}
-        >
-          <option value="">-- Choose project --</option>
-          {projects.map((proj) => (
-            <option key={proj.id} value={proj.id}>
-              {proj.name}
-            </option>
-          ))}
-        </select>
-      </div>
+      <div className="space-y-4">
+        <div className="space-y-1.5">
+          <Label>Select Project</Label>
+          <Select value={targetProjectId} onValueChange={(v) => { setTargetProjectId(v ?? ''); setError(''); }}>
+            <SelectTrigger>
+              <SelectValue placeholder="Choose project…" />
+            </SelectTrigger>
+            <SelectContent>
+              {projects.map((proj) => (
+                <SelectItem key={proj.id} value={proj.id}>{proj.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
-      <div style={{ marginTop: '16px', textAlign: 'center', fontSize: '13px', color: '#999' }}>
-        {selectedItems.size === 0 && currentLibraryId
-          ? 'Adding entire library'
-          : `${selectedItems.size} item${selectedItems.size !== 1 ? 's' : ''} selected`}
-      </div>
+        <p className="text-sm text-muted-foreground text-center">
+          {selectedItems.size === 0 && currentLibraryId
+            ? 'Adding entire library'
+            : `${selectedItems.size} item${selectedItems.size !== 1 ? 's' : ''} selected`}
+        </p>
 
-      <div style={{ display: 'flex', gap: '12px', marginTop: '20px' }}>
-        <button className="btn btn-secondary" onClick={onClose} disabled={submitting}>
-          Cancel
-        </button>
-        <button
-          className="btn btn-primary"
-          onClick={handleSubmit}
-          style={{ flex: 1 }}
-          disabled={submitting}
-        >
-          {submitting ? 'Adding...' : 'Add'}
-        </button>
+        <div className="flex gap-3">
+          <Button variant="outline" onClick={onClose} disabled={submitting}>Cancel</Button>
+          <Button className="flex-1" onClick={handleSubmit} disabled={submitting}>
+            {submitting ? 'Adding...' : 'Add'}
+          </Button>
+        </div>
       </div>
     </PanelShell>
   );

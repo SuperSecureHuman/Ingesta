@@ -3,15 +3,16 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { apiFetch } from '@/lib/api';
-import { Library, Project } from '@/lib/types';
+import { Library } from '@/lib/types';
 import { slugify } from '@/lib/utils';
-import { useToast } from '@/context/ToastContext';
+import { toast } from 'sonner';
 import { useAppContext } from '@/context/AppContext';
 import { useAuth } from '@/hooks/useAuth';
 import { usePanels } from '@/hooks/usePanels';
 import LibraryCard from '@/components/cards/LibraryCard';
 import ProjectCard from '@/components/cards/ProjectCard';
-import Spinner from '@/components/ui/Spinner';
+import { Loader2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import CreateLibraryPanel from '@/components/panels/CreateLibraryPanel';
 import CreateProjectPanel from '@/components/panels/CreateProjectPanel';
 
@@ -19,13 +20,13 @@ export default function HomeView() {
   const [libraries, setLibraries] = useState<Library[]>([]);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
-  const { showToast } = useToast();
   const { setProjects, projects } = useAppContext();
   const { activePanel, openPanel, closePanel } = usePanels();
   const { isAdmin, canEdit } = useAuth();
 
   useEffect(() => {
     loadData();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadData = async () => {
@@ -44,7 +45,7 @@ export default function HomeView() {
       setLibraries(libData.libraries || []);
       setProjects(projData.projects || []);
     } catch (e) {
-      showToast(`Failed to load: ${e}`, 'error');
+      toast.error(`Failed to load: ${e}`);
     } finally {
       setLoading(false);
     }
@@ -62,13 +63,13 @@ export default function HomeView() {
     try {
       const res = await apiFetch(`/api/libraries/${libId}`, { method: 'DELETE' });
       if (res.ok) {
-        showToast('Library deleted', 'success');
+        toast.success('Library deleted');
         await loadData();
       } else {
-        showToast('Failed to delete library', 'error');
+        toast.error('Failed to delete library');
       }
     } catch (e) {
-      showToast(`Error: ${e}`, 'error');
+      toast.error(`Error: ${e}`);
     }
   };
 
@@ -76,38 +77,35 @@ export default function HomeView() {
     try {
       const res = await apiFetch(`/api/projects/${projId}`, { method: 'DELETE' });
       if (res.ok) {
-        showToast('Project deleted', 'success');
+        toast.success('Project deleted');
         await loadData();
       } else {
-        showToast('Failed to delete project', 'error');
+        toast.error('Failed to delete project');
       }
     } catch (e) {
-      showToast(`Error: ${e}`, 'error');
+      toast.error(`Error: ${e}`);
     }
   };
 
   if (loading) {
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', padding: '40px' }}>
-        <Spinner />
+      <div className="flex justify-center py-10">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
 
   return (
     <div>
-      <div className="section-header">
-        <h2>Libraries</h2>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-lg font-semibold">Libraries</h2>
         {isAdmin() && (
-          <button
-            className="btn btn-primary btn-sm"
-            onClick={() => openPanel('createLibrary')}
-          >
+          <Button size="sm" onClick={() => openPanel('createLibrary')}>
             + New Library
-          </button>
+          </Button>
         )}
       </div>
-      <div className="grid">
+      <div className="grid-cards">
         {libraries.length === 0 ? (
           <div style={{ gridColumn: '1/-1', display: 'flex', justifyContent: 'center', padding: '40px', textAlign: 'center' }}>
             <div>
@@ -128,18 +126,15 @@ export default function HomeView() {
         )}
       </div>
 
-      <div className="section-header">
-        <h2>Projects</h2>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-lg font-semibold">Projects</h2>
         {canEdit() && (
-          <button
-            className="btn btn-primary btn-sm"
-            onClick={() => openPanel('createProject')}
-          >
+          <Button size="sm" onClick={() => openPanel('createProject')}>
             + New Project
-          </button>
+          </Button>
         )}
       </div>
-      <div className="grid">
+      <div className="grid-cards">
         {projects.length === 0 ? (
           <div style={{ gridColumn: '1/-1', display: 'flex', justifyContent: 'center', padding: '40px', textAlign: 'center' }}>
             <div>

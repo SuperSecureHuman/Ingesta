@@ -1,13 +1,51 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAppContext } from '@/context/AppContext';
 import { useAuth } from '@/hooks/useAuth';
-import AppShell from '@/components/layout/AppShell';
+import { usePanels } from '@/hooks/usePanels';
+import { useSelection } from '@/hooks/useSelection';
 import LibraryView from '@/components/views/LibraryView';
 import { PlayerContextProvider } from '@/context/PlayerContext';
 import { LutContextProvider } from '@/context/LutContext';
+import { PanelContextProvider } from '@/context/PanelContext';
+import PlayerContainer from '@/components/player/PlayerContainer';
+import AddToProjectPanel from '@/components/panels/AddToProjectPanel';
+
+function LibraryPageInner({ librarySlug, folderPath }: { librarySlug: string; folderPath: string[] }) {
+  const { activePanel, openPanel, closePanel } = usePanels();
+  const { selectedItems, clearSelection } = useSelection();
+  const [resolvedLibraryId, setResolvedLibraryId] = useState<string | undefined>(undefined);
+
+  const handleLibraryResolved = (id: string) => {
+    setResolvedLibraryId(id);
+  };
+
+  const handleAddSuccess = useCallback(() => {
+    clearSelection();
+  }, [clearSelection]);
+
+  return (
+    <PanelContextProvider openPanel={openPanel} closePanel={closePanel} activePanel={activePanel}>
+      <div className="p-6">
+        <LibraryView
+          librarySlug={librarySlug}
+          folderPath={folderPath}
+          onLibraryResolved={handleLibraryResolved}
+        />
+      </div>
+      <AddToProjectPanel
+        isOpen={activePanel === 'addToProject'}
+        onClose={closePanel}
+        onSuccess={handleAddSuccess}
+        selectedItems={selectedItems}
+        currentLibraryId={resolvedLibraryId ?? null}
+      />
+      <PlayerContainer />
+    </PanelContextProvider>
+  );
+}
 
 export default function LibraryPage() {
   const params = useParams();
@@ -17,13 +55,6 @@ export default function LibraryPage() {
   const { currentUser, setCurrentUser } = useAppContext();
   const { checkAuth } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
-  const [resolvedLibraryId, setResolvedLibraryId] = useState<string | undefined>(undefined);
-  const [resolvedLibraryName, setResolvedLibraryName] = useState<string | undefined>(undefined);
-
-  const handleLibraryResolved = (id: string, name: string) => {
-    setResolvedLibraryId(id);
-    setResolvedLibraryName(name);
-  };
 
   useEffect(() => {
     const initAuth = async () => {
@@ -36,12 +67,13 @@ export default function LibraryPage() {
       setIsLoading(false);
     };
     initAuth();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (isLoading) {
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
-        <div className="spinner"></div>
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
       </div>
     );
   }
@@ -51,13 +83,10 @@ export default function LibraryPage() {
   return (
     <LutContextProvider>
       <PlayerContextProvider>
-        <AppShell libraryId={resolvedLibraryId} libraryName={resolvedLibraryName}>
-          <LibraryView
-            librarySlug={librarySlug}
-            folderPath={folderPath ?? []}
-            onLibraryResolved={handleLibraryResolved}
-          />
-        </AppShell>
+        <LibraryPageInner
+          librarySlug={librarySlug}
+          folderPath={folderPath ?? []}
+        />
       </PlayerContextProvider>
     </LutContextProvider>
   );

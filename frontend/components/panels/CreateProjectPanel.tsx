@@ -2,7 +2,10 @@
 
 import { useState } from 'react';
 import { apiFetch } from '@/lib/api';
-import { useToast } from '@/context/ToastContext';
+import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import PanelShell from './PanelShell';
 
 interface CreateProjectPanelProps {
@@ -19,7 +22,6 @@ export default function CreateProjectPanel({
   const [name, setName] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { showToast } = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -44,7 +46,7 @@ export default function CreateProjectPanel({
       }
 
       setName('');
-      showToast('Project created', 'success');
+      toast.success('Project created');
       onSuccess();
     } catch (e) {
       setError(`Error: ${e}`);
@@ -60,25 +62,17 @@ export default function CreateProjectPanel({
       onClose={onClose}
       error={error}
       footer={
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <button className="btn btn-secondary" onClick={onClose}>
-            Cancel
-          </button>
-          <button
-            className="btn btn-primary"
-            style={{ flex: 1 }}
-            onClick={handleSubmit}
-            disabled={loading}
-          >
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={onClose} disabled={loading}>Cancel</Button>
+          <Button className="flex-1" onClick={handleSubmit} disabled={loading}>
             {loading ? 'Creating...' : 'Create'}
-          </button>
+          </Button>
         </div>
       }
     >
-      <div className="form-group">
-        <label htmlFor="projName">Project Name</label>
-        <input
-          type="text"
+      <div className="space-y-1.5">
+        <Label htmlFor="projName">Project Name</Label>
+        <Input
           id="projName"
           placeholder="e.g., Commercial Shoot"
           value={name}
