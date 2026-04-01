@@ -12,7 +12,7 @@ export function useAuth() {
       const res = await apiFetch('/api/auth/me');
       if (res.ok) {
         const data = await res.json();
-        return { username: data.username, role: data.role };
+        return { username: data.username, role: data.role, display_name: data.display_name ?? undefined };
       }
       return null;
     } catch (e) {

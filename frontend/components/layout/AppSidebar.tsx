@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Library, Film, Settings, LogOut, User } from 'lucide-react';
+import { Library, Film, Settings, LogOut, User, UserCircle } from 'lucide-react';
 import {
   Sidebar,
   SidebarContent,
@@ -108,6 +108,10 @@ export function AppSidebar() {
                 </SidebarMenuButton>
               </DropdownMenuTrigger>
               <DropdownMenuContent side="top" align="start" className="w-52">
+                <DropdownMenuItem render={<Link href="/profile" />}>
+                  <UserCircle className="h-4 w-4 mr-2" />
+                  Profile
+                </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleLogout} className="text-destructive focus:text-destructive">
                   <LogOut className="h-4 w-4 mr-2" />

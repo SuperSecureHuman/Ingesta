@@ -63,8 +63,54 @@ CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
     username TEXT NOT NULL UNIQUE,
     password_hash TEXT NOT NULL,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    display_name TEXT,
+    active INTEGER NOT NULL DEFAULT 1,
+    last_login TEXT,
+    pwd_changed_at TEXT
 );
+
+-- Server-side sessions (each login creates a row; logout revokes it)
+CREATE TABLE IF NOT EXISTS sessions (
+    id          TEXT PRIMARY KEY,
+    user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at  TEXT NOT NULL,
+    last_seen   TEXT NOT NULL,
+    expires_at  TEXT NOT NULL,
+    user_agent  TEXT,
+    ip_address  TEXT,
+    revoked     INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_sessions_user_id    ON sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
+
+-- Invite links (single-use, time-limited)
+CREATE TABLE IF NOT EXISTS invites (
+    id          TEXT PRIMARY KEY,
+    created_by  TEXT NOT NULL REFERENCES users(id),
+    role        TEXT NOT NULL DEFAULT 'viewer',
+    created_at  TEXT NOT NULL,
+    expires_at  TEXT NOT NULL,
+    used_at     TEXT,
+    used_by     TEXT REFERENCES users(id)
+);
+
+-- Immutable audit log
+CREATE TABLE IF NOT EXISTS audit_log (
+    id          TEXT PRIMARY KEY,
+    actor_id    TEXT,
+    actor_name  TEXT NOT NULL,
+    action      TEXT NOT NULL,
+    target_type TEXT,
+    target_id   TEXT,
+    target_name TEXT,
+    detail      TEXT,
+    ip_address  TEXT,
+    created_at  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_audit_log_actor_id   ON audit_log(actor_id);
+CREATE INDEX IF NOT EXISTS idx_audit_log_action     ON audit_log(action);
+CREATE INDEX IF NOT EXISTS idx_audit_log_created_at ON audit_log(created_at);
 
 -- Create indexes for common queries
 -- LUT library: 3D color lookup tables for live preview

@@ -5,6 +5,52 @@ export type Role = 'admin' | 'editor' | 'viewer';
 export interface User {
   username: string;
   role: Role;
+  display_name?: string;
+}
+
+export interface AdminUser {
+  id: string;
+  username: string;
+  role: Role;
+  created_at: string;
+  display_name: string | null;
+  active: boolean;
+  last_login: string | null;
+  pwd_changed_at: string | null;
+}
+
+export interface Session {
+  id: string;
+  created_at: string;
+  last_seen: string;
+  expires_at: string;
+  user_agent: string | null;
+  ip_address: string | null;
+  is_current?: boolean;
+}
+
+export interface Invite {
+  id: string;
+  created_by: string;
+  created_by_username: string | null;
+  role: Role;
+  created_at: string;
+  expires_at: string;
+  used_at: string | null;
+  used_by: string | null;
+}
+
+export interface AuditEntry {
+  id: string;
+  actor_id: string | null;
+  actor_name: string;
+  action: string;
+  target_type: string | null;
+  target_id: string | null;
+  target_name: string | null;
+  detail: string | null;
+  ip_address: string | null;
+  created_at: string;
 }
 
 export interface Library {

@@ -26,6 +26,7 @@ from media.transcoder import (
 )
 from routes.auth import pwd_context
 from routes import libraries, projects, shares, auth, stream, debug, luts, admin, annotations
+from routes.invite import router as invite_router
 from scripts.seed_luts import seed_luts
 
 # Initialize logging
@@ -57,6 +58,18 @@ async def cleanup_old_workdirs():
                     shutil.rmtree(d, ignore_errors=True)
         except FileNotFoundError:
             pass
+
+
+async def session_cleanup_loop():
+    """Hourly cleanup of expired and revoked sessions."""
+    while True:
+        await asyncio.sleep(3600)
+        try:
+            count = await crud.clean_expired_sessions()
+            if count:
+                logger.info(f"Cleaned {count} expired/revoked sessions")
+        except Exception:
+            logger.error("Error cleaning sessions", exc_info=True)
 
 
 async def background_scanner_loop():
@@ -190,6 +203,7 @@ async def lifespan(app: FastAPI):
     cleanup_task = asyncio.create_task(cleanup_loop())
     workdir_cleanup_task = asyncio.create_task(cleanup_old_workdirs())
     scanner_task = asyncio.create_task(background_scanner_loop())
+    session_cleanup_task = asyncio.create_task(session_cleanup_loop())
 
     yield
 
@@ -198,6 +212,7 @@ async def lifespan(app: FastAPI):
     cleanup_task.cancel()
     workdir_cleanup_task.cancel()
     scanner_task.cancel()
+    session_cleanup_task.cancel()
     for job in list(manager.get_all_jobs()):
         await manager.kill_ffmpeg(job, reason="server_shutdown")
 
@@ -230,6 +245,7 @@ app.include_router(annotations.router)
 app.include_router(annotations.file_router)
 app.include_router(debug.router)
 app.include_router(admin.router)
+app.include_router(invite_router)
 
 
 if __name__ == "__main__":

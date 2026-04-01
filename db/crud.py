@@ -1219,3 +1219,334 @@ async def get_annotations_for_paths(file_paths: List[str]) -> Dict[str, Dict[str
     return result
 
 
+# ============================================================================
+# USERS — extended fields (Feature 8)
+# ============================================================================
+
+
+async def update_user_display_name(user_id: str, display_name: str) -> None:
+    """Update a user's display name."""
+    db = get_db()
+    await db.execute("UPDATE users SET display_name = ? WHERE id = ?", (display_name, user_id))
+
+
+async def set_user_active(user_id: str, active: bool) -> None:
+    """Suspend or reactivate a user account."""
+    db = get_db()
+    await db.execute("UPDATE users SET active = ? WHERE id = ?", (1 if active else 0, user_id))
+
+
+async def record_login_success(user_id: str, ip: Optional[str], user_agent: Optional[str]) -> None:
+    """Record a successful login: set last_login timestamp."""
+    db = get_db()
+    now = _now_iso()
+    await db.execute("UPDATE users SET last_login = ? WHERE id = ?", (now, user_id))
+
+
+async def get_all_users_full() -> List[Dict[str, Any]]:
+    """Get all users including new fields (no password_hash)."""
+    db = get_db()
+    rows = await db.fetch(
+        """SELECT id, username, created_at, role, display_name, active, last_login, pwd_changed_at
+           FROM users ORDER BY created_at"""
+    )
+    return [
+        {
+            "id": row[0],
+            "username": row[1],
+            "created_at": row[2],
+            "role": row[3],
+            "display_name": row[4],
+            "active": bool(row[5]),
+            "last_login": row[6],
+            "pwd_changed_at": row[7],
+        }
+        for row in rows
+    ]
+
+
+async def set_pwd_changed_at(user_id: str) -> None:
+    """Record that the user's password was just changed."""
+    db = get_db()
+    await db.execute("UPDATE users SET pwd_changed_at = ? WHERE id = ?", (_now_iso(), user_id))
+
+
+# ============================================================================
+# SESSIONS (Feature 8)
+# ============================================================================
+
+
+async def create_session(
+    session_id: str,
+    user_id: str,
+    expires_at: str,
+    ip: Optional[str],
+    user_agent: Optional[str],
+) -> None:
+    """Create a new server-side session record."""
+    db = get_db()
+    now = _now_iso()
+    await db.execute(
+        """INSERT INTO sessions (id, user_id, created_at, last_seen, expires_at, user_agent, ip_address, revoked)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 0)""",
+        (session_id, user_id, now, now, expires_at, user_agent, ip),
+    )
+
+
+async def get_session(session_id: str) -> Optional[Dict[str, Any]]:
+    """Get a session by ID."""
+    db = get_db()
+    row = await db.fetchone(
+        "SELECT id, user_id, created_at, last_seen, expires_at, user_agent, ip_address, revoked FROM sessions WHERE id = ?",
+        (session_id,),
+    )
+    if not row:
+        return None
+    return {
+        "id": row[0],
+        "user_id": row[1],
+        "created_at": row[2],
+        "last_seen": row[3],
+        "expires_at": row[4],
+        "user_agent": row[5],
+        "ip_address": row[6],
+        "revoked": bool(row[7]),
+    }
+
+
+async def touch_session(session_id: str) -> None:
+    """Update last_seen to now for an active session."""
+    db = get_db()
+    await db.execute("UPDATE sessions SET last_seen = ? WHERE id = ?", (_now_iso(), session_id))
+
+
+async def revoke_session(session_id: str) -> None:
+    """Mark a session as revoked."""
+    db = get_db()
+    await db.execute("UPDATE sessions SET revoked = 1 WHERE id = ?", (session_id,))
+
+
+async def revoke_all_sessions(user_id: str) -> int:
+    """Revoke all active sessions for a user. Returns count revoked."""
+    db = get_db()
+    rows = await db.fetch(
+        "SELECT id FROM sessions WHERE user_id = ? AND revoked = 0",
+        (user_id,),
+    )
+    count = len(rows)
+    if count:
+        await db.execute(
+            "UPDATE sessions SET revoked = 1 WHERE user_id = ? AND revoked = 0",
+            (user_id,),
+        )
+    return count
+
+
+async def get_user_sessions(user_id: str) -> List[Dict[str, Any]]:
+    """Get all active (non-revoked, non-expired) sessions for a user."""
+    db = get_db()
+    now = _now_iso()
+    rows = await db.fetch(
+        """SELECT id, created_at, last_seen, expires_at, user_agent, ip_address
+           FROM sessions
+           WHERE user_id = ? AND revoked = 0 AND expires_at > ?
+           ORDER BY last_seen DESC""",
+        (user_id, now),
+    )
+    return [
+        {
+            "id": row[0],
+            "created_at": row[1],
+            "last_seen": row[2],
+            "expires_at": row[3],
+            "user_agent": row[4],
+            "ip_address": row[5],
+        }
+        for row in rows
+    ]
+
+
+async def is_session_valid(session_id: str) -> bool:
+    """Return True if session exists, is not revoked, and is not expired."""
+    db = get_db()
+    now = _now_iso()
+    row = await db.fetchone(
+        "SELECT id FROM sessions WHERE id = ? AND revoked = 0 AND expires_at > ?",
+        (session_id, now),
+    )
+    return row is not None
+
+
+async def clean_expired_sessions() -> int:
+    """Delete expired or revoked sessions. Returns count deleted."""
+    db = get_db()
+    now = _now_iso()
+    rows = await db.fetch(
+        "SELECT id FROM sessions WHERE expires_at <= ? OR revoked = 1",
+        (now,),
+    )
+    count = len(rows)
+    if count:
+        await db.execute(
+            "DELETE FROM sessions WHERE expires_at <= ? OR revoked = 1",
+            (now,),
+        )
+    return count
+
+
+# ============================================================================
+# INVITES (Feature 8)
+# ============================================================================
+
+
+async def create_invite(created_by_id: str, role: str, expires_at: str) -> str:
+    """Create a single-use invite link. Returns the invite ID (used as URL token)."""
+    db = get_db()
+    invite_id = _new_uuid()
+    now = _now_iso()
+    await db.execute(
+        "INSERT INTO invites (id, created_by, role, created_at, expires_at) VALUES (?, ?, ?, ?, ?)",
+        (invite_id, created_by_id, role, now, expires_at),
+    )
+    return invite_id
+
+
+async def get_invite(invite_id: str) -> Optional[Dict[str, Any]]:
+    """Get an invite by ID."""
+    db = get_db()
+    row = await db.fetchone(
+        "SELECT id, created_by, role, created_at, expires_at, used_at, used_by FROM invites WHERE id = ?",
+        (invite_id,),
+    )
+    if not row:
+        return None
+    return {
+        "id": row[0],
+        "created_by": row[1],
+        "role": row[2],
+        "created_at": row[3],
+        "expires_at": row[4],
+        "used_at": row[5],
+        "used_by": row[6],
+    }
+
+
+async def consume_invite(invite_id: str, user_id: str) -> None:
+    """Mark an invite as used."""
+    db = get_db()
+    now = _now_iso()
+    await db.execute(
+        "UPDATE invites SET used_at = ?, used_by = ? WHERE id = ?",
+        (now, user_id, invite_id),
+    )
+
+
+async def list_invites(active_only: bool = True) -> List[Dict[str, Any]]:
+    """List invites. If active_only=True, return only unused non-expired invites."""
+    db = get_db()
+    now = _now_iso()
+    if active_only:
+        rows = await db.fetch(
+            """SELECT i.id, i.created_by, u.username, i.role, i.created_at, i.expires_at, i.used_at, i.used_by
+               FROM invites i LEFT JOIN users u ON u.id = i.created_by
+               WHERE i.used_at IS NULL AND i.expires_at > ?
+               ORDER BY i.created_at DESC""",
+            (now,),
+        )
+    else:
+        rows = await db.fetch(
+            """SELECT i.id, i.created_by, u.username, i.role, i.created_at, i.expires_at, i.used_at, i.used_by
+               FROM invites i LEFT JOIN users u ON u.id = i.created_by
+               ORDER BY i.created_at DESC"""
+        )
+    return [
+        {
+            "id": row[0],
+            "created_by": row[1],
+            "created_by_username": row[2],
+            "role": row[3],
+            "created_at": row[4],
+            "expires_at": row[5],
+            "used_at": row[6],
+            "used_by": row[7],
+        }
+        for row in rows
+    ]
+
+
+async def delete_invite(invite_id: str) -> None:
+    """Delete an invite."""
+    db = get_db()
+    await db.execute("DELETE FROM invites WHERE id = ?", (invite_id,))
+
+
+# ============================================================================
+# AUDIT LOG (Feature 8)
+# ============================================================================
+
+
+async def write_audit(
+    actor_id: Optional[str],
+    actor_name: str,
+    action: str,
+    target_type: Optional[str] = None,
+    target_id: Optional[str] = None,
+    target_name: Optional[str] = None,
+    detail: Optional[str] = None,
+    ip: Optional[str] = None,
+) -> None:
+    """Write an immutable audit log entry."""
+    db = get_db()
+    entry_id = _new_uuid()
+    now = _now_iso()
+    await db.execute(
+        """INSERT INTO audit_log
+           (id, actor_id, actor_name, action, target_type, target_id, target_name, detail, ip_address, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (entry_id, actor_id, actor_name, action, target_type, target_id, target_name, detail, ip, now),
+    )
+
+
+async def get_audit_log(
+    limit: int = 50,
+    offset: int = 0,
+    actor_id: Optional[str] = None,
+    action: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """Fetch audit log entries in reverse chronological order."""
+    db = get_db()
+    conditions = []
+    params: list = []
+    if actor_id:
+        conditions.append("(actor_id = ? OR target_id = ?)")
+        params.extend([actor_id, actor_id])
+    if action:
+        conditions.append("action = ?")
+        params.append(action)
+
+    where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+    params.extend([limit, offset])
+    rows = await db.fetch(
+        f"""SELECT id, actor_id, actor_name, action, target_type, target_id, target_name, detail, ip_address, created_at
+            FROM audit_log {where}
+            ORDER BY created_at DESC
+            LIMIT ? OFFSET ?""",
+        tuple(params),
+    )
+    return [
+        {
+            "id": row[0],
+            "actor_id": row[1],
+            "actor_name": row[2],
+            "action": row[3],
+            "target_type": row[4],
+            "target_id": row[5],
+            "target_name": row[6],
+            "detail": row[7],
+            "ip_address": row[8],
+            "created_at": row[9],
+        }
+        for row in rows
+    ]
+
+

@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     admin_api_key: str = "change-me-in-production"
     admin_username: str = "admin"
     admin_password: str = "changeme"
+    min_password_length: int = 8
+    invite_expiry_hours: int = 72
+    session_expiry_hours: int = 8
 
     # Background tasks
     scanner_interval: int = 30  # seconds between background file scans

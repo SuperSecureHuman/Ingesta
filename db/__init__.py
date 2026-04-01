@@ -250,6 +250,19 @@ async def run_migrations(db: Database) -> None:
         if "already exists" not in str(e).lower():
             raise
 
+    # Migration 005: add new user columns (display_name, active, last_login, pwd_changed_at)
+    for col_def in [
+        "display_name TEXT",
+        "active INTEGER NOT NULL DEFAULT 1",
+        "last_login TEXT",
+        "pwd_changed_at TEXT",
+    ]:
+        try:
+            await db.execute(f"ALTER TABLE users ADD COLUMN {col_def}")
+        except Exception as e:
+            if "duplicate column" not in str(e).lower() and "already exists" not in str(e).lower():
+                raise
+
 
 async def close_db() -> None:
     """Close global database instance."""
