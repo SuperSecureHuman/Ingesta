@@ -20,16 +20,23 @@ interface LutContextType {
 
 const LutContext = createContext<LutContextType | undefined>(undefined);
 
-export function LutContextProvider({ children }: { children: React.ReactNode }) {
-  const [availableLuts, setAvailableLuts] = useState<LutEntry[]>([]);
+export function LutContextProvider({
+  children,
+  initialLuts,
+}: {
+  children: React.ReactNode;
+  initialLuts?: LutEntry[];
+}) {
+  const [availableLuts, setAvailableLuts] = useState<LutEntry[]>(initialLuts ?? []);
   const [activeLutId, setActiveLutId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [lutMode, setLutMode] = useState<'client' | 'server'>('client');
   const [lutStrength, setLutStrength] = useState<number>(1.0);
   const [fileLutPref, setFileLutPref] = useState<string | null>(null);
 
-  // Fetch available LUTs on mount
+  // Fetch available LUTs on mount (skip if initialLuts were provided)
   useEffect(() => {
+    if (initialLuts) return;
     let isMounted = true;
 
     (async () => {

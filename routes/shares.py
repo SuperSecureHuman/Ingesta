@@ -19,6 +19,7 @@ from jwt import InvalidTokenError
 from config import settings
 import db.crud as crud
 from routes.deps import require_auth
+from routes.luts import _extract_folder
 from routes.auth import pwd_context
 from media.playlist import probe_media
 from media.transcoder import TICKS_PER_SECOND, BITRATE_TIERS
@@ -602,10 +603,12 @@ async def share_capabilities(
     """Return server capabilities for share viewers (same data as /api/capabilities)."""
     if token["share_id"] != share_id:
         raise HTTPException(403, "Token mismatch")
+    luts = await crud.get_all_luts()
     return JSONResponse(
         content={
             "hardware": request.app.state.hardware,
             "bitrate_tiers": BITRATE_TIERS,
+            "luts": [{**lut, "folder": _extract_folder(lut["file_path"])} for lut in luts],
         },
         headers={"Cache-Control": "public, max-age=3600"},
     )

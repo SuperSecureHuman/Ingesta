@@ -3,8 +3,7 @@ export interface CubeData {
   data: Float32Array; // flat R,G,B,R,G,B... in R-fastest order (same as .cube spec)
 }
 
-export async function parseCube(url: string): Promise<CubeData> {
-  const text = await fetch(url).then((r) => r.text());
+export function parseCubeText(text: string): CubeData {
   const lines = text.split(/\r?\n/);
 
   let size = 0;
@@ -39,4 +38,9 @@ export async function parseCube(url: string): Promise<CubeData> {
   }
 
   return { size, data: new Float32Array(floats) };
+}
+
+export async function parseCube(url: string): Promise<CubeData> {
+  const text = await fetch(url).then((r) => r.text());
+  return parseCubeText(text);
 }

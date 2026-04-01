@@ -48,8 +48,8 @@ async def list_luts(_auth: dict = Depends(require_role('viewer'))):
 
 
 @router.get("/api/luts/{lut_id}/file")
-async def get_lut_file(lut_id: str, _auth: dict = Depends(require_role('viewer'))):
-    """Stream a .cube LUT file."""
+async def get_lut_file(lut_id: str):
+    """Stream a .cube LUT file. No auth required — .cube files are colour math, not sensitive data."""
     lut = await crud.get_lut(lut_id)
     if not lut:
         raise HTTPException(status_code=404, detail="LUT not found")

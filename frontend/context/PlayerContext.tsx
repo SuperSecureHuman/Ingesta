@@ -4,10 +4,11 @@ import React, { createContext, useContext, useState, useRef, useEffect, useMemo 
 import Hls from 'hls.js';
 import { ProbeData, Capabilities, TranscodeStats } from '@/lib/types';
 import { generateUUID } from '@/lib/utils';
-import { fetchCapabilities, apiFetch } from '@/lib/api';
-import { parseCube } from '@/lib/parseCube';
-import { vertexShaderSrc, fragmentShaderSrc } from '@/lib/lutShader';
+import { apiFetch, fetchCapabilities } from '@/lib/api';
+import { useWebGLLut } from '@/hooks/useWebGLLut';
 import { useLutContext } from './LutContext';
+
+type FetchFn = (url: string, init?: RequestInit) => Promise<Response>;
 
 interface PlayerContextType {
   isVisible: boolean;
@@ -26,7 +27,21 @@ interface PlayerContextType {
 
 const PlayerContext = createContext<PlayerContextType | undefined>(undefined);
 
-export function PlayerContextProvider({ children }: { children: React.ReactNode }) {
+interface PlayerContextProviderProps {
+  children: React.ReactNode;
+  fetchFn?: FetchFn;
+  apiBase?: string;
+  xhrSetup?: (xhr: XMLHttpRequest) => void;
+}
+
+export function PlayerContextProvider({
+  children,
+  fetchFn: fetchFnProp,
+  apiBase = '/api',
+  xhrSetup,
+}: PlayerContextProviderProps) {
+  const fetchFn: FetchFn = fetchFnProp ?? apiFetch;
+
   const [isVisible, setIsVisible] = useState(false);
   const [filePath, setFilePath] = useState<string | null>(null);
   const [quality, setQuality] = useState('source');
@@ -45,22 +60,20 @@ export function PlayerContextProvider({ children }: { children: React.ReactNode 
   const probedFilePathRef = useRef<string | null>(null);
   const playbackStartTimeRef = useRef<number | null>(null);
 
-  // WebGL refs
-  const glRef = useRef<WebGL2RenderingContext | null>(null);
-  const programRef = useRef<WebGLProgram | null>(null);
-  const videoTexRef = useRef<WebGLTexture | null>(null);
-  const lutTexRef = useRef<WebGLTexture | null>(null);
-  const rafRef = useRef<number | null>(null);
-  const lutLoadedRef = useRef(false);
-  const lutStrengthRef = useRef(1.0);
-  const lutSizeLocRef = useRef<WebGLUniformLocation | null>(null);
-  const lutStrengthLocRef = useRef<WebGLUniformLocation | null>(null);
-
   const { lutMode, activeLutId, lutStrength, setFileLutPref } = useLutContext();
 
-  // Fetch lut-pref by path whenever the active file changes
+  useWebGLLut({
+    videoRef,
+    canvasRef,
+    activeLutId,
+    lutStrength,
+    fetchLutFile: (id) => fetch(`/api/luts/${id}/file`).then((r) => r.text()),
+    enabled: lutMode === 'client' && !!activeLutId,
+  });
+
+  // Fetch lut-pref by path whenever the active file changes (skip for share)
   useEffect(() => {
-    if (!filePath) {
+    if (!filePath || apiBase !== '/api') {
       setFileLutPref(null);
       return;
     }
@@ -77,15 +90,11 @@ export function PlayerContextProvider({ children }: { children: React.ReactNode 
       })
       .catch(() => { if (!cancelled) setFileLutPref(null); });
     return () => { cancelled = true; };
-  }, [filePath]);
+  }, [filePath, apiBase]);
 
-  // Sync lutStrengthRef to LutContext lutStrength
-  useEffect(() => {
-    lutStrengthRef.current = lutStrength;
-  }, [lutStrength]);
-
-  // Fetch transcode stats with adaptive polling backoff
+  // Fetch transcode stats with adaptive polling backoff (logged-in only)
   const fetchTranscodeStats = async () => {
+    if (apiBase !== '/api') return; // no debug endpoint on share
     try {
       const resp = await fetch('/api/debug/state');
       if (!resp.ok) return;
@@ -110,217 +119,6 @@ export function PlayerContextProvider({ children }: { children: React.ReactNode 
     }
   };
 
-  // Compile shader helper
-  const compileShader = (source: string, type: GLenum): WebGLShader | null => {
-    const gl = glRef.current;
-    if (!gl) return null;
-    const shader = gl.createShader(type);
-    if (!shader) return null;
-    gl.shaderSource(shader, source);
-    gl.compileShader(shader);
-    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-      console.error('Shader compile error:', gl.getShaderInfoLog(shader));
-      gl.deleteShader(shader);
-      return null;
-    }
-    return shader;
-  };
-
-  // Create WebGL program
-  const createProgram = (): WebGLProgram | null => {
-    const gl = glRef.current;
-    if (!gl) return null;
-    const vShader = compileShader(vertexShaderSrc, gl.VERTEX_SHADER);
-    const fShader = compileShader(fragmentShaderSrc, gl.FRAGMENT_SHADER);
-    if (!vShader || !fShader) return null;
-    const prog = gl.createProgram();
-    if (!prog) return null;
-    gl.attachShader(prog, vShader);
-    gl.attachShader(prog, fShader);
-    gl.linkProgram(prog);
-    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
-      console.error('Program link error:', gl.getProgramInfoLog(prog));
-      return null;
-    }
-    gl.deleteShader(vShader);
-    gl.deleteShader(fShader);
-    return prog;
-  };
-
-  // Initialize WebGL
-  const initWebGL = () => {
-    const canvas = canvasRef.current;
-    const video = videoRef.current;
-    if (!canvas || !video) return;
-
-    // Set canvas size to match video
-    canvas.width = video.videoWidth || 1920;
-    canvas.height = video.videoHeight || 1080;
-
-    const gl = canvas.getContext('webgl2') as WebGL2RenderingContext | null;
-    if (!gl) {
-      console.error('WebGL2 not supported');
-      return;
-    }
-
-    glRef.current = gl;
-
-    // Set viewport
-    gl.viewport(0, 0, canvas.width, canvas.height);
-
-    // Create program
-    const prog = createProgram();
-    if (!prog) return;
-    programRef.current = prog;
-
-    // Create VAO with fullscreen quad
-    const vao = gl.createVertexArray();
-    gl.bindVertexArray(vao);
-
-    const posBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, posBuffer);
-    const positions = new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]);
-    gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW);
-
-    const posLoc = gl.getAttribLocation(prog, 'aPosition');
-    gl.enableVertexAttribArray(posLoc);
-    gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 8, 0);
-
-    // Create video texture
-    const vidTex = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, vidTex);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, 1, 1, 0, gl.RGB, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0]));
-    videoTexRef.current = vidTex;
-
-    // Create LUT texture
-    const lutTex = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_3D, lutTex);
-    gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_R, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    lutTexRef.current = lutTex;
-
-    // Set uniforms
-    gl.useProgram(prog);
-    gl.uniform1i(gl.getUniformLocation(prog, 'uVideo'), 0);
-    gl.uniform1i(gl.getUniformLocation(prog, 'uLut'), 1);
-
-    // Cache uniform locations
-    lutSizeLocRef.current = gl.getUniformLocation(prog, 'uLutSize');
-    lutStrengthLocRef.current = gl.getUniformLocation(prog, 'uLutStrength');
-  };
-
-  // Load LUT texture
-  const loadLutTexture = async (lutId: string | null) => {
-    if (!lutId) {
-      lutLoadedRef.current = false;
-      return;
-    }
-
-    try {
-      const gl = glRef.current;
-      if (!gl) return;
-
-      const cubeData = await parseCube(`/api/luts/${lutId}/file`);
-
-      // Convert Float32Array [0, 1] to Uint8Array [0, 255]
-      const bytes = new Uint8Array(cubeData.data.length);
-      for (let i = 0; i < cubeData.data.length; i++) {
-        bytes[i] = Math.max(0, Math.min(255, Math.round(cubeData.data[i] * 255)));
-      }
-
-      gl.bindTexture(gl.TEXTURE_3D, lutTexRef.current);
-      gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
-
-      gl.texImage3D(
-        gl.TEXTURE_3D, 0, gl.RGB8,
-        cubeData.size, cubeData.size, cubeData.size,
-        0,
-        gl.RGB, gl.UNSIGNED_BYTE,
-        bytes
-      );
-
-      lutLoadedRef.current = true;
-      console.log(`LUT loaded: ${cubeData.size}×${cubeData.size}×${cubeData.size}`);
-    } catch (e) {
-      console.error('Failed to load LUT texture:', e);
-      lutLoadedRef.current = false;
-    }
-  };
-
-  // Sync canvas size to current video resolution
-  const syncCanvasSize = () => {
-    const canvas = canvasRef.current;
-    const video = videoRef.current;
-    const gl = glRef.current;
-    if (!canvas || !video || !gl) return;
-    const w = video.videoWidth;
-    const h = video.videoHeight;
-    if (w > 0 && h > 0 && (canvas.width !== w || canvas.height !== h)) {
-      canvas.width = w;
-      canvas.height = h;
-      gl.viewport(0, 0, w, h);
-
-      // Set CSS to maintain aspect ratio when scaling to fill container
-      const container = canvas.parentElement;
-      if (container) {
-        const containerWidth = container.clientWidth;
-        const containerHeight = container.clientHeight;
-        const canvasAspect = w / h;
-        const containerAspect = containerWidth / containerHeight;
-
-        if (canvasAspect > containerAspect) {
-          // Canvas is wider, fit to width
-          canvas.style.width = '100%';
-          canvas.style.height = 'auto';
-        } else {
-          // Canvas is taller, fit to height
-          canvas.style.width = 'auto';
-          canvas.style.height = '100%';
-        }
-      }
-    }
-  };
-
-  // RAF render loop
-  const renderFrame = () => {
-    const gl = glRef.current;
-    const video = videoRef.current;
-    const prog = programRef.current;
-
-    if (!gl || !video || !prog || video.readyState < 2) {
-      rafRef.current = requestAnimationFrame(renderFrame);
-      return;
-    }
-
-    syncCanvasSize();
-
-    // Upload video frame
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, videoTexRef.current);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, video);
-
-    // Update uniforms
-    gl.useProgram(prog);
-    if (lutLoadedRef.current) {
-      gl.uniform1f(lutSizeLocRef.current, 32); // TODO: make dynamic
-      gl.uniform1f(lutStrengthLocRef.current, lutStrengthRef.current);
-      gl.activeTexture(gl.TEXTURE1);
-      gl.bindTexture(gl.TEXTURE_3D, lutTexRef.current);
-    }
-
-    // Draw
-    gl.drawArrays(gl.TRIANGLES, 0, 6);
-
-    rafRef.current = requestAnimationFrame(renderFrame);
-  };
-
   // Start playback
   const startPlayback = async (newFilePath: string, seekTime = 0, fileId?: string) => {
     if (!videoRef.current) return;
@@ -335,29 +133,32 @@ export function PlayerContextProvider({ children }: { children: React.ReactNode 
       const shouldProbe = newFilePath !== probedFilePathRef.current || !probeData;
 
       if (shouldProbe) {
-        const [probeResp, caps] = await Promise.all([
-          fetch(`/api/probe?path=${encodeURIComponent(newFilePath)}`),
-          fetchCapabilities(),
+        const probeUrl = `${apiBase}/probe?path=${encodeURIComponent(newFilePath)}`;
+        const capsUrl = `${apiBase}/capabilities`;
+
+        const [probeResp, capsResp] = await Promise.all([
+          fetchFn(probeUrl),
+          fetchFn(capsUrl),
         ]);
 
         if (!probeResp.ok) throw new Error('Probe failed');
 
         const probe = await probeResp.json();
+        const caps = capsResp.ok ? await capsResp.json() : null;
         setProbeData(probe);
         setCapabilities(caps);
         probedFilePathRef.current = newFilePath;
       }
 
       // Determine if using client or server LUT
-      const useClientLut = lutMode === 'client' && activeLutId;
       const useServerLut = lutMode === 'server' && activeLutId;
 
       // Adaptive segment length
       const isTranscoding = useServerLut || qualityRef.current !== 'source';
       const segmentLength = isTranscoding ? 1 : 4;
 
-      // Build playlist URL (no lut_id for client mode)
-      const playlistUrl = `/api/playlist/${sid}/main.m3u8?path=${encodeURIComponent(
+      // Build playlist URL
+      const playlistUrl = `${apiBase}/playlist/${sid}/main.m3u8?path=${encodeURIComponent(
         newFilePath
       )}&quality=${qualityRef.current}&segment_length=${segmentLength}${useServerLut ? `&lut_id=${activeLutId}` : ''}`;
 
@@ -371,7 +172,6 @@ export function PlayerContextProvider({ children }: { children: React.ReactNode 
       video.pause();
       video.src = '';
 
-      // Set up buffer config
       if (Hls.isSupported()) {
         const bufferConfig = isTranscoding
           ? {
@@ -389,7 +189,7 @@ export function PlayerContextProvider({ children }: { children: React.ReactNode 
               highWaterMark: 10,
             };
 
-        const hls = new Hls({
+        const hlsConfig: any = {
           debug: false,
           enableWorker: true,
           ...bufferConfig,
@@ -398,19 +198,18 @@ export function PlayerContextProvider({ children }: { children: React.ReactNode 
           abrEwmaDefaultEstimate: 5000000,
           abrEwmaFastLive: 3,
           abrEwmaSlowLive: 9,
-        });
+        };
+
+        if (xhrSetup) {
+          hlsConfig.xhrSetup = xhrSetup;
+        }
+
+        const hls = new Hls(hlsConfig);
 
         hls.on(Hls.Events.MANIFEST_PARSED, async () => {
           video.play();
           if (seekTime > 0) {
             video.currentTime = seekTime;
-          }
-
-          // Init WebGL and start RAF for client LUT
-          if (useClientLut) {
-            initWebGL();
-            await loadLutTexture(activeLutId);
-            rafRef.current = requestAnimationFrame(renderFrame);
           }
         });
 
@@ -429,13 +228,13 @@ export function PlayerContextProvider({ children }: { children: React.ReactNode 
       // Ping loop
       if (pingIntervalRef.current) clearInterval(pingIntervalRef.current);
       pingIntervalRef.current = setInterval(() => {
-        fetch(`/api/ping/${sid}`, { method: 'POST' }).catch(
+        fetchFn(`${apiBase}/ping/${sid}`, { method: 'POST' }).catch(
           (e) => console.warn(e)
         );
       }, 10000);
 
-      // Transcode stats (only for server-side LUT)
-      if (useServerLut || qualityRef.current !== 'source') {
+      // Transcode stats (only for server-side LUT or non-source quality, logged-in only)
+      if (apiBase === '/api' && (useServerLut || qualityRef.current !== 'source')) {
         if (transcodeStatsIntervalRef.current)
           clearInterval(transcodeStatsIntervalRef.current);
 
@@ -462,13 +261,6 @@ export function PlayerContextProvider({ children }: { children: React.ReactNode 
 
   // Stop playback
   const stopPlayback = () => {
-    // Cancel RAF
-    if (rafRef.current) {
-      cancelAnimationFrame(rafRef.current);
-      rafRef.current = null;
-    }
-
-    // Clear intervals
     if (pingIntervalRef.current) {
       clearInterval(pingIntervalRef.current);
       pingIntervalRef.current = null;
@@ -478,39 +270,27 @@ export function PlayerContextProvider({ children }: { children: React.ReactNode 
       transcodeStatsIntervalRef.current = null;
     }
 
-    // Destroy HLS
     if (hlsRef.current) {
       hlsRef.current.destroy();
       hlsRef.current = null;
     }
 
-    // Stop video
     if (videoRef.current) {
       videoRef.current.pause();
       videoRef.current.src = '';
     }
 
-    // Clean up GL
-    const gl = glRef.current;
-    if (gl && videoTexRef.current) {
-      gl.deleteTexture(videoTexRef.current);
-      videoTexRef.current = null;
-    }
-
-    // Send stop signal
     if (sessionIdRef.current) {
-      fetch(`/api/stop/${sessionIdRef.current}`, { method: 'POST' }).catch(
+      fetchFn(`${apiBase}/stop/${sessionIdRef.current}`, { method: 'POST' }).catch(
         (e) => console.warn(e)
       );
     }
 
-    // Update state
     setIsVisible(false);
     setFilePath(null);
     setProbeData(null);
     setTranscodeStats({});
     probedFilePathRef.current = null;
-    lutLoadedRef.current = false;
   };
 
   // Change quality
@@ -522,13 +302,6 @@ export function PlayerContextProvider({ children }: { children: React.ReactNode 
 
     const seekTime = video.currentTime;
 
-    // Cancel RAF
-    if (rafRef.current) {
-      cancelAnimationFrame(rafRef.current);
-      rafRef.current = null;
-    }
-
-    // Stop current playback
     if (pingIntervalRef.current) {
       clearInterval(pingIntervalRef.current);
       pingIntervalRef.current = null;
@@ -545,10 +318,9 @@ export function PlayerContextProvider({ children }: { children: React.ReactNode 
     video.pause();
     video.src = '';
 
-    // Stop old session
     if (sessionIdRef.current) {
       try {
-        await fetch(`/api/stop/${sessionIdRef.current}`, { method: 'POST' });
+        await fetchFn(`${apiBase}/stop/${sessionIdRef.current}`, { method: 'POST' });
       } catch (e) {
         console.warn(e);
       }
@@ -566,30 +338,11 @@ export function PlayerContextProvider({ children }: { children: React.ReactNode 
     const video = videoRef.current;
     if (!video || !filePath) return;
 
-    const seekTime = video.currentTime;
-
     if (lutMode === 'client') {
-      // Client-side LUT: no HLS restart, just swap texture
-      if (rafRef.current) {
-        cancelAnimationFrame(rafRef.current);
-        rafRef.current = null;
-      }
-
-      if (newLutId) {
-        initWebGL();
-        await loadLutTexture(newLutId);
-        rafRef.current = requestAnimationFrame(renderFrame);
-      } else {
-        // No LUT - stop rendering
-        lutLoadedRef.current = false;
-      }
+      // Client-side LUT: hook handles texture swap reactively via activeLutId change
+      return;
     } else {
       // Server-side LUT: full HLS restart
-      if (rafRef.current) {
-        cancelAnimationFrame(rafRef.current);
-        rafRef.current = null;
-      }
-
       if (pingIntervalRef.current) {
         clearInterval(pingIntervalRef.current);
         pingIntervalRef.current = null;
@@ -608,13 +361,14 @@ export function PlayerContextProvider({ children }: { children: React.ReactNode 
 
       if (sessionIdRef.current) {
         try {
-          await fetch(`/api/stop/${sessionIdRef.current}`, { method: 'POST' });
+          await fetchFn(`${apiBase}/stop/${sessionIdRef.current}`, { method: 'POST' });
         } catch (e) {
           console.warn(e);
         }
       }
 
       lutIdRef.current = newLutId;
+      const seekTime = video.currentTime;
       await startPlayback(filePath, seekTime);
     }
   };
@@ -623,14 +377,14 @@ export function PlayerContextProvider({ children }: { children: React.ReactNode 
   useEffect(() => {
     const handler = () => {
       if (sessionIdRef.current) {
-        navigator.sendBeacon(`/api/stop/${sessionIdRef.current}`, '');
+        navigator.sendBeacon(`${apiBase}/stop/${sessionIdRef.current}`, '');
       }
     };
     window.addEventListener('beforeunload', handler);
     return () => {
       window.removeEventListener('beforeunload', handler);
     };
-  }, []);
+  }, [apiBase]);
 
   const value = useMemo(
     () => ({

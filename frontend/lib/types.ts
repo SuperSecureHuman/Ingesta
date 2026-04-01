@@ -74,6 +74,7 @@ export interface BitrateTier {
 export interface Capabilities {
   bitrate_tiers: BitrateTier[];
   hardware: Record<string, boolean>;
+  luts?: LutEntry[];
 }
 
 export interface Share {
