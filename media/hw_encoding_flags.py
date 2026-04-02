@@ -1,6 +1,6 @@
 """
 Hardware encoding flags and FFmpeg command builders.
-Supports multiple platforms: Intel QSV/VAAPI, NVIDIA NVENC, Apple VideoToolbox, AMD VDPAU.
+Supports multiple platforms: Intel QSV/VAAPI, NVIDIA NVENC, Apple VideoToolbox.
 """
 
 from typing import Optional
@@ -18,30 +18,24 @@ def build_hwaccel_input_args(encoder: str) -> list[str]:
     elif encoder == "h264_nvenc":
         return ["-hwaccel", "cuda", "-hwaccel_output_format", "cuda", "-threads", "1"]
     elif encoder == "h264_qsv":
-        # QSV uses VAAPI for decoding on Intel
+        # QSV on Linux: VAAPI parent device → QSV child device.
+        # Decode with VAAPI; bridge to QSV in filter chain via hwmap=derive_device=qsv.
         return [
-            "-init_hw_device",
-            "vaapi=va:/dev/dri/renderD128,driver=iHD",
-            # TODO: Find what this does in jellyfin that falis in this version
-            # "-init_hw_device",
-            # "qsv=qs@va",
-            # "-filter_hw_device",
-            # "qs",
-            "-hwaccel",
-            "vaapi",
-            "-hwaccel_output_format",
-            "vaapi",
+            "-init_hw_device", "vaapi=va:/dev/dri/renderD128,driver=iHD",
+            "-init_hw_device", "qsv=qs@va",
+            "-filter_hw_device", "qs",
+            "-hwaccel", "vaapi",
+            "-hwaccel_output_format", "vaapi",
+            "-noautorotate",
         ]
     elif encoder == "h264_vaapi":
         return [
-            "-init_hw_device",
-            "vaapi=va:/dev/dri/renderD128,driver=iHD",
-            "-filter_hw_device",
-            "va",
-            "-hwaccel",
-            "vaapi",
-            "-hwaccel_output_format",
-            "vaapi",
+            "-init_hw_device", "vaapi=va:/dev/dri/renderD128,driver=iHD",
+            "-filter_hw_device", "va",
+            "-hwaccel", "vaapi",
+            "-hwaccel_output_format", "vaapi",
+            "-hwaccel_flags", "+allow_profile_mismatch",
+            "-noautorotate",
         ]
     return []
 
@@ -50,9 +44,8 @@ def build_video_codec_args(
     encoder: str,
     bitrate: Optional[int],
     max_height: Optional[int],
-    lut_path: Optional[str] = None,
 ) -> list:
-    """Build video codec args with LUT3D (software) for LUT application."""
+    """Build video codec args with filter chain for scaling and format conversion."""
 
     args = ["-codec:v:0", encoder]
 
@@ -73,66 +66,51 @@ def build_video_codec_args(
             args += ["-maxrate", str(bitrate), "-bufsize", str(bitrate * 2)]
 
     elif encoder == "h264_qsv":
-        args += ["-preset", "veryfast"]
+        args += ["-preset", "veryfast", "-mbbrc", "1"]
         if bitrate:
             args += [
-                "-b:v",
-                str(bitrate),
-                "-maxrate",
-                str(bitrate),
-                "-bufsize",
-                str(bitrate * 2),
+                "-b:v", str(bitrate),
+                "-maxrate", str(bitrate + 1),       # +1 triggers QSV VBR mode internally
+                "-rc_init_occupancy", str(bitrate * 2),
+                "-bufsize", str(bitrate * 4),
             ]
-        args += ["-g:v", "180"]  # Keyframe interval for QSV
+        # GOP via stream-indexed flags; -force_key_frames is NOT added for QSV (see transcoder.py)
+        args += ["-g:v:0", "180", "-keyint_min:v:0", "180"]
 
     elif encoder == "h264_vaapi":
-        args += ["-preset", "ultrafast"]
+        # h264_vaapi has no -preset; use -compression_level (iHD driver, 1=slow 7=fast)
+        # -rc_mode VBR required; without it iHD defaults to CQP and ignores bitrate flags
+        args += ["-rc_mode", "VBR", "-compression_level", "7"]
         if bitrate:
             args += [
-                "-b:v",
-                str(bitrate),
-                "-maxrate",
-                str(bitrate),
-                "-bufsize",
-                str(bitrate * 2),
+                "-b:v", str(bitrate),
+                "-maxrate", str(bitrate),
+                "-bufsize", str(bitrate * 2),
             ]
 
-    # --- Filter chain (lut3d for LUT, scale for max_height) ---
+    # --- Filter chain ---
+    # scale_vaapi=format=nv12 handles both resizing and 10-bit→8-bit conversion for H.264
     filters = []
 
-    # Color space setup (important for 10-bit HEVC input)
-    filters.append("setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709")
-
-    if lut_path or max_height:
-        # Build filter chain: lut3d for color grading, scale for resolution
-        if lut_path:
-            # lut3d requires absolute path escaped for FFmpeg filter syntax
-            escaped_path = lut_path.replace("'", "\\'")
-            filters.append(f"lut3d='{escaped_path}'")
-
-        if max_height:
-            # Use hardware-accelerated scaler based on encoder
+    if max_height:
+        if encoder in ("h264_qsv", "h264_vaapi"):
+            filters.append(
+                f"scale_vaapi=w=-2:h='min(ih,{max_height})':format=nv12:extra_hw_frames=24"
+            )
             if encoder == "h264_qsv":
-                filters.append(
-                    f"scale_vaapi=w=-2:h='min(ih,{max_height})':format=nv12:extra_hw_frames=24"
-                )
-                # Map VAAPI output to QSV
-                filters.append("hwmap=derive_device=qsv,format=qsv")
-            elif encoder == "h264_vaapi":
-                filters.append(
-                    f"scale_vaapi=w=-2:h='min(ih,{max_height})':format=nv12:extra_hw_frames=24"
-                )
-            else:
-                # Software scale for other encoders
-                filters.append(f"scale=w=-2:h='min(ih,{max_height})'")
+                filters.append("hwmap=derive_device=qsv")
+                filters.append("format=qsv")
+        else:
+            filters.append(f"scale=w=-2:h='min(ih,{max_height})'")
 
     else:
-        # Even without scaling, apply format conversion for hw encoders
+        # No scaling — still need format conversion (e.g. 10-bit source → nv12 for H.264)
         if encoder == "h264_qsv":
-            filters.append("format=nv12|vaapi,hwupload=extra_hw_frames=64")
-            filters.append("hwmap=derive_device=qsv,format=qsv")
+            filters.append("scale_vaapi=format=nv12:extra_hw_frames=24")
+            filters.append("hwmap=derive_device=qsv")
+            filters.append("format=qsv")
         elif encoder == "h264_vaapi":
-            filters.append("format=nv12|vaapi,hwupload=extra_hw_frames=64")
+            filters.append("scale_vaapi=format=nv12:extra_hw_frames=24")
 
     if filters:
         args += ["-vf", ",".join(filters)]

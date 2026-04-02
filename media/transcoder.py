@@ -20,7 +20,7 @@ logger = get_logger("media.transcoder")
 TICKS_PER_SECOND = 10_000_000
 
 BITRATE_TIERS = [
-    {"label": "120 Mbps", "key": "120M", "bitrate": 120_000_000, "max_height": None},
+    {"label": "120 Mbps", "key": "120M", "bitrate": 120_000_000, "max_height": 2160},
     {"label": "60 Mbps", "key": "60M", "bitrate": 60_000_000, "max_height": 2160},
     {"label": "40 Mbps", "key": "40M", "bitrate": 40_000_000, "max_height": 1440},
     {"label": "20 Mbps", "key": "20M", "bitrate": 20_000_000, "max_height": 1080},
@@ -53,7 +53,6 @@ class TranscodeJob:
     source_path: str
     quality: str
     segment_length: int = field(default_factory=lambda: settings.segment_length)
-    lut_path: Optional[str] = None
     process: Optional[asyncio.subprocess.Process] = None
     start_segment: int = 0
     start_time_sec: float = 0.0
@@ -305,15 +304,6 @@ class TranscodeManager:
         bitrate = preset["bitrate"]
         max_height = preset["max_height"]
 
-        # If LUT is active and copy codec is requested, downgrade to highest transcode tier
-        if job.lut_path and vcodec == "copy":
-            # lut3d filter requires re-encode, cannot use copy codec
-            preset = get_bitrate_preset("120M")
-            vcodec = self.encoder  # use detected hw encoder
-            acodec = preset["acodec"]
-            bitrate = preset["bitrate"]
-            max_height = preset["max_height"]
-
         # Validate source_path is not a network URI (SSRF protection)
         _BLOCKED_SCHEMES = (
             "http://",
@@ -333,19 +323,19 @@ class TranscodeManager:
         # Build FFmpeg command
         cmd = [settings.ffmpeg_path]
 
-        # Add hwaccel input args for hardware decoding
-        # For QSV and VAAPI, these include device initialization
+        # Add hwaccel input args for hardware decoding (transcode only — not copy)
         if vcodec != "copy" and self.encoder in ("h264_qsv", "h264_vaapi"):
             cmd.extend(build_hwaccel_input_args(self.encoder))
-        elif vcodec == "copy":
-            cmd.extend(build_hwaccel_input_args(self.encoder))
+
+        cmd.extend(["-ss", str(seek_time_seconds), "-i", job.source_path])
+
+        # Prevent FFmpeg from auto-inserting a SW scaler when HW decoder output
+        # resolution doesn't match — that would silently pull frames out of GPU memory
+        if vcodec != "copy" and self.encoder in ("h264_qsv", "h264_vaapi"):
+            cmd.append("-noautoscale")
 
         cmd.extend(
             [
-                "-ss",
-                str(seek_time_seconds),
-                "-i",
-                job.source_path,
                 "-map_metadata",
                 "-1",
                 "-map_chapters",
@@ -361,17 +351,20 @@ class TranscodeManager:
         else:
             # Use encoder-aware codec builder (respects hw-specific bitrate control)
             codec_args = build_video_codec_args(
-                self.encoder, bitrate, max_height, job.lut_path
+                self.encoder, bitrate, max_height
             )
             cmd.extend(codec_args)
 
             # Force keyframes at segment boundaries (only for transcoding, not copy)
-            cmd.extend(
-                [
-                    "-force_key_frames:v:0",
-                    f"expr:gte(t,n_forced*{job.segment_length})",
-                ]
-            )
+            # QSV manages GOP internally via -g:v:0/-keyint_min:v:0 in codec args;
+            # adding -force_key_frames on top causes them to fight and breaks GOP alignment
+            if self.encoder != "h264_qsv":
+                cmd.extend(
+                    [
+                        "-force_key_frames:v:0",
+                        f"expr:gte(t,n_forced*{job.segment_length})",
+                    ]
+                )
 
         # Audio codec
         cmd.extend(["-codec:a:0", acodec, "-b:a", "128k", "-ac", "2"])
