@@ -46,7 +46,7 @@ COPY static ./static
 
 # Create data directory for SQLite
 RUN mkdir -p /app/data /app/media 
-RUN chmod +x /app/ffmpeg /app/ffprobe
+# RUN chmod +x /app/ffmpeg /app/ffprobe
 
 # Expose FastAPI port
 EXPOSE 8000
