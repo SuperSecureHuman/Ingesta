@@ -28,7 +28,8 @@ ENV PATH="/root/.local/bin/:$PATH"
 
 
 # Copy requirements and install Python dependencies
-RUN uv python install
+RUN uv python install\
+RUN uv venv
 COPY requirements.txt .
 RUN uv pip install --no-cache-dir -r requirements.txt
 
