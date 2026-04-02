@@ -1,5 +1,5 @@
 # Backend Dockerfile
-FROM docker pull ghcr.io/supersecurehuman/ffmpeg-intel-base:latest
+FROM ghcr.io/supersecurehuman/ffmpeg-intel-base:latest
 
 WORKDIR /app
 
