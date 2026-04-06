@@ -185,4 +185,14 @@ export interface ShareFile {
   bitrate: number;
   video_codec: string;
   scan_status: 'pending' | 'done' | 'error';
+  tags?: string[];
+  rating?: number | null;
+  comments?: FileComment[];
+  markers?: FileMarker[];
+}
+
+export interface ShareFilesResponse {
+  project_name: string | null;
+  expires_at: string | null;
+  files: ShareFile[];
 }

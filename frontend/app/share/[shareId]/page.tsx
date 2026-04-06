@@ -1,12 +1,33 @@
 'use client';
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useParams } from 'next/navigation';
-import { ShareFile, LutEntry } from '@/lib/types';
-import { formatTime, getResolutionLabel, getFileName } from '@/lib/utils';
+import { motion } from 'framer-motion';
+import { ShareFile, ShareFilesResponse, LutEntry } from '@/lib/types';
 import { LutContextProvider } from '@/context/LutContext';
 import { PlayerContextProvider, usePlayerContext } from '@/context/PlayerContext';
 import PlayerContainer from '@/components/player/PlayerContainer';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import ShareFileCard from './ShareFileCard';
+
+// ── Grid stagger variants (match ProjectView pattern) ─────────────────────────
+const gridContainer = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.04 } },
+};
+
+const gridItem = {
+  hidden: { opacity: 0, y: 16, scale: 0.97 },
+  show: {
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    transition: { duration: 0.22, ease: [0.25, 0.1, 0.25, 1] as [number, number, number, number] },
+  },
+};
+
+// ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function ShareViewerPage() {
   const params = useParams();
@@ -17,6 +38,8 @@ export default function ShareViewerPage() {
   const [passwordError, setPasswordError] = useState('');
   const [files, setFiles] = useState<ShareFile[]>([]);
   const [luts, setLuts] = useState<LutEntry[]>([]);
+  const [projectName, setProjectName] = useState<string | null>(null);
+  const [expiresAt, setExpiresAt] = useState<string | null>(null);
 
   const passwordInputRef = useRef<HTMLInputElement>(null);
   const jwtRef = useRef<string | null>(null);
@@ -69,10 +92,12 @@ export default function ShareViewerPage() {
       }
       if (!filesRes.ok) throw new Error('Failed to load files');
 
-      const filesData = await filesRes.json();
+      const filesData: ShareFilesResponse = await filesRes.json();
       const caps = capsRes.ok ? await capsRes.json() : null;
 
-      setFiles(filesData.files || []);
+      setFiles(filesData.files ?? []);
+      setProjectName(filesData.project_name ?? null);
+      setExpiresAt(filesData.expires_at ?? null);
       setLuts(caps?.luts ?? []);
       setView('loaded');
     } catch (e) {
@@ -115,35 +140,47 @@ export default function ShareViewerPage() {
     jwtRef.current = null;
     setJwt(null);
     setFiles([]);
+    setProjectName(null);
+    setExpiresAt(null);
     setView('password');
   }, [shareId]);
 
-  // Password gate
+  // Build initialAnnotations map for the player (preloaded — no extra API calls)
+  const initialAnnotations = useMemo(
+    () =>
+      Object.fromEntries(
+        files.map((f) => [
+          f.file_path,
+          { comments: f.comments ?? [], markers: f.markers ?? [] },
+        ])
+      ),
+    [files]
+  );
+
+  // ── Password gate ─────────────────────────────────────────────────────────
   if (view === 'password') {
     return (
-      <div className="flex items-center justify-center h-screen bg-gray-950 px-4">
+      <div className="flex items-center justify-center min-h-screen bg-background px-4">
         <div className="w-full max-w-md">
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-8 shadow-2xl">
-            <h1 className="text-2xl font-bold text-gray-100 mb-2 text-center">Footage Review</h1>
-            <p className="text-sm text-gray-500 text-center mb-6">Enter password to access shared footage</p>
-            <form onSubmit={submitPassword}>
-              <div className="mb-4">
-                <input
-                  ref={passwordInputRef}
-                  type="password"
-                  placeholder="Enter password"
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-gray-100
-                           placeholder-gray-500 focus:outline-none focus:border-accent transition-colors"
-                  autoFocus
-                />
-              </div>
-              {passwordError && <div className="text-red-400 text-sm mb-4">{passwordError}</div>}
-              <button
-                type="submit"
-                className="w-full bg-accent hover:bg-amber-500 text-gray-950 font-semibold py-3 rounded-lg transition-colors"
-              >
+          <div className="bg-card border border-border rounded-xl p-8 shadow-2xl">
+            <h1 className="text-2xl font-bold text-foreground mb-2 text-center">Footage Review</h1>
+            <p className="text-sm text-muted-foreground text-center mb-6">
+              Enter password to access shared footage
+            </p>
+            <form onSubmit={submitPassword} className="space-y-4">
+              <Input
+                ref={passwordInputRef}
+                type="password"
+                placeholder="Password"
+                className="h-11 bg-zinc-900 border-border focus-visible:border-primary/50"
+                autoFocus
+              />
+              {passwordError && (
+                <p className="text-destructive text-sm">{passwordError}</p>
+              )}
+              <Button type="submit" className="w-full h-11 font-semibold">
                 Watch
-              </button>
+              </Button>
             </form>
           </div>
         </div>
@@ -157,11 +194,15 @@ export default function ShareViewerPage() {
         fetchFn={shareFetch}
         apiBase={`/api/share/${shareId}`}
         xhrSetup={shareXhrSetup}
+        readOnly={true}
+        initialAnnotations={initialAnnotations}
       >
         <ShareMain
           shareId={shareId}
           files={files}
           jwt={jwt}
+          projectName={projectName}
+          expiresAt={expiresAt}
           onLogout={logout}
         />
       </PlayerContextProvider>
@@ -169,101 +210,77 @@ export default function ShareViewerPage() {
   );
 }
 
+// ── Share Main ────────────────────────────────────────────────────────────────
+
 function ShareMain({
   shareId,
   files,
   jwt,
+  projectName,
+  expiresAt,
   onLogout,
 }: {
   shareId: string;
   files: ShareFile[];
   jwt: string | null;
+  projectName: string | null;
+  expiresAt: string | null;
   onLogout: () => void;
 }) {
   const { startPlayback, isVisible } = usePlayerContext();
 
-  const handleCardClick = (file: ShareFile) => {
+  const handleCardClick = (file: ShareFile, sourceRect: DOMRect) => {
     if (file.scan_status === 'pending') return;
-    startPlayback(file.file_path);
+    startPlayback(file.file_path, 0, undefined, sourceRect);
   };
 
   return (
-    <div className={isVisible ? 'contents' : 'flex flex-col h-screen bg-black'}>
+    <div className={isVisible ? 'contents' : 'flex flex-col h-screen bg-background'}>
       {/* Header — hidden while player is open */}
       {!isVisible && (
-        <header className="flex items-center justify-between px-6 py-4 border-b border-gray-800 shrink-0 bg-gray-900">
-          <h1 className="text-lg font-semibold text-gray-100">Shared Footage</h1>
-          <button
-            onClick={onLogout}
-            className="text-xs px-3 py-1.5 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded
-                     text-gray-400 hover:text-gray-200 transition-colors"
-          >
+        <header className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0 bg-card">
+          <div>
+            <h1 className="text-base font-semibold text-foreground">
+              {projectName ?? 'Shared Footage'}
+            </h1>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {files.length} file{files.length !== 1 ? 's' : ''}
+              {expiresAt && ` · Expires ${new Date(expiresAt).toLocaleDateString()}`}
+            </p>
+          </div>
+          <Button variant="outline" size="sm" onClick={onLogout}>
             Logout
-          </button>
+          </Button>
         </header>
       )}
 
-      {/* File Grid — hidden while player is open */}
+      {/* File grid — hidden while player is open */}
       {!isVisible && (
         <div className="flex-1 overflow-y-auto px-6 py-6">
-          <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))' }}>
+          <motion.div
+            key={`files-${files.length}`}
+            className="grid-cards"
+            variants={gridContainer}
+            initial="hidden"
+            animate="show"
+          >
             {files.length === 0 ? (
-              <div className="col-span-full text-center py-20 text-gray-500">No files in this share</div>
+              <div className="col-span-full text-center py-20 text-muted-foreground">
+                No files in this share
+              </div>
             ) : (
-              files.map((file) => {
-                const fileName = getFileName(file.file_path);
-                const posterUrl = `/api/share/${shareId}/thumb?path=${encodeURIComponent(
-                  file.file_path
-                )}&t=0&token=${encodeURIComponent(jwt || '')}`;
-                const durationStr = formatTime(file.duration_seconds || 0);
-                const resLabel = getResolutionLabel(file.height || 0);
-                const mbps = file.bitrate ? (file.bitrate / 1_000_000).toFixed(1) : '—';
-                const isLoading = file.scan_status === 'pending';
-
-                return (
-                  <div
-                    key={file.id}
-                    onClick={() => handleCardClick(file)}
-                    className={`group rounded-lg border border-gray-800 bg-gray-900 hover:border-accent overflow-hidden transition-all ${
-                      isLoading ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
-                    }`}
-                  >
-                    <div className="aspect-video relative bg-gray-800">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={posterUrl}
-                        alt={fileName}
-                        loading="lazy"
-                        className="absolute inset-0 w-full h-full object-cover"
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).style.display = 'none';
-                        }}
-                      />
-                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                        <span className="text-4xl drop-shadow">▶</span>
-                      </div>
-                      {isLoading && (
-                        <div className="absolute inset-0 flex items-center justify-center bg-black/50">
-                          <span className="animate-spin text-2xl">↻</span>
-                        </div>
-                      )}
-                    </div>
-                    <div className="px-3 py-3">
-                      <p className="text-sm text-gray-200 truncate mb-1" title={fileName}>
-                        {fileName}
-                      </p>
-                      <div className="flex justify-between text-xs text-gray-500">
-                        <span>{durationStr}</span>
-                        <span>
-                          {resLabel} · {mbps}Mbps
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })
+              files.map((file) => (
+                <motion.div key={file.id} variants={gridItem}>
+                  <ShareFileCard
+                    file={file}
+                    shareId={shareId}
+                    jwt={jwt}
+                    onPlay={handleCardClick}
+                  />
+                </motion.div>
+              ))
             )}
-          </div>
+          </motion.div>
         </div>
       )}
 

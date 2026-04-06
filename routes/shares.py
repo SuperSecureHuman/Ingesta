@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Optional
 from urllib.parse import quote, unquote
 
+import asyncio
 import shutil
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Header, Request
@@ -229,30 +230,45 @@ async def list_share_files(
     share_id: str,
     token: dict = Depends(get_token_payload),
 ):
-    """List all files in the shared project."""
+    """List all files in the shared project, including annotations."""
     # Verify token matches share
     if token["share_id"] != share_id:
         raise HTTPException(403, "Token mismatch")
 
-    # Get files for this project
-    files = await crud.get_project_files(token["project_id"])
+    # Load project, share metadata, and files concurrently
+    project, share, files = await asyncio.gather(
+        crud.get_project(token["project_id"]),
+        crud.get_share(share_id),
+        crud.get_project_files(token["project_id"]),
+    )
 
-    # Return file info (excluding scan_error from response)
+    # Batch-load annotations for all files
+    file_paths = [f["file_path"] for f in files]
+    annotations = await crud.get_annotations_for_paths(file_paths)
+
+    file_list = []
+    for f in files:
+        ann = annotations.get(f["file_path"], {})
+        file_list.append({
+            "id": f["id"],
+            "file_path": f["file_path"],
+            "file_size": f["file_size"],
+            "duration_seconds": f["duration_seconds"],
+            "width": f["width"],
+            "height": f["height"],
+            "bitrate": f["bitrate"],
+            "video_codec": f["video_codec"],
+            "scan_status": f["scan_status"],
+            "tags": ann.get("tags", []),
+            "rating": ann.get("rating"),
+            "comments": ann.get("comments", []),
+            "markers": ann.get("markers", []),
+        })
+
     return {
-        "files": [
-            {
-                "id": f["id"],
-                "file_path": f["file_path"],
-                "file_size": f["file_size"],
-                "duration_seconds": f["duration_seconds"],
-                "width": f["width"],
-                "height": f["height"],
-                "bitrate": f["bitrate"],
-                "video_codec": f["video_codec"],
-                "scan_status": f["scan_status"],
-            }
-            for f in files
-        ]
+        "project_name": project["name"] if project else None,
+        "expires_at": share["expires_at"] if share else None,
+        "files": file_list,
     }
 
 

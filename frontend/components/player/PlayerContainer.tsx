@@ -66,7 +66,7 @@ const IconMarker = ({ className }: { className?: string }) => (
 export default function PlayerContainer() {
   const {
     isVisible, filePath, sourceRect, quality, probeData, capabilities, transcodeStats,
-    videoRef, canvasRef, stopPlayback, changeQuality, changeLut,
+    videoRef, canvasRef, stopPlayback, changeQuality, changeLut, readOnly, getInitialAnnotations,
   } = usePlayerContext();
 
   const { availableLuts, activeLutId, lutMode, setLutMode, lutStrength, setLutStrength, applyLut, clearLut, fileLutPref } = useLutContext();
@@ -406,9 +406,16 @@ export default function PlayerContainer() {
       setCommentsOpen(false);
       return;
     }
+    const preloaded = getInitialAnnotations(filePath);
+    if (preloaded) {
+      setComments(preloaded.comments);
+      setMarkers(preloaded.markers);
+      return;
+    }
     const q = `?path=${encodeURIComponent(filePath)}`;
     apiFetch(`/api/path-annotations/file/comments${q}`).then((r) => r.ok ? r.json() : []).then(setComments).catch(() => {});
     apiFetch(`/api/path-annotations/file/markers${q}`).then((r) => r.ok ? r.json() : []).then(setMarkers).catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filePath]);
 
   // Track video duration for marker positioning
@@ -602,7 +609,7 @@ export default function PlayerContainer() {
                   {comments.filter((c) => c.timestamp_seconds === null).map((c) => (
                     <div key={c.id} className="flex items-start gap-1 group/c py-1 border-b border-zinc-800/50">
                       <span className="flex-1 text-zinc-300 break-words">{c.body}</span>
-                      {canEdit() && (
+                      {!readOnly && canEdit() && (
                         <button onClick={() => deleteComment(c.id)} className="shrink-0 text-zinc-600 hover:text-red-400 opacity-0 group-hover/c:opacity-100 transition-opacity">✕</button>
                       )}
                     </div>
@@ -620,14 +627,14 @@ export default function PlayerContainer() {
                   </button>
                   <div className="flex items-start gap-1">
                     <span className="flex-1 text-zinc-300 break-words">{c.body}</span>
-                    {canEdit() && (
+                    {!readOnly && canEdit() && (
                       <button onClick={() => deleteComment(c.id)} className="shrink-0 text-zinc-600 hover:text-red-400 opacity-0 group-hover/c:opacity-100 transition-opacity">✕</button>
                     )}
                   </div>
                 </div>
               ))}
             </div>
-            {canEdit() && (
+            {!readOnly && canEdit() && (
               <div className="shrink-0 border-t border-zinc-800 p-3 space-y-2">
                 <div className="flex gap-1">
                   <input
@@ -658,7 +665,7 @@ export default function PlayerContainer() {
         )}
 
         {/* ── Add marker form ───────────────────────────────────────────────── */}
-        {addingMarker && filePath && canEdit() && (
+        {addingMarker && filePath && !readOnly && canEdit() && (
           <div className="absolute bottom-24 right-4 bg-zinc-950/95 backdrop-blur-sm rounded-xl border border-zinc-800 z-50 p-3 w-60">
             <div className="text-xs font-semibold text-zinc-300 mb-2">Add Marker at {formatTime(videoRef.current?.currentTime ?? 0)}</div>
             <input
@@ -942,7 +949,7 @@ export default function PlayerContainer() {
               )}
 
               {/* Add marker (editor only) */}
-              {filePath && canEdit() && (
+              {filePath && !readOnly && canEdit() && (
                 <button
                   onClick={() => setAddingMarker((v) => !v)}
                   className={`w-8 h-8 flex items-center justify-center rounded transition-colors ${addingMarker ? 'text-amber-400' : 'text-zinc-400 hover:text-white'}`}

@@ -1,8 +1,8 @@
 'use client';
 
-import React, { createContext, useContext, useState, useRef, useEffect, useMemo } from 'react';
+import React, { createContext, useContext, useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import Hls from 'hls.js';
-import { ProbeData, Capabilities, TranscodeStats } from '@/lib/types';
+import { ProbeData, Capabilities, TranscodeStats, FileComment, FileMarker } from '@/lib/types';
 import { generateUUID } from '@/lib/utils';
 import { apiFetch, fetchCapabilities } from '@/lib/api';
 import { useWebGLLut } from '@/hooks/useWebGLLut';
@@ -24,6 +24,8 @@ interface PlayerContextType {
   stopPlayback: () => void;
   changeQuality: (key: string) => Promise<void>;
   changeLut: (lutId: string | null) => Promise<void>;
+  readOnly: boolean;
+  getInitialAnnotations: (filePath: string) => { comments: FileComment[]; markers: FileMarker[] } | null;
 }
 
 const PlayerContext = createContext<PlayerContextType | undefined>(undefined);
@@ -33,6 +35,8 @@ interface PlayerContextProviderProps {
   fetchFn?: FetchFn;
   apiBase?: string;
   xhrSetup?: (xhr: XMLHttpRequest) => void;
+  readOnly?: boolean;
+  initialAnnotations?: Record<string, { comments: FileComment[]; markers: FileMarker[] }>;
 }
 
 export function PlayerContextProvider({
@@ -40,6 +44,8 @@ export function PlayerContextProvider({
   fetchFn: fetchFnProp,
   apiBase = '/api',
   xhrSetup,
+  readOnly = false,
+  initialAnnotations,
 }: PlayerContextProviderProps) {
   const fetchFn: FetchFn = fetchFnProp ?? apiFetch;
 
@@ -63,6 +69,14 @@ export function PlayerContextProvider({
   const playbackStartTimeRef = useRef<number | null>(null);
 
   const { lutMode, activeLutId, lutStrength, setFileLutPref } = useLutContext();
+
+  // Annotation injection for read-only contexts (share page)
+  const annotationsRef = useRef(initialAnnotations ?? {});
+  useEffect(() => { annotationsRef.current = initialAnnotations ?? {}; }, [initialAnnotations]);
+  const getInitialAnnotations = useCallback(
+    (path: string) => annotationsRef.current[path] ?? null,
+    []
+  );
 
   useWebGLLut({
     videoRef,
@@ -405,6 +419,8 @@ export function PlayerContextProvider({
       stopPlayback,
       changeQuality,
       changeLut,
+      readOnly,
+      getInitialAnnotations,
     }),
     [
       isVisible,
@@ -418,6 +434,8 @@ export function PlayerContextProvider({
       stopPlayback,
       changeQuality,
       changeLut,
+      readOnly,
+      getInitialAnnotations,
     ]
   );
 
