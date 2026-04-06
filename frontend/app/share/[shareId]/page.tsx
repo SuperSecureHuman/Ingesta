@@ -235,54 +235,50 @@ function ShareMain({
   };
 
   return (
-    <div className={isVisible ? 'contents' : 'flex flex-col h-screen bg-background'}>
+    <div className="flex flex-col h-screen bg-background">
       {/* Header — hidden while player is open */}
-      {!isVisible && (
-        <header className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0 bg-card">
-          <div>
-            <h1 className="text-base font-semibold text-foreground">
-              {projectName ?? 'Shared Footage'}
-            </h1>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              {files.length} file{files.length !== 1 ? 's' : ''}
-              {expiresAt && ` · Expires ${new Date(expiresAt).toLocaleDateString()}`}
-            </p>
-          </div>
-          <Button variant="outline" size="sm" onClick={onLogout}>
-            Logout
-          </Button>
-        </header>
-      )}
+      <header className={`flex items-center justify-between px-6 py-4 border-b border-border shrink-0 bg-card${isVisible ? ' hidden' : ''}`}>
+        <div>
+          <h1 className="text-base font-semibold text-foreground">
+            {projectName ?? 'Shared Footage'}
+          </h1>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {files.length} file{files.length !== 1 ? 's' : ''}
+            {expiresAt && ` · Expires ${new Date(expiresAt).toLocaleDateString()}`}
+          </p>
+        </div>
+        <Button variant="outline" size="sm" onClick={onLogout}>
+          Logout
+        </Button>
+      </header>
 
       {/* File grid — hidden while player is open */}
-      {!isVisible && (
-        <div className="flex-1 overflow-y-auto px-6 py-6">
-          <motion.div
-            key={`files-${files.length}`}
-            className="grid-cards"
-            variants={gridContainer}
-            initial="hidden"
-            animate="show"
-          >
-            {files.length === 0 ? (
-              <div className="col-span-full text-center py-20 text-muted-foreground">
-                No files in this share
-              </div>
-            ) : (
-              files.map((file) => (
-                <motion.div key={file.id} variants={gridItem}>
-                  <ShareFileCard
-                    file={file}
-                    shareId={shareId}
-                    jwt={jwt}
-                    onPlay={handleCardClick}
-                  />
-                </motion.div>
-              ))
-            )}
-          </motion.div>
-        </div>
-      )}
+      <div className={`flex-1 overflow-y-auto px-6 py-6${isVisible ? ' hidden' : ''}`}>
+        <motion.div
+          key={`files-${files.length}`}
+          className="grid-cards"
+          variants={gridContainer}
+          initial="hidden"
+          animate="show"
+        >
+          {files.length === 0 ? (
+            <div className="col-span-full text-center py-20 text-muted-foreground">
+              No files in this share
+            </div>
+          ) : (
+            files.map((file) => (
+              <motion.div key={file.id} variants={gridItem}>
+                <ShareFileCard
+                  file={file}
+                  shareId={shareId}
+                  jwt={jwt}
+                  onPlay={handleCardClick}
+                />
+              </motion.div>
+            ))
+          )}
+        </motion.div>
+      </div>
 
       {/* Player — always mounted so PlayerContext manages its own visibility */}
       <PlayerContainer />
