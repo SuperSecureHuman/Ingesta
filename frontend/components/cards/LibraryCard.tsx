@@ -38,7 +38,7 @@ export default function LibraryCard({ library, onSelect, onDelete }: LibraryCard
       <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-amber-500/0 via-amber-500/70 to-amber-500/0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-10" />
 
       <div className="aspect-video flex items-center justify-center rounded-t-lg overflow-hidden
-        bg-[radial-gradient(ellipse_at_60%_40%,#292524,#09090b)]">
+        bg-[radial-gradient(ellipse_at_60%_40%,var(--card),var(--background))]">
         <div className="relative flex items-center justify-center">
           <div className="absolute h-14 w-14 rounded-full bg-amber-500/[0.06] blur-md" />
           <LibraryIcon className="relative h-10 w-10 text-amber-500/35 drop-shadow-[0_0_6px_rgba(245,158,11,0.25)]" />

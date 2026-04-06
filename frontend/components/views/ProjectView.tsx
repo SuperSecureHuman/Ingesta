@@ -283,11 +283,11 @@ export default function ProjectView({ projectId }: ProjectViewProps) {
 
       <motion.div key={`files-${files.length}`} className="grid-cards" variants={gridContainer} initial="hidden" animate="show">
         {files.length === 0 ? (
-          <div style={{ gridColumn: '1/-1', color: '#666', padding: '20px' }}>
+          <div className="col-span-full text-center py-12 text-muted-foreground text-sm">
             No files in this project.
           </div>
         ) : visibleFiles.length === 0 ? (
-          <div style={{ gridColumn: '1/-1', color: '#666', padding: '20px' }}>
+          <div className="col-span-full text-center py-12 text-muted-foreground text-sm">
             No files match the current filter.
           </div>
         ) : (
@@ -428,14 +428,14 @@ export default function ProjectView({ projectId }: ProjectViewProps) {
                               setTimeout(() => { setAddingTagForFile(null); setTagInputValue(''); }, 150);
                             }}
                             placeholder="tag name…"
-                            className="w-full h-6 px-1.5 text-[11px] bg-zinc-800 border border-zinc-600 rounded text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:border-amber-500/50"
+                            className="w-full h-6 px-1.5 text-[11px] bg-input border border-input rounded text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-amber-500/50"
                           />
                           {tagSuggestions.length > 0 && tagInputValue && (
-                            <div className="absolute z-20 top-full left-0 right-0 mt-0.5 bg-zinc-800 border border-zinc-600 rounded shadow-lg max-h-28 overflow-y-auto">
+                            <div className="absolute z-20 top-full left-0 right-0 mt-0.5 bg-popover border border-border rounded shadow-lg max-h-28 overflow-y-auto">
                               {tagSuggestions.map((s) => (
                                 <button
                                   key={s}
-                                  className="w-full text-left px-2 py-1 text-[11px] text-zinc-200 hover:bg-zinc-700"
+                                  className="w-full text-left px-2 py-1 text-[11px] text-foreground hover:bg-muted"
                                   onMouseDown={(e) => { e.preventDefault(); submitTag(file.id, s); }}
                                 >
                                   {s}

@@ -121,11 +121,10 @@ export default function HomeView() {
       </div>
       <motion.div key={`libs-${libraries.length}`} className="grid-cards" variants={gridContainer} initial="hidden" animate="show">
         {libraries.length === 0 ? (
-          <div style={{ gridColumn: '1/-1', display: 'flex', justifyContent: 'center', padding: '40px', textAlign: 'center' }}>
+          <div className="col-span-full flex justify-center py-10 text-center">
             <div>
-              <div style={{ fontSize: '48px', marginBottom: '12px' }}>📁</div>
-              <p style={{ color: 'var(--color-muted)', marginBottom: '8px' }}>No libraries yet</p>
-              <p style={{ fontSize: '13px', color: 'var(--color-muted)' }}>Create a new library to start organizing your media</p>
+              <p className="text-muted-foreground text-sm mb-2">No libraries yet</p>
+              <p className="text-muted-foreground text-xs">Create a new library to start organizing your media</p>
             </div>
           </div>
         ) : (
@@ -151,11 +150,10 @@ export default function HomeView() {
       </div>
       <motion.div key={`projs-${projects.length}`} className="grid-cards" variants={gridContainer} initial="hidden" animate="show">
         {projects.length === 0 ? (
-          <div style={{ gridColumn: '1/-1', display: 'flex', justifyContent: 'center', padding: '40px', textAlign: 'center' }}>
+          <div className="col-span-full flex justify-center py-10 text-center">
             <div>
-              <div style={{ fontSize: '48px', marginBottom: '12px' }}>🎬</div>
-              <p style={{ color: 'var(--color-muted)', marginBottom: '8px' }}>No projects yet</p>
-              <p style={{ fontSize: '13px', color: 'var(--color-muted)' }}>Create a new project to start editing</p>
+              <p className="text-muted-foreground text-sm mb-2">No projects yet</p>
+              <p className="text-muted-foreground text-xs">Create a new project to start editing</p>
             </div>
           </div>
         ) : (

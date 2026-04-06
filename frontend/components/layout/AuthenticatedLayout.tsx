@@ -8,7 +8,7 @@ export default function AuthenticatedLayout({ children }: { children: React.Reac
     <SidebarProvider>
       <AppSidebar />
       <SidebarInset>
-        <header className="sticky top-0 z-10 flex h-14 shrink-0 items-center gap-2 px-4 bg-zinc-950/70 backdrop-blur-md border-b border-white/[0.06]">
+        <header className="sticky top-0 z-10 flex h-14 shrink-0 items-center gap-2 px-4 bg-background/70 backdrop-blur-md border-b border-border">
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="h-4 opacity-30" />
           <AppBreadcrumb />

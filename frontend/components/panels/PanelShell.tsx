@@ -30,7 +30,7 @@ export default function PanelShell({
         side="right"
         className="w-96 flex flex-col gap-0 p-0"
       >
-        <SheetHeader className="px-4 py-4 border-b border-white/[0.06] shrink-0">
+        <SheetHeader className="px-4 py-4 border-b border-border shrink-0">
           <SheetTitle>{title}</SheetTitle>
         </SheetHeader>
 
@@ -44,7 +44,7 @@ export default function PanelShell({
         </div>
 
         {footer && (
-          <div className="px-4 py-4 border-t border-white/[0.06] shrink-0">
+          <div className="px-4 py-4 border-t border-border shrink-0">
             {footer}
           </div>
         )}

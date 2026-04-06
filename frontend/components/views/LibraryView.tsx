@@ -79,6 +79,7 @@ interface ComboboxProps {
 
 function Combobox({ id, label, value, onChange, suggestions }: ComboboxProps) {
   const [open, setOpen] = useState(false);
+  const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
   const ref = useRef<HTMLDivElement>(null);
   const filtered = suggestions.filter((s) => s.toLowerCase().includes(value.toLowerCase()));
 
@@ -102,14 +103,14 @@ function Combobox({ id, label, value, onChange, suggestions }: ComboboxProps) {
         autoComplete="off"
       />
       {open && filtered.length > 0 && (
-        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#1e1e1e', border: '1px solid #444', borderRadius: '4px', zIndex: 100, maxHeight: '160px', overflowY: 'auto' }}>
-          {filtered.map((s) => (
+        <div className="absolute top-full left-0 right-0 mt-0 bg-popover border border-border rounded z-[100] max-h-40 overflow-y-auto">
+          {filtered.map((s, idx) => (
             <div
               key={s}
               onMouseDown={(e) => { e.preventDefault(); onChange(s); setOpen(false); }}
-              style={{ padding: '8px 12px', cursor: 'pointer', fontSize: '13px' }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = '#2a2a2a')}
-              onMouseLeave={(e) => (e.currentTarget.style.background = '')}
+              className={`px-3 py-2 cursor-pointer text-sm ${hoveredIdx === idx ? 'bg-muted' : ''}`}
+              onMouseEnter={() => setHoveredIdx(idx)}
+              onMouseLeave={() => setHoveredIdx(null)}
             >
               {s}
             </div>
@@ -396,7 +397,7 @@ export default function LibraryView({
   }
 
   if (!files) {
-    return <div style={{ color: '#666', padding: '20px' }}>Failed to load library files</div>;
+    return <div className="py-5 text-muted-foreground text-sm">Failed to load library files</div>;
   }
 
   return (
@@ -418,7 +419,7 @@ export default function LibraryView({
       </div>
       <motion.div key={files?.path ?? 'empty'} className="grid-cards" variants={gridContainer} initial="hidden" animate="show">
         {files.entries.length === 0 ? (
-          <div style={{ gridColumn: '1/-1', color: '#666', padding: '20px' }}>
+          <div className="col-span-full text-center py-12 text-muted-foreground text-sm">
             No files in this library.
           </div>
         ) : (

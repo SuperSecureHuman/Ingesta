@@ -643,7 +643,7 @@ export default function PlayerContainer() {
                     onChange={(e) => setNewCommentBody(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter') addComment(null); }}
                     placeholder="Add general comment…"
-                    className="flex-1 h-7 px-2 text-xs bg-zinc-800 border border-zinc-700 rounded text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:border-amber-500/50"
+                    className="flex-1 h-7 px-2 text-xs bg-input border border-input rounded text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-amber-500/50"
                   />
                   <button
                     onClick={() => addComment(null)}
@@ -653,7 +653,7 @@ export default function PlayerContainer() {
                 <div className="flex gap-1">
                   <button
                     onClick={() => addComment(videoRef.current?.currentTime ?? null)}
-                    className="flex-1 h-7 px-2 text-xs bg-zinc-800 border border-zinc-700 rounded text-zinc-400 hover:text-zinc-200 hover:border-zinc-600 transition-colors text-left truncate"
+                    className="flex-1 h-7 px-2 text-xs bg-input border border-input rounded text-muted-foreground hover:text-foreground hover:border-border transition-colors text-left truncate"
                     title="Add comment at current playback time"
                   >
                     Add at {formatTime(videoRef.current?.currentTime ?? 0)}
@@ -674,7 +674,7 @@ export default function PlayerContainer() {
               onChange={(e) => setMarkerForm((p) => ({ ...p, label: e.target.value }))}
               onKeyDown={(e) => { if (e.key === 'Enter') submitMarker(); if (e.key === 'Escape') setAddingMarker(false); }}
               placeholder="Label…"
-              className="w-full h-7 px-2 text-xs bg-zinc-800 border border-zinc-700 rounded text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:border-amber-500/50 mb-2"
+              className="w-full h-7 px-2 text-xs bg-input border border-input rounded text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-amber-500/50 mb-2"
               autoFocus
             />
             <div className="flex gap-1.5 mb-2">
