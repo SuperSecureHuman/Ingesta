@@ -257,9 +257,14 @@ async def list_share_files(
     file_list = []
     for f in files:
         ann = annotations.get(f["file_path"], {})
+        try:
+            rel = str(Path(f["file_path"]).relative_to(Path(settings.media_root).resolve()))
+        except ValueError:
+            rel = Path(f["file_path"]).name
         file_list.append({
             "id": f["id"],
             "file_path": f["file_path"],
+            "relative_path": rel,
             "file_size": f["file_size"],
             "duration_seconds": f["duration_seconds"],
             "width": f["width"],

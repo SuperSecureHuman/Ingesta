@@ -45,7 +45,7 @@ async def list_projects(
 @router.post("")
 async def create_project(
     req: CreateProjectRequest,
-    _auth: dict = Depends(require_role('editor')),
+    auth: dict = Depends(require_role('editor')),
 ):
     """Create a new project."""
     # If library_id is provided, verify it exists
@@ -55,6 +55,10 @@ async def create_project(
             raise HTTPException(404, "Library not found")
 
     project_id = await crud.create_project(name=req.name, library_id=req.library_id)
+    await crud.write_audit(
+        auth.get("user_id"), auth.get("username", "unknown"),
+        "project.create", target_type="project", target_id=project_id, target_name=req.name,
+    )
     return {"id": project_id, "name": req.name, "library_id": req.library_id}
 
 
@@ -91,7 +95,7 @@ async def get_project(
 async def add_files_to_project(
     project_id: str,
     req: AddFilesRequest,
-    _auth: dict = Depends(require_role('editor')),
+    auth: dict = Depends(require_role('editor')),
 ):
     """Add files to a project (paths are marked as pending scan)."""
     project = await crud.get_project(project_id)
@@ -148,6 +152,12 @@ async def add_files_to_project(
         except Exception as e:
             errors.append({"path": file_path, "error": str(e)})
 
+    if added:
+        await crud.write_audit(
+            auth.get("user_id"), auth.get("username", "unknown"),
+            "project.files.add", target_type="project", target_id=project_id,
+            target_name=project.get("name"), detail=f"{added} file(s) added",
+        )
     return {
         "added": added,
         "errors": errors,
@@ -158,7 +168,7 @@ async def add_files_to_project(
 async def remove_files_from_project(
     project_id: str,
     req: AddFilesRequest,
-    _auth: dict = Depends(require_role('editor')),
+    auth: dict = Depends(require_role('editor')),
 ):
     """Remove files from a project."""
     project = await crud.get_project(project_id)
@@ -189,6 +199,11 @@ async def remove_files_from_project(
     # Batch delete all valid files
     if file_ids_to_delete:
         await crud.delete_project_files_by_ids(file_ids_to_delete)
+        await crud.write_audit(
+            auth.get("user_id"), auth.get("username", "unknown"),
+            "project.files.remove", target_type="project", target_id=project_id,
+            target_name=project.get("name"), detail=f"{removed} file(s) removed",
+        )
 
     return {
         "removed": removed,
@@ -199,7 +214,7 @@ async def remove_files_from_project(
 @router.delete("/{project_id}")
 async def delete_project(
     project_id: str,
-    _auth: dict = Depends(require_role('editor')),
+    auth: dict = Depends(require_role('editor')),
 ):
     """Delete a project and all its files."""
     project = await crud.get_project(project_id)
@@ -207,6 +222,11 @@ async def delete_project(
         raise HTTPException(404, "Project not found")
 
     await crud.delete_project(project_id)
+    await crud.write_audit(
+        auth.get("user_id"), auth.get("username", "unknown"),
+        "project.delete", target_type="project", target_id=project_id,
+        target_name=project.get("name"),
+    )
     return {"status": "deleted"}
 
 

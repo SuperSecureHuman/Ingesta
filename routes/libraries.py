@@ -112,12 +112,14 @@ async def browse_library(
         if not p.is_dir():
             raise HTTPException(400, "Not a directory")
 
+        root = Path(library["root_path"])
         entries = []
         for entry in await async_iterdir(p):
             entries.append(
                 {
                     "name": entry.name,
                     "path": str(entry),
+                    "relative_path": str(entry.relative_to(root)),
                     "is_dir": entry.is_dir(),
                     "is_video": entry.suffix.lower()
                     in {
@@ -136,7 +138,6 @@ async def browse_library(
                 }
             )
 
-        root = Path(library["root_path"])
         return {
             "path": str(p),
             "parent": str(p.parent) if p != root else None,

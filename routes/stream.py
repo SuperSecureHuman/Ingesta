@@ -72,6 +72,7 @@ async def browse(path: str = Query("/"), _auth: str = Depends(require_auth)):
                 {
                     "name": entry.name,
                     "path": str(entry),
+                    "relative_path": str(entry.relative_to(MEDIA_ROOT)),
                     "is_dir": entry.is_dir(),
                     "is_video": entry.suffix.lower()
                     in {
@@ -407,10 +408,9 @@ async def ping(session_id: str, manager: TranscodeManager = Depends(get_manager)
 
 @router.get("/capabilities")
 async def capabilities(request: Request, _auth: str = Depends(require_auth)):
-    """Get server capabilities including hardware support and media root."""
+    """Get server capabilities including hardware support and bitrate tiers."""
     return JSONResponse(
         content={
-            "media_root": str(MEDIA_ROOT),
             "hardware": request.app.state.hardware,
             "bitrate_tiers": BITRATE_TIERS,
         },

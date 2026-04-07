@@ -283,7 +283,7 @@ async def get_audit(
 
 @router.get("/fs-browse", dependencies=[_require_admin])
 async def fs_browse(path: str = Query("/")):
-    """Browse server filesystem directories (admin only). No MEDIA_ROOT restriction."""
+    """Browse server filesystem directories (admin only). Full filesystem access — admin role required."""
     p = Path(os.path.normpath(os.path.abspath(path)))
     if not p.exists() or not p.is_dir():
         raise HTTPException(status_code=400, detail=f"Path not found or not a directory: {path}")

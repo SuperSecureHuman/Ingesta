@@ -14,7 +14,7 @@ to prevent FastAPI matching the literal "tags" as a {file_id} path parameter.
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 import db.crud as crud
 from db import get_db
@@ -33,19 +33,19 @@ router = path_router   # kept for main.py backwards compat — main.py registers
 # ── Request models ────────────────────────────────────────────────────────────
 
 class AddTagRequest(BaseModel):
-    tag: str
+    tag: str = Field(..., min_length=1, max_length=255)
 
 class SetRatingRequest(BaseModel):
     rating: Optional[int] = None
 
 class AddCommentRequest(BaseModel):
-    body: str
+    body: str = Field(..., min_length=1, max_length=4096)
     timestamp_seconds: Optional[float] = None
 
 class AddMarkerRequest(BaseModel):
     timestamp_seconds: float
-    label: str
-    color: str = "#f59e0b"
+    label: str = Field(..., min_length=1, max_length=255)
+    color: str = Field(default="#f59e0b", max_length=20)
 
 class UpdateMarkerRequest(BaseModel):
     label: Optional[str] = None

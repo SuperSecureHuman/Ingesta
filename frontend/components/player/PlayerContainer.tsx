@@ -9,6 +9,9 @@ import { apiFetch } from '@/lib/api';
 import { useAuth } from '@/hooks/useAuth';
 import { FileComment, FileMarker } from '@/lib/types';
 
+type InfoRow = [string, string | number | null | undefined];
+type InfoSection = { title: string; rows: InfoRow[] };
+
 // ── Icons ─────────────────────────────────────────────────────────────────────
 
 const IconPlay = ({ className }: { className?: string }) => (
@@ -77,7 +80,7 @@ export default function PlayerContainer() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
   const [infoVisible, setInfoVisible] = useState(false);
-  const [infoHtml, setInfoHtml] = useState('');
+  const [infoSections, setInfoSections] = useState<InfoSection[]>([]);
   const [qualityPopoverOpen, setQualityPopoverOpen] = useState(false);
   const [lutDropdownOpen, setLutDropdownOpen] = useState(false);
   const [helpVisible, setHelpVisible] = useState(false);
@@ -192,11 +195,8 @@ export default function PlayerContainer() {
   const filename = filePath ? filePath.split('/').pop() : 'Video';
 
   // ── Info panel helper ──────────────────────────────────────────────────────
-  function formatInfoSection(title: string, rows: [string, string | number | null | undefined][]): string {
-    const items = rows.map(([k, v]) =>
-      `<div class="flex justify-between gap-2 py-0.5"><span class="text-gray-500 shrink-0">${k}</span><span class="text-gray-200 text-right truncate">${v ?? '—'}</span></div>`
-    ).join('');
-    return `<div><div class="text-gray-400 font-sans font-semibold text-xs mb-1.5 uppercase tracking-wider">${title}</div><div class="space-y-0.5">${items}</div></div>`;
+  function makeInfoSection(title: string, rows: InfoRow[]): InfoSection {
+    return { title, rows };
   }
 
   // ── Update info panel ──────────────────────────────────────────────────────
@@ -225,8 +225,8 @@ export default function PlayerContainer() {
     const tgtBitDepth = isDirectCopy ? srcBitDepth : '8-bit';
     const tgtAudioCodec = isDirectCopy ? srcAudioCodec : 'AAC';
     const tgtPixFmt = isDirectCopy ? srcPixFmt : 'yuv420p';
-    const sections = [
-      formatInfoSection('Player', [
+    const sections: InfoSection[] = [
+      makeInfoSection('Player', [
         ['Play method', quality === 'source' ? 'Direct copy' : 'Transcoded HLS'],
         ['Quality', quality === 'source' ? sourceResLabel : quality],
         ['Encoder', quality === 'source' ? 'Copy (no encode)' : encoderLabel],
@@ -234,13 +234,13 @@ export default function PlayerContainer() {
         ['Transcode FPS', transcodeStats.fps ? `${transcodeStats.fps.toFixed(0)} fps` : '—'],
         ['Speed', transcodeStats.speed ? `${transcodeStats.speed.toFixed(2)}x real-time` : '—'],
       ]),
-      formatInfoSection('Video (live)', [
+      makeInfoSection('Video (live)', [
         ['Dimensions', `${v.videoWidth}×${v.videoHeight}`],
         ['Current time', formatTime(v.currentTime)],
         ['Buffered ahead', `${bufferedSec}s`],
         ['Dropped frames', (q as VideoPlaybackQuality).droppedVideoFrames ?? '—'],
       ]),
-      formatInfoSection('Codecs', [
+      makeInfoSection('Codecs', [
         ['Source video', `${srcCodec} · ${srcBitDepth}`],
         ['Source audio', srcAudioCodec],
         ['Source pixel fmt', srcPixFmt],
@@ -248,14 +248,14 @@ export default function PlayerContainer() {
         ['Output audio', tgtAudioCodec],
         ['Output pixel fmt', tgtPixFmt],
       ]),
-      formatInfoSection('Original Media', [
+      makeInfoSection('Original Media', [
         ['Container', container || '—'],
         ['Resolution', sourceRes],
         ['Bitrate', sourceMbpsStr],
         ['Duration', probeData ? formatTime(probeData.duration_seconds) : '—'],
       ]),
     ];
-    setInfoHtml(sections.join(''));
+    setInfoSections(sections);
   }, [filePath, quality, probeData, capabilities, transcodeStats, videoRef, sourceResLabel]);
 
   // ── Time / seekbar updates ─────────────────────────────────────────────────
@@ -614,7 +614,23 @@ export default function PlayerContainer() {
             <span className="text-sm font-semibold text-zinc-100 font-sans">Playback Info</span>
             <button onClick={() => setInfoVisible(false)} className="text-zinc-500 hover:text-zinc-200 transition-colors">✕</button>
           </div>
-          <div className="px-4 py-3 space-y-4 overflow-y-auto" dangerouslySetInnerHTML={{ __html: infoHtml }} />
+          <div className="px-4 py-3 space-y-4 overflow-y-auto">
+            {infoSections.map((section) => (
+              <div key={section.title}>
+                <div className="text-gray-400 font-sans font-semibold text-xs mb-1.5 uppercase tracking-wider">
+                  {section.title}
+                </div>
+                <div className="space-y-0.5">
+                  {section.rows.map(([k, v]) => (
+                    <div key={k} className="flex justify-between gap-2 py-0.5">
+                      <span className="text-gray-500 shrink-0">{k}</span>
+                      <span className="text-gray-200 text-right truncate">{v ?? '—'}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* Keyboard help */}

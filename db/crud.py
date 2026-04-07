@@ -602,10 +602,10 @@ async def create_user(username: str, password_hash: str, role: str = 'viewer') -
 
 
 async def get_user(user_id: str) -> Optional[Dict[str, Any]]:
-    """Get user by ID."""
+    """Get user by ID (excludes password_hash — use get_user_by_username for auth)."""
     db = get_db()
     row = await db.fetchone(
-        "SELECT id, username, password_hash, created_at, role FROM users WHERE id = ?",
+        "SELECT id, username, created_at, role FROM users WHERE id = ?",
         (user_id,),
     )
     if not row:
@@ -613,9 +613,8 @@ async def get_user(user_id: str) -> Optional[Dict[str, Any]]:
     return {
         "id": row[0],
         "username": row[1],
-        "password_hash": row[2],
-        "created_at": row[3],
-        "role": row[4],
+        "created_at": row[2],
+        "role": row[3],
     }
 
 
