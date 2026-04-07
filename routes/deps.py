@@ -9,7 +9,7 @@ from typing import Optional
 from fastapi import Header, Cookie, HTTPException, Request, Depends
 
 from config import settings
-from routes.auth import verify_session_token
+from routes.auth import verify_session_token_full
 import db.crud as crud
 
 # Path validation constants
@@ -41,7 +41,7 @@ async def require_auth(
     # Try session cookie (browser)
     if session:
         try:
-            payload = verify_session_token(session)
+            payload = await verify_session_token_full(session)
             return payload["username"]
         except HTTPException:
             pass
@@ -59,7 +59,7 @@ async def _get_auth_payload(
         return {"user_id": "__admin_key__", "username": "admin", "role": "admin"}
     if session:
         try:
-            return verify_session_token(session)
+            return await verify_session_token_full(session)
         except HTTPException:
             pass
     raise HTTPException(401, "Authentication required")

@@ -44,16 +44,12 @@ export default function ShareViewerPage() {
   const passwordInputRef = useRef<HTMLInputElement>(null);
   const jwtRef = useRef<string | null>(null);
 
-  // Load from session storage on mount
+  // Token lives in jwtRef (stable ref for callbacks) and jwt state (for re-renders).
+  // It is never persisted to sessionStorage — re-entering password is required after navigation.
   useEffect(() => {
-    const stored = sessionStorage.getItem(`share_jwt_${shareId}`);
-    if (stored) {
-      jwtRef.current = stored;
-      setJwt(stored);
-      loadFiles(stored);
-    }
+    // Nothing to restore from storage — intentional security decision (SEC-13).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shareId]);
+  }, []);
 
   const shareFetch = useCallback(
     (url: string, init?: RequestInit): Promise<Response> => {
@@ -126,7 +122,6 @@ export default function ShareViewerPage() {
       const data = await res.json();
       jwtRef.current = data.token;
       setJwt(data.token);
-      sessionStorage.setItem(`share_jwt_${shareId}`, data.token);
       if (passwordInputRef.current) passwordInputRef.current.value = '';
 
       loadFiles(data.token);
@@ -136,14 +131,13 @@ export default function ShareViewerPage() {
   };
 
   const logout = useCallback(() => {
-    sessionStorage.removeItem(`share_jwt_${shareId}`);
     jwtRef.current = null;
     setJwt(null);
     setFiles([]);
     setProjectName(null);
     setExpiresAt(null);
     setView('password');
-  }, [shareId]);
+  }, []);
 
   // Build initialAnnotations map for the player (preloaded — no extra API calls)
   const initialAnnotations = useMemo(

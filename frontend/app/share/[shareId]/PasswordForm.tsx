@@ -45,8 +45,6 @@ export function PasswordForm({ shareId, onSuccess, onError }: PasswordFormProps)
         const data = await res.json();
         const token = data.jwt;
 
-        sessionStorage.setItem(`share_jwt_${shareId}`, token);
-
         // Fetch files with token
         const filesRes = await fetch(`/api/share/${shareId}/files`, {
           headers: { 'Authorization': `Bearer ${token}` },

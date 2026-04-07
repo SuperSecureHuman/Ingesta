@@ -58,12 +58,21 @@ def create_access_token(share_id: str, project_id: str) -> str:
 
 
 def verify_token(token: str) -> dict:
-    """Verify and decode JWT token."""
+    """Verify and decode JWT token (signature + expiry only)."""
     try:
         payload = pyjwt.decode(token, settings.secret_key, algorithms=[ALGORITHM])
         return payload
     except InvalidTokenError:
         raise HTTPException(401, "Invalid or expired token")
+
+
+async def verify_token_full(token: str) -> dict:
+    """Verify JWT and check server-side share validity (revocation + expiry)."""
+    payload = verify_token(token)
+    share_id = payload.get("share_id")
+    if share_id and not await crud.is_share_valid(share_id):
+        raise HTTPException(403, "Share has been revoked or expired")
+    return payload
 
 
 # ============================================================================
@@ -199,7 +208,7 @@ async def authenticate_share(share_id: str, req: AuthRequest):
 # ============================================================================
 
 
-def get_token_payload(authorization: Optional[str] = Header(None)) -> dict:
+async def get_token_payload(authorization: Optional[str] = Header(None)) -> dict:
     """Extract and verify JWT token from Authorization header."""
     if not authorization:
         raise HTTPException(401, "Missing authorization header")
@@ -209,7 +218,7 @@ def get_token_payload(authorization: Optional[str] = Header(None)) -> dict:
         raise HTTPException(401, "Invalid authorization header")
 
     token = parts[1]
-    return verify_token(token)
+    return await verify_token_full(token)
 
 
 async def validate_file_in_project(project_id: str, file_path: str) -> str:
@@ -608,7 +617,7 @@ async def share_download(
         return FileResponse(
             p,
             media_type="application/octet-stream",
-            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+            headers={"Content-Disposition": f'attachment; filename="{quote(filename, safe="")}"'},
         )
     except HTTPException:
         raise

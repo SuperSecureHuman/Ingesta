@@ -86,6 +86,25 @@ def verify_session_token(token: str) -> dict:
         raise HTTPException(401, "Invalid or expired session")
 
 
+async def verify_session_token_full(token: str) -> dict:
+    """Verify JWT and check server-side session validity (revocation + account active)."""
+    payload = verify_session_token(token)
+
+    jti = payload.get("jti")
+    if jti:
+        if not await crud.is_session_valid(jti):
+            raise HTTPException(401, "Session revoked or expired")
+        await crud.touch_session(jti)
+
+    user_id = payload.get("user_id")
+    if user_id:
+        user = await crud.get_user(user_id)
+        if user and not user.get("active", True):
+            raise HTTPException(403, "Account suspended")
+
+    return payload
+
+
 async def get_session_payload(
     request: Request,
     session: Optional[str] = Cookie(None),

@@ -557,6 +557,25 @@ async def revoke_share(share_id: str) -> bool:
     return True
 
 
+async def is_share_valid(share_id: str) -> bool:
+    """Return True if share exists, is active, and has not expired."""
+    db = get_db()
+    row = await db.fetchone(
+        "SELECT active, expires_at FROM shares WHERE id = ?",
+        (share_id,),
+    )
+    if not row:
+        return False
+    active, expires_at = bool(row[0]), row[1]
+    if not active:
+        return False
+    if expires_at:
+        from datetime import datetime, timezone
+        if datetime.now(timezone.utc) > datetime.fromisoformat(expires_at):
+            return False
+    return True
+
+
 async def delete_share(share_id: str) -> bool:
     """Delete a share."""
     db = get_db()
