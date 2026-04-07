@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { apiFetch } from '@/lib/api';
 import { ProjectFile } from '@/lib/types';
@@ -16,6 +16,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import ConfirmOverlay from '@/components/custom/ConfirmOverlay';
 import SourceTagPanel from '@/components/panels/SourceTagPanel';
+import TagInput from '@/components/custom/TagInput';
+import StarRating from '@/components/custom/StarRating';
 import { motion } from 'framer-motion';
 
 const gridContainer = {
@@ -36,15 +38,6 @@ interface ProjectViewProps {
   onReady?: () => void;
 }
 
-// ── Inline SVG star ───────────────────────────────────────────────────────────
-function StarIcon({ filled, className }: { filled: boolean; className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 20 20" fill={filled ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.5">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-    </svg>
-  );
-}
-
 export default function ProjectView({ projectId, onReady }: ProjectViewProps) {
   const router = useRouter();
   const { startPlayback } = usePlayerContext();
@@ -63,16 +56,8 @@ export default function ProjectView({ projectId, onReady }: ProjectViewProps) {
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
-  // Per-file tag input state
-  const [addingTagForFile, setAddingTagForFile] = useState<string | null>(null);
-  const [tagInputValue, setTagInputValue] = useState('');
-  const [tagSuggestions, setTagSuggestions] = useState<string[]>([]);
+  // Distinct tags for autocomplete
   const [allDistinctTags, setAllDistinctTags] = useState<string[]>([]);
-  const [expandedTagFileId, setExpandedTagFileId] = useState<string | null>(null);
-  const tagInputRef = useRef<HTMLInputElement>(null);
-
-  // Per-file hover rating state (fileId -> hovered star index 1-5, or 0)
-  const [hoverRating, setHoverRating] = useState<Record<string, number>>({});
 
   useEffect(() => {
     loadProjectFiles();
@@ -145,29 +130,14 @@ export default function ProjectView({ projectId, onReady }: ProjectViewProps) {
 
   // ── Annotation helpers ────────────────────────────────────────────────────
 
-  const openTagInput = async (fileId: string) => {
-    setAddingTagForFile(fileId);
-    setTagInputValue('');
-    // Fetch distinct tags for autocomplete if not already loaded
+  const ensureTagsLoaded = async () => {
     if (allDistinctTags.length === 0) {
       const res = await apiFetch('/api/files/tags');
       if (res.ok) {
         const tags: string[] = await res.json();
         setAllDistinctTags(tags);
-        setTagSuggestions(tags);
       }
-    } else {
-      setTagSuggestions(allDistinctTags);
     }
-    setTimeout(() => tagInputRef.current?.focus(), 50);
-  };
-
-  const handleTagInputChange = (value: string) => {
-    setTagInputValue(value);
-    const lower = value.toLowerCase();
-    setTagSuggestions(
-      lower ? allDistinctTags.filter((t) => t.toLowerCase().includes(lower)) : allDistinctTags
-    );
   };
 
   const submitTag = async (fileId: string, tag: string) => {
@@ -175,15 +145,9 @@ export default function ProjectView({ projectId, onReady }: ProjectViewProps) {
     if (!trimmed) return;
     const file = files.find((f) => f.id === fileId);
     if (!file) return;
-    if (file.tags.includes(trimmed)) {
-      setAddingTagForFile(null);
-      setTagInputValue('');
-      return;
-    }
+    if (file.tags.includes(trimmed)) return;
     // Optimistic update
     setFiles((prev) => prev.map((f) => f.id === fileId ? { ...f, tags: [...f.tags, trimmed] } : f));
-    setAddingTagForFile(null);
-    setTagInputValue('');
     setAllDistinctTags((prev) => prev.includes(trimmed) ? prev : [...prev, trimmed].sort());
 
     const res = await apiFetch(`/api/files/${fileId}/tags`, {
@@ -296,12 +260,7 @@ export default function ProjectView({ projectId, onReady }: ProjectViewProps) {
             const isSelected = selectedIds.has(file.id);
             const fallbackSvg = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='120'%3E%3Crect fill='%2318181b' width='200' height='120'/%3E%3Ctext x='50%25' y='50%25' fill='%23666' text-anchor='middle' dy='.3em' font-size='14'%3E%F0%9F%8E%A5%3C/text%3E%3C/svg%3E`;
             const tags = file.tags ?? [];
-            const isExpanded = expandedTagFileId === file.id;
-            const visibleTags = isExpanded ? tags : tags.slice(0, 4);
-            const overflowCount = tags.length - 4;
             const currentRating = file.rating ?? 0;
-            const hoveredStar = hoverRating[file.id] ?? 0;
-            const displayRating = hoveredStar || currentRating;
 
             return (
               <motion.div key={file.id} variants={gridItem}>
@@ -367,113 +326,23 @@ export default function ProjectView({ projectId, onReady }: ProjectViewProps) {
 
                   {/* ── Tags ──────────────────────────────────────────────── */}
                   {(tags.length > 0 || canEdit()) && (
-                    <div className="mt-1.5" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex flex-wrap gap-1 items-center">
-                        {visibleTags.map((tag) => (
-                          <span
-                            key={tag}
-                            className="inline-flex items-center gap-0.5 px-1.5 py-0 text-[10px] rounded bg-amber-500/15 text-amber-300 border border-amber-500/25"
-                          >
-                            {tag}
-                            {canEdit() && (
-                              <button
-                                className="ml-0.5 text-amber-400/60 hover:text-amber-300 leading-none"
-                                onClick={() => removeTag(file.id, tag)}
-                                title="Remove tag"
-                              >
-                                ×
-                              </button>
-                            )}
-                          </span>
-                        ))}
-                        {!isExpanded && overflowCount > 0 && (
-                          <button
-                            className="text-[10px] text-zinc-400 hover:text-zinc-200 px-1.5 py-0 rounded border border-zinc-700 hover:border-zinc-500"
-                            onClick={() => setExpandedTagFileId(file.id)}
-                          >
-                            +{overflowCount} more
-                          </button>
-                        )}
-                        {isExpanded && tags.length > 4 && (
-                          <button
-                            className="text-[10px] text-zinc-400 hover:text-zinc-200 px-1.5 py-0 rounded border border-zinc-700 hover:border-zinc-500"
-                            onClick={() => setExpandedTagFileId(null)}
-                          >
-                            less
-                          </button>
-                        )}
-                        {canEdit() && addingTagForFile !== file.id && (
-                          <button
-                            className="text-[10px] text-zinc-500 hover:text-zinc-200 px-1.5 py-0 rounded border border-dashed border-zinc-700 hover:border-zinc-400"
-                            onClick={() => openTagInput(file.id)}
-                          >
-                            + tag
-                          </button>
-                        )}
-                      </div>
-
-                      {/* Tag input with autocomplete */}
-                      {canEdit() && addingTagForFile === file.id && (
-                        <div className="relative mt-1">
-                          <input
-                            ref={tagInputRef}
-                            type="text"
-                            value={tagInputValue}
-                            onChange={(e) => handleTagInputChange(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') submitTag(file.id, tagInputValue);
-                              if (e.key === 'Escape') { setAddingTagForFile(null); setTagInputValue(''); }
-                            }}
-                            onBlur={() => {
-                              // Small delay to allow suggestion click to register
-                              setTimeout(() => { setAddingTagForFile(null); setTagInputValue(''); }, 150);
-                            }}
-                            placeholder="tag name…"
-                            className="w-full h-6 px-1.5 text-[11px] bg-input border border-input rounded text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-amber-500/50"
-                          />
-                          {tagSuggestions.length > 0 && tagInputValue && (
-                            <div className="absolute z-20 top-full left-0 right-0 mt-0.5 bg-popover border border-border rounded shadow-lg max-h-28 overflow-y-auto">
-                              {tagSuggestions.map((s) => (
-                                <button
-                                  key={s}
-                                  className="w-full text-left px-2 py-1 text-[11px] text-foreground hover:bg-muted"
-                                  onMouseDown={(e) => { e.preventDefault(); submitTag(file.id, s); }}
-                                >
-                                  {s}
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      )}
+                    <div onClick={(e) => e.stopPropagation()}>
+                      <TagInput
+                        tags={tags}
+                        suggestions={allDistinctTags}
+                        onAdd={(tag) => { ensureTagsLoaded(); submitTag(file.id, tag); }}
+                        onRemove={(tag) => removeTag(file.id, tag)}
+                        canEdit={canEdit()}
+                      />
                     </div>
                   )}
 
                   {/* ── Star Rating ───────────────────────────────────────── */}
-                  <div
-                    className="flex items-center gap-0.5 mt-1.5"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    {[1, 2, 3, 4, 5].map((star) => (
-                      <button
-                        key={star}
-                        className={`w-4 h-4 transition-colors ${
-                          canEdit()
-                            ? 'cursor-pointer hover:scale-110'
-                            : 'cursor-default'
-                        } ${star <= displayRating ? 'text-amber-400' : 'text-zinc-600'}`}
-                        onMouseEnter={() => canEdit() && setHoverRating((p) => ({ ...p, [file.id]: star }))}
-                        onMouseLeave={() => canEdit() && setHoverRating((p) => ({ ...p, [file.id]: 0 }))}
-                        onClick={() => {
-                          if (!canEdit()) return;
-                          const newRating = star === currentRating ? null : star;
-                          setRating(file.id, newRating);
-                        }}
-                        title={canEdit() ? (star === currentRating ? 'Clear rating' : `Rate ${star}`) : `${currentRating || 0}/5`}
-                      >
-                        <StarIcon filled={star <= displayRating} className="w-full h-full" />
-                      </button>
-                    ))}
+                  <div onClick={(e) => e.stopPropagation()}>
+                    <StarRating
+                      rating={currentRating}
+                      onChange={canEdit() ? (r) => setRating(file.id, r === 0 ? null : r) : undefined}
+                    />
                   </div>
                 </div>
               </div>

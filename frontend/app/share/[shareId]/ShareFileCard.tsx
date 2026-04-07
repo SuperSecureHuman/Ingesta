@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { Play } from 'lucide-react';
 import { ShareFile } from '@/lib/types';
 import { formatTime, getFileName, getResolutionLabel } from '@/lib/utils';
+import StarRating from '@/components/custom/StarRating';
 
 const FALLBACK_SVG = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="120"><rect fill="%2318181b" width="200" height="120"/></svg>';
 
@@ -95,18 +96,7 @@ export default function ShareFileCard({ file, shareId, jwt, onPlay }: ShareFileC
 
             {/* Star rating (display only) */}
             {rating > 0 && (
-              <div className="flex items-center gap-0.5 mt-1.5">
-                {[1, 2, 3, 4, 5].map(n => (
-                  <svg
-                    key={n}
-                    className={`w-3.5 h-3.5 ${n <= rating ? 'text-amber-400' : 'text-zinc-600'}`}
-                    viewBox="0 0 24 24"
-                    fill="currentColor"
-                  >
-                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z" />
-                  </svg>
-                ))}
-              </div>
+              <StarRating rating={rating} />
             )}
 
             {/* Comment + marker counts */}
