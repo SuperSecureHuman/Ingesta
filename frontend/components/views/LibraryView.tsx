@@ -45,10 +45,8 @@ interface LibraryViewProps {
 function toUrlSegments(absolutePath: string, rootPath: string): string[] {
   if (absolutePath === rootPath) return [];
   const prefix = rootPath.endsWith('/') ? rootPath : rootPath + '/';
-  const relative = absolutePath.startsWith(prefix)
-    ? absolutePath.slice(prefix.length)
-    : absolutePath;
-  return relative.split('/').filter(Boolean);
+  if (!absolutePath.startsWith(prefix)) return []; // never expose paths outside root
+  return absolutePath.slice(prefix.length).split('/').filter(Boolean);
 }
 
 function toAbsolutePath(rootPath: string, segments: string[]): string {
@@ -369,7 +367,9 @@ export default function LibraryView({
   };
 
   const handleNavigateBack = () => {
-    if (!library || !files?.parent) return;
+    if (!library) return;
+    // At library root, parent is null — go back to home
+    if (!files?.parent) { router.push('/'); return; }
     const segments = toUrlSegments(files.parent, library.root_path);
     const url = segments.length
       ? `/library/${librarySlug}/${segments.map(encodeURIComponent).join('/')}`
@@ -401,11 +401,9 @@ export default function LibraryView({
     <div>
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          {files.parent !== null && (
-            <Button size="sm" variant="outline" onClick={handleNavigateBack}>
-              ← Back
-            </Button>
-          )}
+          <Button size="sm" variant="outline" onClick={handleNavigateBack}>
+            ← Back
+          </Button>
           <h2 className="text-lg font-semibold">Library Files</h2>
         </div>
         {canEdit() && (

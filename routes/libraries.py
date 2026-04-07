@@ -136,9 +136,10 @@ async def browse_library(
                 }
             )
 
+        root = Path(library["root_path"])
         return {
             "path": str(p),
-            "parent": str(p.parent) if p != p.parent else None,
+            "parent": str(p.parent) if p != root else None,
             "entries": entries,
         }
     except HTTPException:

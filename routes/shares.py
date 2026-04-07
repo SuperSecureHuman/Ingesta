@@ -104,7 +104,6 @@ async def create_share(
 
     return {
         "share_id": share_id,
-        "password": req.password,
         "expires_at": expires_at,
     }
 
