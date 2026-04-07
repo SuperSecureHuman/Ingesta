@@ -11,7 +11,7 @@ import { useSelection } from '@/hooks/useSelection';
 import { useAuth } from '@/hooks/useAuth';
 import { usePanelContext } from '@/context/PanelContext';
 import { fetchLuts } from '@/lib/api';
-import { Loader2 } from 'lucide-react';
+import { FolderOpen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -39,6 +39,7 @@ interface LibraryViewProps {
   librarySlug: string;
   folderPath: string[];
   onLibraryResolved?: (libraryId: string, libraryName: string) => void;
+  onReady?: () => void;
 }
 
 function toUrlSegments(absolutePath: string, rootPath: string): string[] {
@@ -125,6 +126,7 @@ export default function LibraryView({
   librarySlug,
   folderPath,
   onLibraryResolved,
+  onReady,
 }: LibraryViewProps) {
   const router = useRouter();
   const { startPlayback } = usePlayerContext();
@@ -223,6 +225,7 @@ export default function LibraryView({
       toast.error(`Error: ${e}`);
     } finally {
       setLoading(false);
+      onReady?.();
     }
   };
 
@@ -388,17 +391,11 @@ export default function LibraryView({
     updateSelection(item, selected);
   }, [updateSelection]);
 
-  if (loading) {
-    return (
-      <div className="flex justify-center py-10">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-
-  if (!files) {
+  if (!loading && !files) {
     return <div className="py-5 text-muted-foreground text-sm">Failed to load library files</div>;
   }
+
+  if (!files) return null;
 
   return (
     <div>
@@ -418,9 +415,14 @@ export default function LibraryView({
         )}
       </div>
       <motion.div key={files?.path ?? 'empty'} className="grid-cards" variants={gridContainer} initial="hidden" animate="show">
-        {files.entries.length === 0 ? (
-          <div className="col-span-full text-center py-12 text-muted-foreground text-sm">
-            No files in this library.
+        {!loading && files.entries.length === 0 ? (
+          <div className="col-span-full flex flex-col items-center justify-center py-20 gap-3 text-center">
+            <div className="rounded-full bg-zinc-800/50 p-4">
+              <FolderOpen className="h-7 w-7 text-muted-foreground" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-foreground">This folder is empty</p>
+            </div>
           </div>
         ) : (
           files.entries.filter((e) => e.is_dir || e.is_video).map((entry) => (

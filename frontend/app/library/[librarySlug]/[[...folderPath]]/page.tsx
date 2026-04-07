@@ -17,6 +17,7 @@ function LibraryPageInner({ librarySlug, folderPath }: { librarySlug: string; fo
   const { activePanel, openPanel, closePanel } = usePanels();
   const { selectedItems, clearSelection } = useSelection();
   const [resolvedLibraryId, setResolvedLibraryId] = useState<string | undefined>(undefined);
+  const [dataReady, setDataReady] = useState(false);
 
   const handleLibraryResolved = (id: string) => {
     setResolvedLibraryId(id);
@@ -27,23 +28,33 @@ function LibraryPageInner({ librarySlug, folderPath }: { librarySlug: string; fo
   }, [clearSelection]);
 
   return (
-    <PanelContextProvider openPanel={openPanel} closePanel={closePanel} activePanel={activePanel}>
-      <div className="p-6">
-        <LibraryView
-          librarySlug={librarySlug}
-          folderPath={folderPath}
-          onLibraryResolved={handleLibraryResolved}
-        />
+    <>
+      {!dataReady && (
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+        </div>
+      )}
+      <div className={dataReady ? '' : 'hidden'}>
+        <PanelContextProvider openPanel={openPanel} closePanel={closePanel} activePanel={activePanel}>
+          <div className="p-6">
+            <LibraryView
+              librarySlug={librarySlug}
+              folderPath={folderPath}
+              onLibraryResolved={handleLibraryResolved}
+              onReady={() => setDataReady(true)}
+            />
+          </div>
+          <AddToProjectPanel
+            isOpen={activePanel === 'addToProject'}
+            onClose={closePanel}
+            onSuccess={handleAddSuccess}
+            selectedItems={selectedItems}
+            currentLibraryId={resolvedLibraryId ?? null}
+          />
+          <PlayerContainer />
+        </PanelContextProvider>
       </div>
-      <AddToProjectPanel
-        isOpen={activePanel === 'addToProject'}
-        onClose={closePanel}
-        onSuccess={handleAddSuccess}
-        selectedItems={selectedItems}
-        currentLibraryId={resolvedLibraryId ?? null}
-      />
-      <PlayerContainer />
-    </PanelContextProvider>
+    </>
   );
 }
 
@@ -54,9 +65,10 @@ export default function LibraryPage() {
   const router = useRouter();
   const { currentUser, setCurrentUser } = useAppContext();
   const { checkAuth } = useAuth();
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(currentUser === null);
 
   useEffect(() => {
+    if (currentUser) return;
     const initAuth = async () => {
       const user = await checkAuth();
       if (user) {

@@ -15,29 +15,39 @@ import ShareLinksPanel from '@/components/panels/ShareLinksPanel';
 
 function ProjectPageInner({ projectId }: { projectId: string }) {
   const { activePanel, openPanel, closePanel } = usePanels();
+  const [dataReady, setDataReady] = useState(false);
 
   const handleOpenShareLinks = useCallback(() => {
     openPanel('shareLinks');
   }, [openPanel]);
 
   return (
-    <PanelContextProvider openPanel={openPanel} closePanel={closePanel} activePanel={activePanel}>
-      <div className="p-6">
-        <ProjectView projectId={projectId} />
+    <>
+      {!dataReady && (
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+        </div>
+      )}
+      <div className={dataReady ? '' : 'hidden'}>
+        <PanelContextProvider openPanel={openPanel} closePanel={closePanel} activePanel={activePanel}>
+          <div className="p-6">
+            <ProjectView projectId={projectId} onReady={() => setDataReady(true)} />
+          </div>
+          <CreateSharePanel
+            isOpen={activePanel === 'createShare'}
+            onClose={closePanel}
+            currentProjectId={projectId}
+            onOpenShareLinks={handleOpenShareLinks}
+          />
+          <ShareLinksPanel
+            isOpen={activePanel === 'shareLinks'}
+            onClose={closePanel}
+            currentProjectId={projectId}
+          />
+          <PlayerContainer />
+        </PanelContextProvider>
       </div>
-      <CreateSharePanel
-        isOpen={activePanel === 'createShare'}
-        onClose={closePanel}
-        currentProjectId={projectId}
-        onOpenShareLinks={handleOpenShareLinks}
-      />
-      <ShareLinksPanel
-        isOpen={activePanel === 'shareLinks'}
-        onClose={closePanel}
-        currentProjectId={projectId}
-      />
-      <PlayerContainer />
-    </PanelContextProvider>
+    </>
   );
 }
 
@@ -47,9 +57,10 @@ export default function ProjectPage() {
   const router = useRouter();
   const { currentUser, setCurrentUser } = useAppContext();
   const { checkAuth } = useAuth();
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(currentUser === null);
 
   useEffect(() => {
+    if (currentUser) return;
     const initAuth = async () => {
       const user = await checkAuth();
       if (user) {

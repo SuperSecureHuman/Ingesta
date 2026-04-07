@@ -16,25 +16,35 @@ import AddToProjectPanel from '@/components/panels/AddToProjectPanel';
 function HomePageInner() {
   const { activePanel, openPanel, closePanel } = usePanels();
   const { selectedItems, clearSelection } = useSelection();
+  const [dataReady, setDataReady] = useState(false);
 
   const handleAddSuccess = useCallback(() => {
     clearSelection();
   }, [clearSelection]);
 
   return (
-    <PanelContextProvider openPanel={openPanel} closePanel={closePanel} activePanel={activePanel}>
-      <div className="p-6">
-        <HomeView />
+    <>
+      {!dataReady && (
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+        </div>
+      )}
+      <div className={dataReady ? '' : 'hidden'}>
+        <PanelContextProvider openPanel={openPanel} closePanel={closePanel} activePanel={activePanel}>
+          <div className="p-6">
+            <HomeView onReady={() => setDataReady(true)} />
+          </div>
+          <AddToProjectPanel
+            isOpen={activePanel === 'addToProject'}
+            onClose={closePanel}
+            onSuccess={handleAddSuccess}
+            selectedItems={selectedItems}
+            currentLibraryId={null}
+          />
+          <PlayerContainer />
+        </PanelContextProvider>
       </div>
-      <AddToProjectPanel
-        isOpen={activePanel === 'addToProject'}
-        onClose={closePanel}
-        onSuccess={handleAddSuccess}
-        selectedItems={selectedItems}
-        currentLibraryId={null}
-      />
-      <PlayerContainer />
-    </PanelContextProvider>
+    </>
   );
 }
 

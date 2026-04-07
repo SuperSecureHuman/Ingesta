@@ -9,7 +9,7 @@ import { toast } from 'sonner';
 import { usePlayerContext } from '@/context/PlayerContext';
 import { useAuth } from '@/hooks/useAuth';
 import { usePanelContext } from '@/context/PanelContext';
-import { Loader2, Tag } from 'lucide-react';
+import { Tag, Film } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -33,6 +33,7 @@ const gridItem = {
 
 interface ProjectViewProps {
   projectId: string;
+  onReady?: () => void;
 }
 
 // ── Inline SVG star ───────────────────────────────────────────────────────────
@@ -44,7 +45,7 @@ function StarIcon({ filled, className }: { filled: boolean; className?: string }
   );
 }
 
-export default function ProjectView({ projectId }: ProjectViewProps) {
+export default function ProjectView({ projectId, onReady }: ProjectViewProps) {
   const router = useRouter();
   const { startPlayback } = usePlayerContext();
   const { canEdit } = useAuth();
@@ -94,6 +95,7 @@ export default function ProjectView({ projectId }: ProjectViewProps) {
       toast.error(`Error: ${e}`);
     } finally {
       setLoading(false);
+      onReady?.();
     }
   };
 
@@ -229,13 +231,6 @@ export default function ProjectView({ projectId }: ProjectViewProps) {
 
   const selectedFiles = files.filter((f) => selectedIds.has(f.id));
 
-  if (loading) {
-    return (
-      <div className="flex justify-center py-10">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
 
   return (
     <div>
@@ -282,9 +277,15 @@ export default function ProjectView({ projectId }: ProjectViewProps) {
       )}
 
       <motion.div key={`files-${files.length}`} className="grid-cards" variants={gridContainer} initial="hidden" animate="show">
-        {files.length === 0 ? (
-          <div className="col-span-full text-center py-12 text-muted-foreground text-sm">
-            No files in this project.
+        {!loading && files.length === 0 ? (
+          <div className="col-span-full flex flex-col items-center justify-center py-20 gap-3 text-center">
+            <div className="rounded-full bg-zinc-800/50 p-4">
+              <Film className="h-7 w-7 text-muted-foreground" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-foreground">No files in this project</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Browse a library to add footage</p>
+            </div>
           </div>
         ) : visibleFiles.length === 0 ? (
           <div className="col-span-full text-center py-12 text-muted-foreground text-sm">

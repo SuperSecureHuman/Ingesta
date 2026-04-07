@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { apiFetch } from '@/lib/api';
 import { toast } from 'sonner';
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -134,6 +134,7 @@ export default function CreateSharePanel({
         <div className="flex gap-2">
           <Button variant="outline" onClick={onClose} disabled={loading}>Cancel</Button>
           <Button className="flex-1" onClick={handleSubmit} disabled={loading}>
+            {loading && <Loader2 className="h-4 w-4 animate-spin mr-1.5" />}
             {loading ? 'Creating...' : 'Create'}
           </Button>
         </div>

@@ -11,7 +11,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { usePanels } from '@/hooks/usePanels';
 import LibraryCard from '@/components/cards/LibraryCard';
 import ProjectCard from '@/components/cards/ProjectCard';
-import { Loader2 } from 'lucide-react';
+import { Library as LibraryIcon, Clapperboard } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import CreateLibraryPanel from '@/components/panels/CreateLibraryPanel';
 import CreateProjectPanel from '@/components/panels/CreateProjectPanel';
@@ -30,7 +30,7 @@ const gridItem = {
   },
 };
 
-export default function HomeView() {
+export default function HomeView({ onReady }: { onReady?: () => void }) {
   const [libraries, setLibraries] = useState<Library[]>([]);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
@@ -62,6 +62,7 @@ export default function HomeView() {
       toast.error(`Failed to load: ${e}`);
     } finally {
       setLoading(false);
+      onReady?.();
     }
   };
 
@@ -101,14 +102,6 @@ export default function HomeView() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex justify-center py-10">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
@@ -120,12 +113,18 @@ export default function HomeView() {
         )}
       </div>
       <motion.div key={`libs-${libraries.length}`} className="grid-cards" variants={gridContainer} initial="hidden" animate="show">
-        {libraries.length === 0 ? (
-          <div className="col-span-full flex justify-center py-10 text-center">
-            <div>
-              <p className="text-muted-foreground text-sm mb-2">No libraries yet</p>
-              <p className="text-muted-foreground text-xs">Create a new library to start organizing your media</p>
+        {!loading && libraries.length === 0 ? (
+          <div className="col-span-full flex flex-col items-center justify-center py-20 gap-3 text-center">
+            <div className="rounded-full bg-zinc-800/50 p-4">
+              <LibraryIcon className="h-7 w-7 text-muted-foreground" />
             </div>
+            <div>
+              <p className="text-sm font-medium text-foreground">No libraries</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Create a library to start organizing footage</p>
+            </div>
+            {isAdmin() && (
+              <Button size="sm" variant="outline" onClick={() => openPanel('createLibrary')}>+ New Library</Button>
+            )}
           </div>
         ) : (
           libraries.map((lib) => (
@@ -149,12 +148,18 @@ export default function HomeView() {
         )}
       </div>
       <motion.div key={`projs-${projects.length}`} className="grid-cards" variants={gridContainer} initial="hidden" animate="show">
-        {projects.length === 0 ? (
-          <div className="col-span-full flex justify-center py-10 text-center">
-            <div>
-              <p className="text-muted-foreground text-sm mb-2">No projects yet</p>
-              <p className="text-muted-foreground text-xs">Create a new project to start editing</p>
+        {!loading && projects.length === 0 ? (
+          <div className="col-span-full flex flex-col items-center justify-center py-20 gap-3 text-center">
+            <div className="rounded-full bg-zinc-800/50 p-4">
+              <Clapperboard className="h-7 w-7 text-muted-foreground" />
             </div>
+            <div>
+              <p className="text-sm font-medium text-foreground">No projects</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Create a project to group files for review</p>
+            </div>
+            {canEdit() && (
+              <Button size="sm" variant="outline" onClick={() => openPanel('createProject')}>+ New Project</Button>
+            )}
           </div>
         ) : (
           projects.map((proj) => (
