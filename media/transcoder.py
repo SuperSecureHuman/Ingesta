@@ -428,7 +428,6 @@ class TranscodeManager:
                 "FFmpeg command",
                 extra={"ffmpeg_command": cmd_str},
             )
-            print(cmd_str)
             job.active_requests = 0
 
             # Drain stderr to prevent pipe block

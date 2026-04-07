@@ -4,6 +4,7 @@ Uses JWT tokens stored as HttpOnly cookies.
 """
 
 import json
+import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -131,7 +132,7 @@ async def login(req: LoginRequest, request: Request, response: Response):
     ip = _get_client_ip(request)
     user_agent = request.headers.get("User-Agent")
 
-    jti = str(uuid.uuid4())
+    jti = secrets.token_urlsafe(32)
     token = create_session_token(user["id"], user["username"], user["role"], jti)
 
     now = datetime.now(timezone.utc)
@@ -148,7 +149,7 @@ async def login(req: LoginRequest, request: Request, response: Response):
         "session",
         token,
         httponly=True,
-        samesite="lax",
+        samesite="strict",
         secure=True,
         path="/",
         max_age=settings.session_expiry_hours * 3600,
@@ -171,7 +172,7 @@ async def logout(
                 await crud.revoke_session(jti)
         except HTTPException:
             pass  # token invalid/expired — nothing to revoke
-    response.delete_cookie("session", path="/", samesite="lax")
+    response.delete_cookie("session", path="/", samesite="strict")
     return {"status": "logged out"}
 
 
@@ -188,7 +189,7 @@ async def logout_all(
         target_type="user", target_id=user_id, target_name=payload["username"],
         detail=json.dumps({"sessions_revoked": count}),
     )
-    response.delete_cookie("session", path="/", samesite="lax")
+    response.delete_cookie("session", path="/", samesite="strict")
     return {"revoked": count}
 
 

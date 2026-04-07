@@ -591,11 +591,18 @@ async def share_download(
 
     try:
         path = unquote(path)
-        await validate_file_in_project(token["project_id"], path)
+        file_record = await crud.get_project_file_by_path(token["project_id"], path)
+        if not file_record:
+            raise HTTPException(403, "File not in project")
 
         p = Path(path).resolve()
         if not p.exists() or not p.is_file():
             raise HTTPException(404, "File not found")
+
+        # Symlink traversal guard: resolved request path must match DB-recorded path
+        recorded = Path(file_record["file_path"]).resolve()
+        if p != recorded:
+            raise HTTPException(403, "Path mismatch")
 
         filename = p.name
         return FileResponse(

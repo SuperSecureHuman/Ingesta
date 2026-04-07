@@ -3,6 +3,7 @@ Shared dependencies: authentication, path validation, manager access.
 """
 
 import re
+import secrets
 from pathlib import Path
 from typing import Optional
 from fastapi import Header, Cookie, HTTPException, Request, Depends
@@ -34,7 +35,7 @@ async def require_auth(
     Returns the authenticated identity (username or "admin").
     """
     # Try API key first (programmatic clients)
-    if x_admin_key and x_admin_key == settings.admin_api_key:
+    if x_admin_key and secrets.compare_digest(x_admin_key, settings.admin_api_key):
         return "admin"
 
     # Try session cookie (browser)
@@ -54,7 +55,7 @@ async def _get_auth_payload(
     session: Optional[str] = Cookie(None),
 ) -> dict:
     """Internal: decode and return full JWT payload (or synthetic admin payload for API key)."""
-    if x_admin_key and x_admin_key == settings.admin_api_key:
+    if x_admin_key and secrets.compare_digest(x_admin_key, settings.admin_api_key):
         return {"user_id": "__admin_key__", "username": "admin", "role": "admin"}
     if session:
         try:

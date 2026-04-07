@@ -138,10 +138,13 @@ async def get_playlist(
 
         # Validate quality
         if quality != "source":
-            try:
-                get_bitrate_preset(quality)
-            except ValueError:
-                raise ValueError(f"Unknown quality: {quality}")
+            valid_keys = {t["key"] for t in BITRATE_TIERS}
+            if quality not in valid_keys:
+                raise HTTPException(400, f"Unknown quality tier: {quality!r}")
+
+        # Validate segment_length
+        if not (1 <= segment_length <= 60):
+            raise HTTPException(400, "segment_length must be between 1 and 60")
 
         # Probe media
         info = await probe_media(path)
@@ -190,10 +193,13 @@ async def get_segment(
 
         # Validate quality
         if quality != "source":
-            try:
-                get_bitrate_preset(quality)
-            except ValueError:
-                raise ValueError(f"Unknown quality: {quality}")
+            valid_keys = {t["key"] for t in BITRATE_TIERS}
+            if quality not in valid_keys:
+                raise HTTPException(400, f"Unknown quality tier: {quality!r}")
+
+        # Validate segment_length
+        if not (1 <= segment_length <= 60):
+            raise HTTPException(400, "segment_length must be between 1 and 60")
 
         if runtimeTicks is None or actualSegmentLengthTicks is None:
             raise ValueError("runtimeTicks and actualSegmentLengthTicks are required")
