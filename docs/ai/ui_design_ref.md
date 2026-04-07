@@ -336,6 +336,45 @@ startPlayback(filePath);
 
 `PlayerContainer` must be mounted inside a `PlayerContextProvider`. It handles its own visibility — only renders when `isVisible` is true.
 
+### Player Interaction Patterns
+
+- **Seekbar**: Uses pointer events (`onPointerDown` / `onPointerMove` / `onPointerUp`) for drag-to-seek. During drag, only the visual position (`dragPct`) updates — the actual `currentTime` seek happens on `pointerUp` to avoid HLS jank. Supports mouse and touch. `setPointerCapture` keeps tracking even if the pointer leaves the bar. `touchAction: 'none'` prevents browser scroll hijacking.
+- **Volume**: Hover-expand (`group/vol` + `group-hover/vol:w-20`). Click mutes/unmutes. Keyboard M also toggles mute.
+- **Controls auto-hide**: 2500ms timeout after mouse stops. Resets on any mouse movement.
+- **Marker color swatches**: 20px (`w-5 h-5 border-2`) with `border-white scale-110` for selection.
+- **Annotations panel**: Tabbed sidebar (`commentsOpen` + `annotationsTab` state) with "Comments" and "Markers" tabs. Amber underline for active tab. Markers tab shows sorted list with color dot, label, timestamp — click to seek. Badge on button when either has items.
+- **Markers**: Label is optional — defaults to `"Marker at {time}"` if empty.
+
+---
+
+## ConfirmOverlay
+
+Self-contained Tailwind component at `components/custom/ConfirmOverlay.tsx`. No legacy CSS classes. Uses `absolute inset-0` positioning (must be inside a `relative` parent — typically a card). Props: `message`, `onConfirm`, `onCancel`, `confirmText` (default 'Delete'), `cancelText` (default 'Cancel'), `isDanger` (default true).
+
+---
+
+## Tailwind v4 Color Token Registration
+
+**Critical**: CSS variables in `:root` are NOT automatically available as Tailwind utilities in v4. They must be registered in the `@theme inline` block in `globals.css` as `--color-{name}: var(--{name})`. All shadcn semantic tokens (`destructive`, `primary`, `secondary`, etc.) are registered there. If you add a new CSS variable and need a Tailwind utility for it, add it to the `@theme inline` block.
+
+---
+
+## Cursor Pointer
+
+A global rule in `globals.css` sets `button, [role="button"] { cursor: pointer }`. No need to add `cursor-pointer` to individual buttons — it's automatic.
+
+---
+
+## Button/Hover State Patterns
+
+### Destructive actions (delete)
+- **Trash icon button on cards**: `hover:bg-destructive/20 hover:text-destructive` — now works correctly with registered `--color-destructive` token.
+- **ConfirmOverlay delete button**: `bg-destructive text-destructive-foreground` (red bg, white text) when `isDanger=true`.
+
+### Password Fields
+
+Password inputs use a show/hide toggle pattern with `Eye`/`EyeOff` icons from lucide-react. Wrap `<Input>` in a `relative` div, add a toggle button with `absolute right-2.5 top-1/2 -translate-y-1/2`. Default state is masked (`type="password"`).
+
 ---
 
 ## LUT Context

@@ -82,6 +82,7 @@ export default function PlayerContainer() {
   const [lutDropdownOpen, setLutDropdownOpen] = useState(false);
   const [helpVisible, setHelpVisible] = useState(false);
   const [progressPct, setProgressPct] = useState(0);
+  const [dragPct, setDragPct] = useState<number | null>(null);
   const [bufferedPct, setBufferedPct] = useState(0);
   const [currentTimeStr, setCurrentTimeStr] = useState('0:00');
   const [totalTimeStr, setTotalTimeStr] = useState('0:00');
@@ -96,9 +97,9 @@ export default function PlayerContainer() {
   const [comments, setComments] = useState<FileComment[]>([]);
   const [newCommentBody, setNewCommentBody] = useState('');
   const [markers, setMarkers] = useState<FileMarker[]>([]);
-  const [addingMarker, setAddingMarker] = useState(false);
-  const [markerForm, setMarkerForm] = useState({ label: '', color: '#f59e0b' });
+  const [editingMarkerId, setEditingMarkerId] = useState<string | null>(null);
   const [markerContextMenu, setMarkerContextMenu] = useState<{ markerId: string; x: number; y: number } | null>(null);
+  const [annotationsTab, setAnnotationsTab] = useState<'comments' | 'markers'>('comments');
   const [duration, setDuration] = useState(0);
 
   // ── Refs ───────────────────────────────────────────────────────────────────
@@ -111,6 +112,7 @@ export default function PlayerContainer() {
   const qualityRef = useRef<HTMLDivElement>(null);
   const lutRef = useRef<HTMLDivElement>(null);
   const handleCloseRef = useRef<() => void>(() => {});
+  const isDraggingSeek = useRef(false);
 
   // ── Animation controls ─────────────────────────────────────────────────────
   const controls = useAnimation();
@@ -284,7 +286,7 @@ export default function PlayerContainer() {
       if (isPlayingRef.current && !qualityPopoverOpenRef.current) {
         setControlsVisible(false);
       }
-    }, 3000);
+    }, 2500);
   }, []);
 
   const showControls = useCallback(() => {
@@ -449,19 +451,47 @@ export default function PlayerContainer() {
     await apiFetch(`/api/path-annotations/file/comments/${commentId}`, { method: 'DELETE' });
   };
 
-  const submitMarker = async () => {
-    if (!filePath || !markerForm.label.trim() || !videoRef.current) return;
+  const addQuickMarker = async () => {
+    if (!filePath || !videoRef.current) return;
     const ts = videoRef.current.currentTime;
     const res = await apiFetch(`/api/path-annotations/file/markers?path=${encodeURIComponent(filePath)}`, {
       method: 'POST',
-      body: JSON.stringify({ timestamp_seconds: ts, label: markerForm.label.trim(), color: markerForm.color }),
+      body: JSON.stringify({ timestamp_seconds: ts, label: `Marker at ${formatTime(ts)}`, color: '#f59e0b' }),
     });
     if (res.ok) {
       const marker: FileMarker = await res.json();
       setMarkers((prev) => [...prev, marker]);
     }
-    setAddingMarker(false);
-    setMarkerForm({ label: '', color: '#f59e0b' });
+  };
+
+  const updateMarker = async (markerId: string, updates: { label?: string; color?: string }) => {
+    if (!filePath) return;
+    const res = await apiFetch(`/api/path-annotations/file/markers/${markerId}?path=${encodeURIComponent(filePath)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(updates),
+    });
+    if (res.ok) {
+      const updated: FileMarker = await res.json();
+      setMarkers((prev) => prev.map((m) => m.id === markerId ? updated : m));
+    }
+  };
+
+  const updateMarkerTime = async (markerId: string, newTime: number) => {
+    if (!filePath) return;
+    const existing = markers.find((m) => m.id === markerId);
+    if (!existing) return;
+    // API doesn't support time update — delete + recreate
+    await apiFetch(`/api/path-annotations/file/markers/${markerId}`, { method: 'DELETE' });
+    const res = await apiFetch(`/api/path-annotations/file/markers?path=${encodeURIComponent(filePath)}`, {
+      method: 'POST',
+      body: JSON.stringify({ timestamp_seconds: newTime, label: existing.label, color: existing.color }),
+    });
+    if (res.ok) {
+      const newMarker: FileMarker = await res.json();
+      setMarkers((prev) => prev.filter((m) => m.id !== markerId).concat(newMarker));
+    } else {
+      setMarkers((prev) => prev.filter((m) => m.id !== markerId));
+    }
   };
 
   const deleteMarker = async (markerId: string) => {
@@ -472,10 +502,35 @@ export default function PlayerContainer() {
   };
 
   // ── Handlers ───────────────────────────────────────────────────────────────
-  const handleSeekClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!videoRef.current?.duration) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    videoRef.current.currentTime = ((e.clientX - rect.left) / rect.width) * videoRef.current.duration;
+  const getSeekFraction = (e: React.PointerEvent<HTMLDivElement>, el: HTMLElement) => {
+    const rect = el.getBoundingClientRect();
+    return Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+  };
+
+  const handleSeekPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    isDraggingSeek.current = true;
+    const fraction = getSeekFraction(e, e.currentTarget);
+    const dur = videoRef.current?.duration || 0;
+    setDragPct(fraction * 100);
+    setCurrentTimeStr(formatTime(fraction * dur));
+    if (videoRef.current) videoRef.current.currentTime = fraction * dur;
+  };
+
+  const handleSeekPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDraggingSeek.current) return;
+    const fraction = getSeekFraction(e, e.currentTarget);
+    const dur = videoRef.current?.duration || 0;
+    setDragPct(fraction * 100);
+    setCurrentTimeStr(formatTime(fraction * dur));
+  };
+
+  const handleSeekPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDraggingSeek.current) return;
+    isDraggingSeek.current = false;
+    const fraction = getSeekFraction(e, e.currentTarget);
+    setDragPct(null);
+    if (videoRef.current) videoRef.current.currentTime = fraction * (videoRef.current.duration || 0);
   };
 
   const handleSeekHover = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -593,104 +648,177 @@ export default function PlayerContainer() {
           </div>
         )}
 
-        {/* ── Comments sidebar ──────────────────────────────────────────────── */}
+        {/* ── Annotations sidebar (Comments + Markers tabs) ─────────────────── */}
         {commentsOpen && filePath && (
           <div className="absolute top-14 right-4 bottom-20 w-72 bg-zinc-950/95 backdrop-blur-sm rounded-xl border border-zinc-800 z-50 flex flex-col">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800 shrink-0">
-              <span className="text-sm font-semibold text-zinc-100">Comments</span>
-              <button onClick={() => setCommentsOpen(false)} className="text-zinc-500 hover:text-zinc-200 transition-colors">✕</button>
+            {/* Tab bar + close */}
+            <div className="flex items-center border-b border-zinc-800 shrink-0">
+              <button
+                onClick={() => setAnnotationsTab('comments')}
+                className={`flex-1 px-3 py-2.5 text-xs font-medium transition-colors ${annotationsTab === 'comments' ? 'text-amber-400 border-b-2 border-amber-400' : 'text-zinc-500 hover:text-zinc-300'}`}
+              >
+                Comments{comments.length > 0 ? ` (${comments.length})` : ''}
+              </button>
+              <button
+                onClick={() => setAnnotationsTab('markers')}
+                className={`flex-1 px-3 py-2.5 text-xs font-medium transition-colors ${annotationsTab === 'markers' ? 'text-amber-400 border-b-2 border-amber-400' : 'text-zinc-500 hover:text-zinc-300'}`}
+              >
+                Markers{markers.length > 0 ? ` (${markers.length})` : ''}
+              </button>
+              <button onClick={() => setCommentsOpen(false)} className="px-3 py-2.5 text-zinc-500 hover:text-zinc-200 transition-colors shrink-0">✕</button>
             </div>
-            <div className="flex-1 overflow-y-auto px-3 py-2 space-y-2 text-xs">
-              {comments.length === 0 && <p className="text-zinc-500 text-center py-4">No comments yet.</p>}
-              {/* General comments */}
-              {comments.filter((c) => c.timestamp_seconds === null).length > 0 && (
-                <div>
-                  <div className="text-[10px] text-zinc-600 font-semibold uppercase tracking-wider mb-1">General</div>
-                  {comments.filter((c) => c.timestamp_seconds === null).map((c) => (
-                    <div key={c.id} className="flex items-start gap-1 group/c py-1 border-b border-zinc-800/50">
-                      <span className="flex-1 text-zinc-300 break-words">{c.body}</span>
-                      {!readOnly && canEdit() && (
-                        <button onClick={() => deleteComment(c.id)} className="shrink-0 text-zinc-600 hover:text-red-400 opacity-0 group-hover/c:opacity-100 transition-opacity">✕</button>
-                      )}
+
+            {/* ── Comments tab ──────────────────────────────────────────────── */}
+            {annotationsTab === 'comments' && (
+              <>
+                <div className="flex-1 overflow-y-auto px-3 py-2 space-y-2 text-xs">
+                  {comments.length === 0 && <p className="text-zinc-500 text-center py-4">No comments yet.</p>}
+                  {/* General comments */}
+                  {comments.filter((c) => c.timestamp_seconds === null).length > 0 && (
+                    <div>
+                      <div className="text-[10px] text-zinc-600 font-semibold uppercase tracking-wider mb-1">General</div>
+                      {comments.filter((c) => c.timestamp_seconds === null).map((c) => (
+                        <div key={c.id} className="flex items-start gap-1 group/c py-1 border-b border-zinc-800/50">
+                          <span className="flex-1 text-zinc-300 break-words">{c.body}</span>
+                          {!readOnly && canEdit() && (
+                            <button onClick={() => deleteComment(c.id)} className="shrink-0 text-zinc-600 hover:text-red-400 opacity-0 group-hover/c:opacity-100 transition-opacity">✕</button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {/* Timestamped comments */}
+                  {comments.filter((c) => c.timestamp_seconds !== null).sort((a, b) => (a.timestamp_seconds ?? 0) - (b.timestamp_seconds ?? 0)).map((c) => (
+                    <div key={c.id} className="group/c py-1 border-b border-zinc-800/50">
+                      <button
+                        className="text-[10px] text-amber-400/80 hover:text-amber-400 font-mono mb-0.5 block"
+                        onClick={() => { if (videoRef.current && c.timestamp_seconds !== null) videoRef.current.currentTime = c.timestamp_seconds; }}
+                      >
+                        At {formatTime(c.timestamp_seconds ?? 0)}
+                      </button>
+                      <div className="flex items-start gap-1">
+                        <span className="flex-1 text-zinc-300 break-words">{c.body}</span>
+                        {!readOnly && canEdit() && (
+                          <button onClick={() => deleteComment(c.id)} className="shrink-0 text-zinc-600 hover:text-red-400 opacity-0 group-hover/c:opacity-100 transition-opacity">✕</button>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
-              )}
-              {/* Timestamped comments */}
-              {comments.filter((c) => c.timestamp_seconds !== null).sort((a, b) => (a.timestamp_seconds ?? 0) - (b.timestamp_seconds ?? 0)).map((c) => (
-                <div key={c.id} className="group/c py-1 border-b border-zinc-800/50">
-                  <button
-                    className="text-[10px] text-amber-400/80 hover:text-amber-400 font-mono mb-0.5 block"
-                    onClick={() => { if (videoRef.current && c.timestamp_seconds !== null) videoRef.current.currentTime = c.timestamp_seconds; }}
-                  >
-                    At {formatTime(c.timestamp_seconds ?? 0)}
-                  </button>
-                  <div className="flex items-start gap-1">
-                    <span className="flex-1 text-zinc-300 break-words">{c.body}</span>
-                    {!readOnly && canEdit() && (
-                      <button onClick={() => deleteComment(c.id)} className="shrink-0 text-zinc-600 hover:text-red-400 opacity-0 group-hover/c:opacity-100 transition-opacity">✕</button>
-                    )}
+                {!readOnly && canEdit() && (
+                  <div className="shrink-0 border-t border-zinc-800 p-3 space-y-2">
+                    <div className="flex gap-1">
+                      <input
+                        type="text"
+                        value={newCommentBody}
+                        onChange={(e) => setNewCommentBody(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') addComment(null); }}
+                        placeholder="Add general comment…"
+                        className="flex-1 h-7 px-2 text-xs bg-input border border-input rounded text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-amber-500/50"
+                      />
+                      <button
+                        onClick={() => addComment(null)}
+                        className="h-7 px-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-200 rounded text-xs transition-colors"
+                      >+</button>
+                    </div>
+                    <div className="flex gap-1">
+                      <button
+                        onClick={() => addComment(videoRef.current?.currentTime ?? null)}
+                        className="flex-1 h-7 px-2 text-xs bg-input border border-input rounded text-muted-foreground hover:text-foreground hover:border-border transition-colors text-left truncate"
+                        title="Add comment at current playback time"
+                      >
+                        Add at {formatTime(videoRef.current?.currentTime ?? 0)}
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
-            {!readOnly && canEdit() && (
-              <div className="shrink-0 border-t border-zinc-800 p-3 space-y-2">
-                <div className="flex gap-1">
-                  <input
-                    type="text"
-                    value={newCommentBody}
-                    onChange={(e) => setNewCommentBody(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') addComment(null); }}
-                    placeholder="Add general comment…"
-                    className="flex-1 h-7 px-2 text-xs bg-input border border-input rounded text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-amber-500/50"
-                  />
-                  <button
-                    onClick={() => addComment(null)}
-                    className="h-7 px-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-200 rounded text-xs transition-colors"
-                  >+</button>
-                </div>
-                <div className="flex gap-1">
-                  <button
-                    onClick={() => addComment(videoRef.current?.currentTime ?? null)}
-                    className="flex-1 h-7 px-2 text-xs bg-input border border-input rounded text-muted-foreground hover:text-foreground hover:border-border transition-colors text-left truncate"
-                    title="Add comment at current playback time"
-                  >
-                    Add at {formatTime(videoRef.current?.currentTime ?? 0)}
-                  </button>
-                </div>
+                )}
+              </>
+            )}
+
+            {/* ── Markers tab ──────────────────────────────────────────────── */}
+            {annotationsTab === 'markers' && (
+              <div className="flex-1 overflow-y-auto px-3 py-2 text-xs space-y-1">
+                {markers.length === 0 && <p className="text-zinc-500 text-center py-4">No markers yet.</p>}
+                {[...markers].sort((a, b) => a.timestamp_seconds - b.timestamp_seconds).map((m) => {
+                  const isEditing = editingMarkerId === m.id;
+                  return (
+                    <div key={m.id} className="rounded border border-zinc-800/50 overflow-hidden">
+                      {/* Collapsed row */}
+                      <div className="flex items-center gap-2 px-2 py-1.5 hover:bg-zinc-800/50 transition-colors">
+                        <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: m.color }} />
+                        <button
+                          onClick={() => { if (videoRef.current) videoRef.current.currentTime = m.timestamp_seconds; }}
+                          className="text-xs text-zinc-300 truncate flex-1 text-left hover:text-white transition-colors"
+                        >
+                          {m.label}
+                        </button>
+                        <span
+                          className="text-[10px] text-amber-400/80 hover:text-amber-400 font-mono cursor-pointer"
+                          onClick={() => { if (videoRef.current) videoRef.current.currentTime = m.timestamp_seconds; }}
+                        >
+                          {formatTime(m.timestamp_seconds)}
+                        </span>
+                        {!readOnly && canEdit() && (
+                          <button
+                            onClick={() => setEditingMarkerId(isEditing ? null : m.id)}
+                            className={`shrink-0 text-zinc-600 hover:text-zinc-300 transition-colors ${isEditing ? 'text-amber-400' : ''}`}
+                            title="Edit marker"
+                          >
+                            ✎
+                          </button>
+                        )}
+                      </div>
+                      {/* Expanded editor */}
+                      {isEditing && !readOnly && canEdit() && (
+                        <div className="px-2 pb-2 pt-1 space-y-2 border-t border-zinc-800/50 bg-zinc-900/50">
+                          {/* Label */}
+                          <input
+                            type="text"
+                            defaultValue={m.label}
+                            onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== m.label) updateMarker(m.id, { label: v }); }}
+                            onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                            placeholder="Label…"
+                            className="w-full h-6 px-2 text-xs bg-input border border-input rounded text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-amber-500/50"
+                          />
+                          {/* Color swatches */}
+                          <div className="flex gap-1.5">
+                            {['#f59e0b', '#ef4444', '#22c55e', '#3b82f6', '#f8fafc'].map((c) => (
+                              <button
+                                key={c}
+                                className={`w-5 h-5 rounded-full border-2 transition-all ${m.color === c ? 'border-white scale-110' : 'border-transparent'}`}
+                                style={{ backgroundColor: c }}
+                                onClick={() => updateMarker(m.id, { color: c })}
+                              />
+                            ))}
+                          </div>
+                          {/* Time adjustment */}
+                          <div className="flex items-center gap-1">
+                            <span className="text-[10px] text-zinc-500 shrink-0">Time:</span>
+                            <button onClick={() => updateMarkerTime(m.id, Math.max(0, m.timestamp_seconds - 1))} className="h-5 w-5 flex items-center justify-center rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-400 text-[10px]">−</button>
+                            <span className="text-[10px] text-zinc-300 tabular-nums font-mono min-w-[3.5rem] text-center">{formatTime(m.timestamp_seconds)}</span>
+                            <button onClick={() => updateMarkerTime(m.id, Math.min(duration || Infinity, m.timestamp_seconds + 1))} className="h-5 w-5 flex items-center justify-center rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-400 text-[10px]">+</button>
+                            <button
+                              onClick={() => { if (videoRef.current) updateMarkerTime(m.id, videoRef.current.currentTime); }}
+                              className="ml-auto h-5 px-1.5 rounded bg-zinc-800 hover:bg-zinc-700 text-[10px] text-zinc-400 hover:text-zinc-200 transition-colors"
+                              title="Set to current playback time"
+                            >
+                              Now
+                            </button>
+                          </div>
+                          {/* Delete */}
+                          <button
+                            onClick={() => { deleteMarker(m.id); setEditingMarkerId(null); }}
+                            className="w-full h-6 text-[10px] text-destructive hover:bg-destructive/10 rounded transition-colors"
+                          >
+                            Delete marker
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
-          </div>
-        )}
-
-        {/* ── Add marker form ───────────────────────────────────────────────── */}
-        {addingMarker && filePath && !readOnly && canEdit() && (
-          <div className="absolute bottom-24 right-4 bg-zinc-950/95 backdrop-blur-sm rounded-xl border border-zinc-800 z-50 p-3 w-60">
-            <div className="text-xs font-semibold text-zinc-300 mb-2">Add Marker at {formatTime(videoRef.current?.currentTime ?? 0)}</div>
-            <input
-              type="text"
-              value={markerForm.label}
-              onChange={(e) => setMarkerForm((p) => ({ ...p, label: e.target.value }))}
-              onKeyDown={(e) => { if (e.key === 'Enter') submitMarker(); if (e.key === 'Escape') setAddingMarker(false); }}
-              placeholder="Label…"
-              className="w-full h-7 px-2 text-xs bg-input border border-input rounded text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-amber-500/50 mb-2"
-              autoFocus
-            />
-            <div className="flex gap-1.5 mb-2">
-              {['#f59e0b', '#ef4444', '#22c55e', '#3b82f6', '#f8fafc'].map((c) => (
-                <button
-                  key={c}
-                  className={`w-5 h-5 rounded-full border-2 transition-all ${markerForm.color === c ? 'border-white scale-110' : 'border-transparent'}`}
-                  style={{ backgroundColor: c }}
-                  onClick={() => setMarkerForm((p) => ({ ...p, color: c }))}
-                />
-              ))}
-            </div>
-            <div className="flex gap-1">
-              <button onClick={submitMarker} className="flex-1 h-7 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-semibold rounded text-xs transition-colors">Add</button>
-              <button onClick={() => setAddingMarker(false)} className="h-7 px-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 rounded text-xs transition-colors">Cancel</button>
-            </div>
           </div>
         )}
 
@@ -716,17 +844,20 @@ export default function PlayerContainer() {
           {/* Seekbar */}
           <div
             className="relative w-full h-3 flex items-center cursor-pointer group/seek"
-            onClick={handleSeekClick}
+            onPointerDown={handleSeekPointerDown}
+            onPointerMove={handleSeekPointerMove}
+            onPointerUp={handleSeekPointerUp}
             onMouseMove={handleSeekHover}
             onMouseLeave={() => setSeekTooltip(null)}
+            style={{ touchAction: 'none' }}
           >
             <div className="absolute inset-x-0 h-[3px] group-hover/seek:h-[5px] bg-zinc-700/60 rounded-full transition-[height] duration-150 overflow-hidden">
               <div className="absolute inset-y-0 left-0 bg-zinc-500/50 rounded-full" style={{ width: `${bufferedPct}%` }} />
-              <div className="absolute inset-y-0 left-0 bg-amber-400 rounded-full" style={{ width: `${progressPct}%` }} />
+              <div className="absolute inset-y-0 left-0 bg-amber-400 rounded-full" style={{ width: `${dragPct ?? progressPct}%` }} />
             </div>
             <div
               className="absolute w-3 h-3 bg-amber-400 rounded-full shadow-md opacity-0 group-hover/seek:opacity-100 transition-opacity pointer-events-none"
-              style={{ left: `${progressPct}%`, top: '50%', transform: 'translate(-50%, -50%)' }}
+              style={{ left: `${dragPct ?? progressPct}%`, top: '50%', transform: 'translate(-50%, -50%)' }}
             />
             {seekTooltip !== null && (
               <div
@@ -936,24 +1067,24 @@ export default function PlayerContainer() {
                 )}
               </div>
 
-              {/* Comments toggle */}
+              {/* Annotations toggle (comments + markers) */}
               {filePath && (
                 <button
                   onClick={() => setCommentsOpen((v) => !v)}
                   className={`w-8 h-8 flex items-center justify-center rounded transition-colors relative ${commentsOpen ? 'text-amber-400' : 'text-zinc-400 hover:text-white'}`}
-                  title="Comments"
+                  title="Annotations"
                 >
                   <IconComment className="w-5 h-5" />
-                  {comments.length > 0 && <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-amber-400" />}
+                  {(comments.length > 0 || markers.length > 0) && <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-amber-400" />}
                 </button>
               )}
 
-              {/* Add marker (editor only) */}
+              {/* Add marker (instant) */}
               {filePath && !readOnly && canEdit() && (
                 <button
-                  onClick={() => setAddingMarker((v) => !v)}
-                  className={`w-8 h-8 flex items-center justify-center rounded transition-colors ${addingMarker ? 'text-amber-400' : 'text-zinc-400 hover:text-white'}`}
-                  title="Add marker"
+                  onClick={addQuickMarker}
+                  className="w-8 h-8 flex items-center justify-center rounded transition-colors text-zinc-400 hover:text-white"
+                  title="Add marker at current time"
                 >
                   <IconMarker className="w-5 h-5" />
                 </button>

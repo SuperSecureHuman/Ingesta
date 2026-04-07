@@ -58,7 +58,7 @@ export default function ProjectCard({ project, onSelect, onDelete }: ProjectCard
           <Button
             variant="ghost"
             size="icon"
-            className="h-7 w-7 bg-zinc-950/60 backdrop-blur-sm hover:bg-zinc-950/80 hover:text-destructive"
+            className="h-7 w-7 bg-zinc-950/60 backdrop-blur-sm hover:bg-destructive/20 hover:text-destructive"
             onClick={handleDeleteClick}
           >
             <Trash2 className="h-3.5 w-3.5" />

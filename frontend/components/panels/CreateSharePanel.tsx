@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { apiFetch } from '@/lib/api';
 import { toast } from 'sonner';
+import { Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -22,6 +23,7 @@ export default function CreateSharePanel({
   onOpenShareLinks,
 }: CreateSharePanelProps) {
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [expiryDays, setExpiryDays] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -140,15 +142,29 @@ export default function CreateSharePanel({
       <div className="space-y-4">
         <div className="space-y-1.5">
           <Label htmlFor="sharePassword">Password</Label>
-          <Input
-            id="sharePassword"
-            type="password"
-            placeholder="Share password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            autoFocus
-            disabled={loading}
-          />
+          <div className="relative">
+            <Input
+              id="sharePassword"
+              type={showPassword ? 'text' : 'password'}
+              placeholder="Share password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoFocus
+              disabled={loading}
+              className="pr-10"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(v => !v)}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+              tabIndex={-1}
+            >
+              {showPassword
+                ? <EyeOff className="h-4 w-4" />
+                : <Eye className="h-4 w-4" />
+              }
+            </button>
+          </div>
         </div>
 
         <div className="space-y-1.5">
