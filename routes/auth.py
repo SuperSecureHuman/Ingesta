@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Depends, Cookie, Request, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import jwt as pyjwt
 from jwt import InvalidTokenError
 from passlib.context import CryptContext
@@ -131,10 +131,23 @@ async def get_session_payload(
 
 
 def _get_client_ip(request: Request) -> Optional[str]:
-    """Extract client IP from request (forwarded header if set)."""
+    """Extract client IP from request.
+
+    Reads X-Forwarded-For only when the value looks like a valid IP address.
+    This prevents log-poisoning by clients who set arbitrary header values.
+    Trusting X-FF at all is only appropriate when the app is behind a known
+    reverse-proxy; for a direct-internet deployment, remove the header check.
+    """
     forwarded = request.headers.get("X-Forwarded-For")
     if forwarded:
-        return forwarded.split(",")[0].strip()
+        candidate = forwarded.split(",")[0].strip()
+        # Accept only bare IPv4 / IPv6 addresses (no ports, no schemes)
+        import ipaddress
+        try:
+            ipaddress.ip_address(candidate)
+            return candidate
+        except ValueError:
+            pass  # Malformed — fall through to real socket IP
     return request.client.host if request.client else None
 
 
@@ -275,7 +288,7 @@ async def change_password(
 
 
 class ProfileUpdateRequest(BaseModel):
-    display_name: Optional[str] = None
+    display_name: Optional[str] = Field(None, max_length=128)
 
 
 @router.patch("/profile")

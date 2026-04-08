@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 import db.crud as crud
-from routes.deps import require_role
+from routes.deps import require_role, validate_path_boundary
 
 router = APIRouter(tags=["luts"])
 
@@ -105,6 +105,7 @@ async def source_tags_by_paths(body: SourceTagsByPathsRequest, _auth: dict = Dep
 @router.put("/api/path-tags")
 async def put_path_tags(body: PathTagUpdate, _auth: dict = Depends(require_role('editor'))):
     """Set camera/lens/lut for a file by path. Updates file_path_tags and syncs all project_files rows."""
+    validate_path_boundary(body.path)
     await crud.upsert_file_path_tags(body.path, body.camera, body.lens, body.lut_id, body.lut_intensity)
     return {"path": body.path, "camera": body.camera, "lens": body.lens, "lut_id": body.lut_id, "lut_intensity": body.lut_intensity}
 

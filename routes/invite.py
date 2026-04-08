@@ -10,7 +10,7 @@ from pydantic import BaseModel
 
 import db.crud as crud
 from config import settings
-from routes.auth import hash_password, create_session_token
+from routes.auth import hash_password, create_session_token, _get_client_ip
 
 router = APIRouter(prefix="/api/invite", tags=["invite"])
 
@@ -69,11 +69,11 @@ async def redeem_invite(invite_id: str, req: RedeemRequest, request: Request, re
         invite["created_by"], creator_name, "user.create",
         target_type="user", target_id=user_id, target_name=req.username,
         detail='{"via": "invite"}',
-        ip=request.client.host if request.client else None,
+        ip=_get_client_ip(request),
     )
 
     # Auto-login: create session + set cookie
-    ip = request.client.host if request.client else None
+    ip = _get_client_ip(request)
     user_agent = request.headers.get("User-Agent")
     jti = str(uuid.uuid4())
     token = create_session_token(user_id, req.username, invite["role"], jti)
@@ -87,7 +87,7 @@ async def redeem_invite(invite_id: str, req: RedeemRequest, request: Request, re
         "session",
         token,
         httponly=True,
-        samesite="lax",
+        samesite="strict",
         secure=True,
         path="/",
         max_age=settings.session_expiry_hours * 3600,

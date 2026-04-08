@@ -18,7 +18,7 @@ from pydantic import BaseModel, Field
 
 import db.crud as crud
 from db import get_db
-from routes.deps import require_role
+from routes.deps import require_role, validate_path_boundary
 
 # ── Routers ───────────────────────────────────────────────────────────────────
 
@@ -91,6 +91,7 @@ async def path_list_file_tags(
     path: str = Query(...),
     _auth: dict = Depends(require_role('viewer')),
 ):
+    validate_path_boundary(path)
     return await crud.get_file_tags(path)
 
 
@@ -100,6 +101,7 @@ async def path_add_file_tag(
     path: str = Query(...),
     _auth: dict = Depends(require_role('editor')),
 ):
+    validate_path_boundary(path)
     tag = req.tag.strip()
     if not tag:
         raise HTTPException(400, "Tag cannot be empty")
@@ -112,6 +114,7 @@ async def path_remove_file_tag(
     path: str = Query(...),
     _auth: dict = Depends(require_role('editor')),
 ):
+    validate_path_boundary(path)
     removed = await crud.remove_file_tag(path, tag)
     if not removed:
         raise HTTPException(404, "Tag not found on this file")
@@ -124,6 +127,7 @@ async def path_get_file_rating(
     path: str = Query(...),
     _auth: dict = Depends(require_role('viewer')),
 ):
+    validate_path_boundary(path)
     return {"rating": await crud.get_file_rating(path)}
 
 
@@ -133,6 +137,7 @@ async def path_set_file_rating(
     path: str = Query(...),
     _auth: dict = Depends(require_role('editor')),
 ):
+    validate_path_boundary(path)
     if req.rating is not None and req.rating not in (1, 2, 3, 4, 5):
         raise HTTPException(400, "Rating must be 1-5 or null")
     await crud.set_file_rating(path, req.rating)
@@ -145,6 +150,7 @@ async def path_list_file_comments(
     path: str = Query(...),
     _auth: dict = Depends(require_role('viewer')),
 ):
+    validate_path_boundary(path)
     return await crud.get_file_comments(path)
 
 
@@ -154,6 +160,7 @@ async def path_add_file_comment(
     path: str = Query(...),
     _auth: dict = Depends(require_role('editor')),
 ):
+    validate_path_boundary(path)
     body = req.body.strip()
     if not body:
         raise HTTPException(400, "Comment body cannot be empty")
@@ -177,6 +184,7 @@ async def path_list_file_markers(
     path: str = Query(...),
     _auth: dict = Depends(require_role('viewer')),
 ):
+    validate_path_boundary(path)
     return await crud.get_file_markers(path)
 
 
@@ -186,6 +194,7 @@ async def path_add_file_marker(
     path: str = Query(...),
     _auth: dict = Depends(require_role('editor')),
 ):
+    validate_path_boundary(path)
     label = req.label.strip()
     if not label:
         raise HTTPException(400, "Marker label cannot be empty")
@@ -199,6 +208,7 @@ async def path_update_file_marker(
     path: str = Query(...),
     _auth: dict = Depends(require_role('editor')),
 ):
+    validate_path_boundary(path)
     existing_markers = await crud.get_file_markers(path)
     marker = next((m for m in existing_markers if m["id"] == marker_id), None)
     if not marker:

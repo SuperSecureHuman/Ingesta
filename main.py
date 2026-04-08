@@ -231,6 +231,18 @@ class _SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        # Restrict resource loading to same origin; media/blob needed for HLS player.
+        # Adjust script-src / style-src if you add a CDN.
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' blob: data:; "
+            "media-src 'self' blob:; "
+            "connect-src 'self'; "
+            "worker-src blob:; "
+            "frame-ancestors 'none'"
+        )
         return response
 
 

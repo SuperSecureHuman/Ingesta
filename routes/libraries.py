@@ -7,7 +7,7 @@ from typing import Optional
 from urllib.parse import unquote
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from config import settings
 import db.crud as crud
@@ -20,7 +20,7 @@ router = APIRouter(prefix="/api/libraries", tags=["libraries"])
 
 class CreateLibraryRequest(BaseModel):
     """Request to create a library."""
-    name: str
+    name: str = Field(..., min_length=1, max_length=255)
     root_path: str
 
 

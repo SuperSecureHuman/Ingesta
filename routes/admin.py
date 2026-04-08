@@ -9,11 +9,11 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 import db.crud as crud
 from config import settings
-from routes.auth import pwd_context
+from routes.auth import pwd_context, _get_client_ip
 from routes.deps import require_role
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -25,16 +25,16 @@ VALID_PERM_ROLES = {'editor', 'viewer'}
 
 
 class CreateUserRequest(BaseModel):
-    username: str
+    username: str = Field(..., min_length=1, max_length=64)
     password: str
     role: str = 'viewer'
-    display_name: Optional[str] = None
+    display_name: Optional[str] = Field(None, max_length=128)
 
 
 class UpdateUserRequest(BaseModel):
     role: Optional[str] = None
     password: Optional[str] = None
-    display_name: Optional[str] = None
+    display_name: Optional[str] = Field(None, max_length=128)
 
 
 class SetPermissionRequest(BaseModel):
@@ -75,7 +75,7 @@ async def create_user(req: CreateUserRequest, request: Request, payload: dict = 
         payload["user_id"], payload["username"], "user.create",
         target_type="user", target_id=user_id, target_name=req.username,
         detail=json.dumps({"role": req.role}),
-        ip=request.client.host if request.client else None,
+        ip=_get_client_ip(request),
     )
     return {"id": user_id, "username": req.username, "role": req.role}
 
@@ -94,7 +94,7 @@ async def update_user(user_id: str, req: UpdateUserRequest, request: Request, pa
             payload["user_id"], payload["username"], "user.role_change",
             target_type="user", target_id=user_id, target_name=user["username"],
             detail=json.dumps({"from": user["role"], "to": req.role}),
-            ip=request.client.host if request.client else None,
+            ip=_get_client_ip(request),
         )
     if req.password is not None:
         if len(req.password) < settings.min_password_length:
@@ -105,7 +105,7 @@ async def update_user(user_id: str, req: UpdateUserRequest, request: Request, pa
         await crud.write_audit(
             payload["user_id"], payload["username"], "user.password_reset",
             target_type="user", target_id=user_id, target_name=user["username"],
-            ip=request.client.host if request.client else None,
+            ip=_get_client_ip(request),
         )
     if req.display_name is not None:
         await crud.update_user_display_name(user_id, req.display_name)
@@ -129,7 +129,7 @@ async def delete_user(user_id: str, request: Request, payload: dict = Depends(re
     await crud.write_audit(
         payload["user_id"], payload["username"], "user.delete",
         target_type="user", target_id=user_id, target_name=user["username"],
-        ip=request.client.host if request.client else None,
+        ip=_get_client_ip(request),
     )
     await crud.delete_user(user_id)
     return {"status": "deleted"}
@@ -146,7 +146,7 @@ async def set_user_status(user_id: str, req: SetStatusRequest, request: Request,
     await crud.write_audit(
         payload["user_id"], payload["username"], action,
         target_type="user", target_id=user_id, target_name=user["username"],
-        ip=request.client.host if request.client else None,
+        ip=_get_client_ip(request),
     )
     return {"status": "updated", "active": req.active}
 
@@ -162,7 +162,7 @@ async def force_logout_user(user_id: str, request: Request, payload: dict = Depe
         payload["user_id"], payload["username"], "session.revoke_all",
         target_type="user", target_id=user_id, target_name=user["username"],
         detail=json.dumps({"sessions_revoked": count}),
-        ip=request.client.host if request.client else None,
+        ip=_get_client_ip(request),
     )
     return {"revoked": count}
 
@@ -244,7 +244,7 @@ async def create_invite(req: CreateInviteRequest, request: Request, payload: dic
         payload["user_id"], payload["username"], "user.invite_create",
         target_type="invite", target_id=invite_id,
         detail=json.dumps({"role": req.role, "expires_hours": expiry_hours}),
-        ip=request.client.host if request.client else None,
+        ip=_get_client_ip(request),
     )
     return {
         "id": invite_id,

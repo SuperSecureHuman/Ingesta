@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from config import settings
 import db.crud as crud
@@ -22,7 +22,7 @@ router = APIRouter(prefix="/api/projects", tags=["projects"])
 class CreateProjectRequest(BaseModel):
     """Request to create a project."""
 
-    name: str
+    name: str = Field(..., min_length=1, max_length=255)
     library_id: Optional[str] = None
 
 

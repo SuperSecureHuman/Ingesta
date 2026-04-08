@@ -605,7 +605,7 @@ async def get_user(user_id: str) -> Optional[Dict[str, Any]]:
     """Get user by ID (excludes password_hash — use get_user_by_username for auth)."""
     db = get_db()
     row = await db.fetchone(
-        "SELECT id, username, created_at, role FROM users WHERE id = ?",
+        "SELECT id, username, created_at, role, active FROM users WHERE id = ?",
         (user_id,),
     )
     if not row:
@@ -615,6 +615,7 @@ async def get_user(user_id: str) -> Optional[Dict[str, Any]]:
         "username": row[1],
         "created_at": row[2],
         "role": row[3],
+        "active": bool(row[4]) if row[4] is not None else True,
     }
 
 

@@ -419,7 +419,7 @@ async def capabilities(request: Request, _auth: str = Depends(require_auth)):
 
 
 @router.get("/thumb")
-async def get_thumb(path: str = Query(...), t: float = Query(0), w: int = Query(320), _auth: str = Depends(require_auth)):
+async def get_thumb(path: str = Query(...), t: float = Query(0), w: int = Query(320, ge=1, le=1920), _auth: str = Depends(require_auth)):
     """Get or generate thumbnail at time offset t (seconds), width w."""
     try:
         path = unquote(path)

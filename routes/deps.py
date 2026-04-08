@@ -119,6 +119,16 @@ def validate_path(path: str) -> Path:
     return p
 
 
+def validate_path_boundary(path: str) -> str:
+    """Validate path is within MEDIA_ROOT (existence not required). Returns resolved str."""
+    p = Path(path).resolve()
+    media_root_str = str(MEDIA_ROOT)
+    p_str = str(p)
+    if p_str != media_root_str and not p_str.startswith(media_root_str + "/"):
+        raise HTTPException(403, "Path outside MEDIA_ROOT")
+    return p_str
+
+
 def get_manager(request: Request):
     """Get the TranscodeManager singleton from app state."""
     return request.app.state.manager

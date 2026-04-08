@@ -344,7 +344,7 @@ async def share_playlist(
     stream_id: str,
     path: str = Query(...),
     quality: str = Query("720p"),
-    segment_length: int = Query(6),
+    segment_length: int = Query(6, ge=1, le=60),
     token: dict = Depends(get_token_payload),
 ):
     """Generate HLS playlist for shared project file."""
@@ -404,7 +404,7 @@ async def share_segment(
     segment_id: int,
     path: str = Query(...),
     quality: str = Query("720p"),
-    segment_length: int = Query(6),
+    segment_length: int = Query(6, ge=1, le=60),
     runtimeTicks: int = Query(None),
     actualSegmentLengthTicks: int = Query(None),
     token: dict = Depends(get_token_payload),
@@ -554,29 +554,16 @@ async def share_thumb(
     share_id: str,
     path: str = Query(...),
     t: float = Query(0),
-    w: int = Query(320),
-    token_param: Optional[str] = Query(None, alias="token"),
-    authorization: Optional[str] = Header(None),
+    w: int = Query(320, ge=1, le=1920),
+    token: dict = Depends(get_token_payload),
 ):
     """Get thumbnail for shared project file."""
-    # Resolve token from query param OR Authorization header
-    if token_param:
-        payload = verify_token(token_param)
-    elif authorization:
-        parts = authorization.split()
-        if len(parts) == 2 and parts[0].lower() == "bearer":
-            payload = verify_token(parts[1])
-        else:
-            raise HTTPException(401, "Missing or invalid authorization")
-    else:
-        raise HTTPException(401, "Missing authorization")
-
-    if payload["share_id"] != share_id:
+    if token["share_id"] != share_id:
         raise HTTPException(403, "Token mismatch")
 
     try:
         path = unquote(path)
-        await validate_file_in_project(payload["project_id"], path)
+        await validate_file_in_project(token["project_id"], path)
 
         thumb_path = await get_or_generate_thumb(path, t, w)
         if not thumb_path:
