@@ -576,12 +576,6 @@ async def is_share_valid(share_id: str) -> bool:
     return True
 
 
-async def delete_share(share_id: str) -> bool:
-    """Delete a share."""
-    db = get_db()
-    await db.execute("DELETE FROM shares WHERE id = ?", (share_id,))
-    return True
-
 
 # ============================================================================
 # USERS
@@ -935,15 +929,6 @@ async def delete_file_lut_pref(file_id: str) -> None:
     db = get_db()
     await db.execute("DELETE FROM file_lut_prefs WHERE file_id = ?", (file_id,))
 
-
-async def get_lut_file_path(lut_id: str) -> Optional[str]:
-    """Get absolute file path for a LUT by ID."""
-    db = get_db()
-    row = await db.fetchone(
-        "SELECT file_path FROM luts WHERE id = ?",
-        (lut_id,),
-    )
-    return row[0] if row else None
 
 
 # ── Annotation CRUD (Feature 5) — keyed by file_path ─────────────────────────

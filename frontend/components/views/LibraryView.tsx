@@ -7,7 +7,7 @@ import { Library, BrowseResult, SelectionItem, LutEntry } from '@/lib/types';
 import { slugify } from '@/lib/utils';
 import { toast } from 'sonner';
 import { usePlayerContext } from '@/context/PlayerContext';
-import { useSelection } from '@/hooks/useSelection';
+import { useSelection } from '@/context/SelectionContext';
 import { useAuth } from '@/hooks/useAuth';
 import { usePanelContext } from '@/context/PanelContext';
 import { fetchLuts } from '@/lib/api';

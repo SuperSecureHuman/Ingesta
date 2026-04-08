@@ -21,7 +21,7 @@ from config import settings
 import db.crud as crud
 from routes.deps import require_auth
 from routes.luts import _extract_folder
-from routes.auth import pwd_context
+from routes.auth import pwd_context, hash_password, verify_password
 from media.playlist import probe_media
 from media.transcoder import TICKS_PER_SECOND, BITRATE_TIERS
 from media.thumbs import get_or_generate_thumb
@@ -33,15 +33,6 @@ router = APIRouter(prefix="/api/share", tags=["shares"])
 ALGORITHM = "HS256"
 TOKEN_EXPIRE_HOURS = 24
 
-
-def hash_password(password: str) -> str:
-    """Hash a plaintext password using bcrypt."""
-    return pwd_context.hash(password)
-
-
-def verify_password(plain: str, hashed: str) -> bool:
-    """Verify plaintext password against bcrypt hash."""
-    return pwd_context.verify(plain, hashed)
 
 
 def create_access_token(share_id: str, project_id: str) -> str:

@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useAppContext } from '@/context/AppContext';
 import { useAuth } from '@/hooks/useAuth';
 import { usePanels } from '@/hooks/usePanels';
-import { useSelection } from '@/hooks/useSelection';
+import { useSelection } from '@/context/SelectionContext';
 import LibraryView from '@/components/views/LibraryView';
 import { PlayerContextProvider } from '@/context/PlayerContext';
 import { LutContextProvider } from '@/context/LutContext';

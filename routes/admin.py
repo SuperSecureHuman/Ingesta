@@ -109,6 +109,12 @@ async def update_user(user_id: str, req: UpdateUserRequest, request: Request, pa
         )
     if req.display_name is not None:
         await crud.update_user_display_name(user_id, req.display_name)
+        await crud.write_audit(
+            payload["user_id"], payload["username"], "user.display_name_change",
+            target_type="user", target_id=user_id, target_name=user.get("username", ""),
+            detail=json.dumps({"new_display_name": req.display_name}),
+            ip=_get_client_ip(request),
+        )
     return {"status": "updated"}
 
 

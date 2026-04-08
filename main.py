@@ -4,7 +4,6 @@ FastAPI server with on-demand transcoding and dynamic seeking.
 
 import asyncio
 import os
-import re
 import shutil
 import time
 import uuid

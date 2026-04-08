@@ -7,7 +7,6 @@ import { fetchLuts } from '@/lib/api';
 interface LutContextType {
   availableLuts: LutEntry[];
   activeLutId: string | null;
-  isLoading: boolean;
   applyLut: (lutId: string) => void;
   clearLut: () => void;
   lutMode: 'client' | 'server';
@@ -29,7 +28,6 @@ export function LutContextProvider({
 }) {
   const [availableLuts, setAvailableLuts] = useState<LutEntry[]>(initialLuts ?? []);
   const [activeLutId, setActiveLutId] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
   const [lutMode, setLutMode] = useState<'client' | 'server'>('client');
   const [lutStrength, setLutStrength] = useState<number>(1.0);
   const [fileLutPref, setFileLutPref] = useState<string | null>(null);
@@ -67,7 +65,6 @@ export function LutContextProvider({
     () => ({
       availableLuts,
       activeLutId,
-      isLoading,
       applyLut,
       clearLut,
       lutMode,
@@ -77,7 +74,7 @@ export function LutContextProvider({
       fileLutPref,
       setFileLutPref,
     }),
-    [availableLuts, activeLutId, isLoading, lutMode, lutStrength, fileLutPref]
+    [availableLuts, activeLutId, lutMode, lutStrength, fileLutPref]
   );
 
   return (

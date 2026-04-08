@@ -9,7 +9,7 @@ import { PanelContextProvider } from '@/context/PanelContext';
 import { useAppContext } from '@/context/AppContext';
 import { useAuth } from '@/hooks/useAuth';
 import { usePanels } from '@/hooks/usePanels';
-import { useSelection } from '@/hooks/useSelection';
+import { useSelection } from '@/context/SelectionContext';
 import PlayerContainer from '@/components/player/PlayerContainer';
 import AddToProjectPanel from '@/components/panels/AddToProjectPanel';
 
