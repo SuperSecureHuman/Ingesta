@@ -62,28 +62,36 @@ def verify_password(plain: str, hashed: str) -> bool:
     return pwd_context.verify(plain, hashed)
 
 
+def create_jwt(payload: dict, expires_delta: timedelta) -> str:
+    """Generic JWT creation with expiry."""
+    now = datetime.now(timezone.utc)
+    payload = {**payload, "exp": int((now + expires_delta).timestamp())}
+    return pyjwt.encode(payload, settings.secret_key, algorithm=ALGORITHM)
+
+
+def decode_jwt(
+    token: str,
+    error_status: int = 401,
+    error_msg: str = "Invalid or expired token",
+) -> dict:
+    """Generic JWT decode; raises HTTPException on failure."""
+    try:
+        return pyjwt.decode(token, settings.secret_key, algorithms=[ALGORITHM])
+    except InvalidTokenError:
+        raise HTTPException(error_status, error_msg)
+
+
 def create_session_token(user_id: str, username: str, role: str, jti: str) -> str:
     """Create a JWT session token with a jti claim for server-side session tracking."""
-    now = datetime.now(timezone.utc)
-    expires = now + timedelta(hours=settings.session_expiry_hours)
-    payload = {
-        "user_id": user_id,
-        "username": username,
-        "role": role,
-        "jti": jti,
-        "exp": int(expires.timestamp()),
-    }
-    token = pyjwt.encode(payload, settings.secret_key, algorithm=ALGORITHM)
-    return token
+    return create_jwt(
+        {"user_id": user_id, "username": username, "role": role, "jti": jti},
+        timedelta(hours=settings.session_expiry_hours),
+    )
 
 
 def verify_session_token(token: str) -> dict:
     """Verify and decode session JWT token. Does NOT check server-side session validity."""
-    try:
-        payload = pyjwt.decode(token, settings.secret_key, algorithms=[ALGORITHM])
-        return payload
-    except InvalidTokenError:
-        raise HTTPException(401, "Invalid or expired session")
+    return decode_jwt(token, error_status=401, error_msg="Invalid or expired session")
 
 
 async def verify_session_token_full(token: str) -> dict:
@@ -151,6 +159,19 @@ def _get_client_ip(request: Request) -> Optional[str]:
     return request.client.host if request.client else None
 
 
+def set_session_cookie(response: Response, token: str) -> None:
+    """Set the session cookie on a response."""
+    response.set_cookie(
+        "session",
+        token,
+        httponly=True,
+        samesite="strict",
+        secure=True,
+        path="/",
+        max_age=settings.session_expiry_hours * 3600,
+    )
+
+
 @router.post("/login")
 async def login(req: LoginRequest, request: Request, response: Response):
     """Login with username and password. Returns JWT in HttpOnly cookie."""
@@ -177,15 +198,7 @@ async def login(req: LoginRequest, request: Request, response: Response):
         ip=ip,
     )
 
-    response.set_cookie(
-        "session",
-        token,
-        httponly=True,
-        samesite="strict",
-        secure=True,
-        path="/",
-        max_age=settings.session_expiry_hours * 3600,
-    )
+    set_session_cookie(response, token)
 
     return LoginResponse(username=user["username"], role=user["role"])
 

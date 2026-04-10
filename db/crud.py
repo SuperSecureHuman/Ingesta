@@ -650,16 +650,20 @@ async def get_all_users() -> List[Dict[str, Any]]:
     ]
 
 
+async def _update_user_field(user_id: str, field: str, value: Any) -> None:
+    await get_db().execute(
+        f"UPDATE users SET {field} = ? WHERE id = ?", (value, user_id)
+    )
+
+
 async def update_user_role(user_id: str, role: str) -> None:
     """Update a user's global role."""
-    db = get_db()
-    await db.execute("UPDATE users SET role = ? WHERE id = ?", (role, user_id))
+    await _update_user_field(user_id, "role", role)
 
 
 async def update_user_password(user_id: str, password_hash: str) -> None:
     """Update a user's password hash."""
-    db = get_db()
-    await db.execute("UPDATE users SET password_hash = ? WHERE id = ?", (password_hash, user_id))
+    await _update_user_field(user_id, "password_hash", password_hash)
 
 
 async def delete_user(user_id: str) -> None:
@@ -1230,21 +1234,17 @@ async def get_annotations_for_paths(file_paths: List[str]) -> Dict[str, Dict[str
 
 async def update_user_display_name(user_id: str, display_name: str) -> None:
     """Update a user's display name."""
-    db = get_db()
-    await db.execute("UPDATE users SET display_name = ? WHERE id = ?", (display_name, user_id))
+    await _update_user_field(user_id, "display_name", display_name)
 
 
 async def set_user_active(user_id: str, active: bool) -> None:
     """Suspend or reactivate a user account."""
-    db = get_db()
-    await db.execute("UPDATE users SET active = ? WHERE id = ?", (1 if active else 0, user_id))
+    await _update_user_field(user_id, "active", 1 if active else 0)
 
 
 async def record_login_success(user_id: str, ip: Optional[str], user_agent: Optional[str]) -> None:
     """Record a successful login: set last_login timestamp."""
-    db = get_db()
-    now = _now_iso()
-    await db.execute("UPDATE users SET last_login = ? WHERE id = ?", (now, user_id))
+    await _update_user_field(user_id, "last_login", _now_iso())
 
 
 async def get_all_users_full() -> List[Dict[str, Any]]:
@@ -1271,8 +1271,7 @@ async def get_all_users_full() -> List[Dict[str, Any]]:
 
 async def set_pwd_changed_at(user_id: str) -> None:
     """Record that the user's password was just changed."""
-    db = get_db()
-    await db.execute("UPDATE users SET pwd_changed_at = ? WHERE id = ?", (_now_iso(), user_id))
+    await _update_user_field(user_id, "pwd_changed_at", _now_iso())
 
 
 # ============================================================================

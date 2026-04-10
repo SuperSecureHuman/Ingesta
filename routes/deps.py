@@ -5,8 +5,11 @@ Shared dependencies: authentication, path validation, manager access.
 import re
 import secrets
 from pathlib import Path
-from typing import Optional
-from fastapi import Header, Cookie, HTTPException, Request, Depends
+from typing import Optional, TypeVar
+from urllib.parse import unquote
+from fastapi import Header, Cookie, HTTPException, Request, Depends, Query
+
+T = TypeVar("T")
 
 from config import settings
 from routes.auth import verify_session_token_full
@@ -132,3 +135,15 @@ def validate_path_boundary(path: str) -> str:
 def get_manager(request: Request):
     """Get the TranscodeManager singleton from app state."""
     return request.app.state.manager
+
+
+def or_404(resource: T | None, label: str) -> T:
+    """Return resource if truthy, else raise 404."""
+    if not resource:
+        raise HTTPException(status_code=404, detail=f"{label} not found")
+    return resource
+
+
+def decoded_path(path: str = Query(...)) -> str:
+    """Dependency: URL-decode the `path` query parameter."""
+    return unquote(path)

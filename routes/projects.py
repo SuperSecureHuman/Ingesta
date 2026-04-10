@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 from config import settings
 import db.crud as crud
 from routes.deps import require_auth, require_role, MEDIA_ROOT
+from routes.constants import VIDEO_EXTENSIONS
 from routes.utils import async_rglob
 
 
@@ -229,21 +230,6 @@ async def delete_project(
     )
     return {"status": "deleted"}
 
-
-# Video file extensions for bulk operations
-VIDEO_EXTENSIONS = {
-    ".mp4",
-    ".mkv",
-    ".avi",
-    ".mov",
-    ".m4v",
-    ".ts",
-    ".wmv",
-    ".flv",
-    ".webm",
-    ".mpeg",
-    ".mpg",
-}
 
 
 class BulkAddFolderRequest(BaseModel):

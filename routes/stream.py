@@ -22,7 +22,8 @@ from media.transcoder import (
 )
 from media.playlist import probe_media, compute_equal_length_segments, build_vod_playlist
 from media.thumbs import get_or_generate_thumb
-from routes.deps import validate_path, validate_session_id, get_manager, MEDIA_ROOT, require_auth
+from routes.deps import validate_path, validate_session_id, get_manager, MEDIA_ROOT, require_auth, decoded_path
+from routes.constants import VIDEO_EXTENSIONS
 from routes.utils import async_iterdir
 from logger import get_logger
 from db import crud
@@ -32,12 +33,11 @@ logger = get_logger("routes.stream")
 
 
 @router.get("/probe")
-async def probe(path: str = Query(...), stream_id: str = Query(None), _auth: str = Depends(require_auth)):
+async def probe(path: str = Depends(decoded_path), stream_id: str = Query(None), _auth: str = Depends(require_auth)):
     """Probe media file for duration, resolution, and bitrate."""
     try:
         if stream_id:
             validate_session_id(stream_id)
-        path = unquote(path)
         validate_path(path)
         info = await probe_media(path)
         return {
@@ -74,20 +74,7 @@ async def browse(path: str = Query("/"), _auth: str = Depends(require_auth)):
                     "path": str(entry),
                     "relative_path": str(entry.relative_to(MEDIA_ROOT)),
                     "is_dir": entry.is_dir(),
-                    "is_video": entry.suffix.lower()
-                    in {
-                        ".mp4",
-                        ".mkv",
-                        ".avi",
-                        ".mov",
-                        ".m4v",
-                        ".ts",
-                        ".wmv",
-                        ".flv",
-                        ".webm",
-                        ".mpeg",
-                        ".mpg",
-                    },
+                    "is_video": entry.suffix.lower() in VIDEO_EXTENSIONS,
                 }
             )
 
@@ -126,7 +113,7 @@ async def bitrate_tiers(bitrate: int = Query(None), height: int = Query(None), _
 @router.get("/playlist/{stream_id}/main.m3u8")
 async def get_playlist(
     stream_id: str,
-    path: str = Query(...),
+    path: str = Depends(decoded_path),
     quality: str = Query("720p"),
     segment_length: int = Query(6),
     _auth: str = Depends(require_auth),
@@ -134,7 +121,6 @@ async def get_playlist(
     """Generate VOD m3u8 playlist (pre-computed, no FFmpeg)."""
     try:
         validate_session_id(stream_id)
-        path = unquote(path)
         validate_path(path)
 
         # Validate quality
@@ -172,7 +158,7 @@ async def get_playlist(
 async def get_segment(
     stream_id: str,
     segment_id: int,
-    path: str = Query(...),
+    path: str = Depends(decoded_path),
     quality: str = Query("720p"),
     segment_length: int = Query(6),
     runtimeTicks: int = Query(None),
@@ -184,7 +170,6 @@ async def get_segment(
     """On-demand segment handler (core seeking + transcoding logic)."""
     try:
         validate_session_id(stream_id)
-        path = unquote(path)
         validate_path(path)
 
         # Concurrent stream guard (max 10 active FFmpeg processes)
@@ -419,10 +404,9 @@ async def capabilities(request: Request, _auth: str = Depends(require_auth)):
 
 
 @router.get("/thumb")
-async def get_thumb(path: str = Query(...), t: float = Query(0), w: int = Query(320, ge=1, le=1920), _auth: str = Depends(require_auth)):
+async def get_thumb(path: str = Depends(decoded_path), t: float = Query(0), w: int = Query(320, ge=1, le=1920), _auth: str = Depends(require_auth)):
     """Get or generate thumbnail at time offset t (seconds), width w."""
     try:
-        path = unquote(path)
         validate_path(path)
 
         thumb_path = await get_or_generate_thumb(path, t, w)
@@ -441,10 +425,9 @@ async def get_thumb(path: str = Query(...), t: float = Query(0), w: int = Query(
 
 
 @router.get("/poster")
-async def get_poster(path: str = Query(...), _auth: str = Depends(require_auth)):
+async def get_poster(path: str = Depends(decoded_path), _auth: str = Depends(require_auth)):
     """Get poster frame at 10% into video (or 10s min), width 640."""
     try:
-        path = unquote(path)
         validate_path(path)
 
         # Probe duration

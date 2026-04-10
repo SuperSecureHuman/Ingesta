@@ -14,14 +14,12 @@ import shutil
 from fastapi import APIRouter, Depends, HTTPException, Query, Header, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel
-import jwt as pyjwt
-from jwt import InvalidTokenError
 
 from config import settings
 import db.crud as crud
-from routes.deps import require_auth
+from routes.deps import require_auth, decoded_path
 from routes.luts import _extract_folder
-from routes.auth import pwd_context, hash_password, verify_password
+from routes.auth import pwd_context, hash_password, verify_password, create_jwt, decode_jwt
 from media.playlist import probe_media
 from media.transcoder import TICKS_PER_SECOND, BITRATE_TIERS
 from media.thumbs import get_or_generate_thumb
@@ -37,24 +35,15 @@ TOKEN_EXPIRE_HOURS = 24
 
 def create_access_token(share_id: str, project_id: str) -> str:
     """Create a JWT access token."""
-    now = datetime.now(timezone.utc)
-    expires = now + timedelta(hours=TOKEN_EXPIRE_HOURS)
-    payload = {
-        "share_id": share_id,
-        "project_id": project_id,
-        "exp": int(expires.timestamp()),
-    }
-    token = pyjwt.encode(payload, settings.secret_key, algorithm=ALGORITHM)
-    return token
+    return create_jwt(
+        {"share_id": share_id, "project_id": project_id},
+        timedelta(hours=TOKEN_EXPIRE_HOURS),
+    )
 
 
 def verify_token(token: str) -> dict:
     """Verify and decode JWT token (signature + expiry only)."""
-    try:
-        payload = pyjwt.decode(token, settings.secret_key, algorithms=[ALGORITHM])
-        return payload
-    except InvalidTokenError:
-        raise HTTPException(401, "Invalid or expired token")
+    return decode_jwt(token, error_status=401, error_msg="Invalid or expired token")
 
 
 async def verify_token_full(token: str) -> dict:
@@ -212,6 +201,16 @@ async def get_token_payload(authorization: Optional[str] = Header(None)) -> dict
     return await verify_token_full(token)
 
 
+def require_share_match(
+    share_id: str,
+    token: dict = Depends(get_token_payload),
+) -> dict:
+    """Verify the token's share_id matches the path parameter."""
+    if token["share_id"] != share_id:
+        raise HTTPException(status_code=403, detail="Token mismatch")
+    return token
+
+
 async def validate_file_in_project(project_id: str, file_path: str) -> str:
     """
     Validate that a file path belongs to the given project.
@@ -227,13 +226,9 @@ async def validate_file_in_project(project_id: str, file_path: str) -> str:
 @router.get("/{share_id}/files")
 async def list_share_files(
     share_id: str,
-    token: dict = Depends(get_token_payload),
+    token: dict = Depends(require_share_match),
 ):
     """List all files in the shared project, including annotations."""
-    # Verify token matches share
-    if token["share_id"] != share_id:
-        raise HTTPException(403, "Token mismatch")
-
     # Load project, share metadata, and files concurrently
     project, share, files = await asyncio.gather(
         crud.get_project(token["project_id"]),
@@ -279,15 +274,11 @@ async def list_share_files(
 @router.get("/{share_id}/probe")
 async def share_probe(
     share_id: str,
-    path: str = Query(...),
-    token: dict = Depends(get_token_payload),
+    path: str = Depends(decoded_path),
+    token: dict = Depends(require_share_match),
 ):
     """Probe file in shared project."""
-    if token["share_id"] != share_id:
-        raise HTTPException(403, "Token mismatch")
-
     try:
-        path = unquote(path)
         file_record = await crud.get_project_file_by_path(token["project_id"], path)
         if not file_record:
             raise HTTPException(403, "File not in project")
@@ -333,17 +324,13 @@ async def share_probe(
 async def share_playlist(
     share_id: str,
     stream_id: str,
-    path: str = Query(...),
+    path: str = Depends(decoded_path),
     quality: str = Query("720p"),
     segment_length: int = Query(6, ge=1, le=60),
-    token: dict = Depends(get_token_payload),
+    token: dict = Depends(require_share_match),
 ):
     """Generate HLS playlist for shared project file."""
-    if token["share_id"] != share_id:
-        raise HTTPException(403, "Token mismatch")
-
     try:
-        path = unquote(path)
         file_record = await crud.get_project_file_by_path(token["project_id"], path)
         if not file_record:
             raise HTTPException(403, "File not in project")
@@ -393,22 +380,18 @@ async def share_segment(
     share_id: str,
     stream_id: str,
     segment_id: int,
-    path: str = Query(...),
+    path: str = Depends(decoded_path),
     quality: str = Query("720p"),
     segment_length: int = Query(6, ge=1, le=60),
     runtimeTicks: int = Query(None),
     actualSegmentLengthTicks: int = Query(None),
-    token: dict = Depends(get_token_payload),
+    token: dict = Depends(require_share_match),
 ):
     """
     Stream segment for shared project file.
     Reuses transcoding infrastructure from main endpoints.
     """
-    if token["share_id"] != share_id:
-        raise HTTPException(403, "Token mismatch")
-
     try:
-        path = unquote(path)
         await validate_file_in_project(token["project_id"], path)
 
         # Delegate to main segment endpoint with same logic
@@ -543,17 +526,13 @@ async def share_segment(
 @router.get("/{share_id}/thumb")
 async def share_thumb(
     share_id: str,
-    path: str = Query(...),
+    path: str = Depends(decoded_path),
     t: float = Query(0),
     w: int = Query(320, ge=1, le=1920),
-    token: dict = Depends(get_token_payload),
+    token: dict = Depends(require_share_match),
 ):
     """Get thumbnail for shared project file."""
-    if token["share_id"] != share_id:
-        raise HTTPException(403, "Token mismatch")
-
     try:
-        path = unquote(path)
         await validate_file_in_project(token["project_id"], path)
 
         thumb_path = await get_or_generate_thumb(path, t, w)
@@ -574,15 +553,11 @@ async def share_thumb(
 @router.get("/{share_id}/download")
 async def share_download(
     share_id: str,
-    path: str = Query(...),
-    token: dict = Depends(get_token_payload),
+    path: str = Depends(decoded_path),
+    token: dict = Depends(require_share_match),
 ):
     """Download original file from shared project."""
-    if token["share_id"] != share_id:
-        raise HTTPException(403, "Token mismatch")
-
     try:
-        path = unquote(path)
         file_record = await crud.get_project_file_by_path(token["project_id"], path)
         if not file_record:
             raise HTTPException(403, "File not in project")
@@ -612,11 +587,9 @@ async def share_download(
 async def share_capabilities(
     share_id: str,
     request: Request,
-    token: dict = Depends(get_token_payload),
+    token: dict = Depends(require_share_match),
 ):
     """Return server capabilities for share viewers (same data as /api/capabilities)."""
-    if token["share_id"] != share_id:
-        raise HTTPException(403, "Token mismatch")
     luts = await crud.get_all_luts()
     return JSONResponse(
         content={
@@ -633,12 +606,9 @@ async def share_stop(
     share_id: str,
     stream_id: str,
     request: Request,
-    token: dict = Depends(get_token_payload),
+    token: dict = Depends(require_share_match),
 ):
     """Stop a transcoding session started by a share viewer."""
-    if token["share_id"] != share_id:
-        raise HTTPException(403, "Token mismatch")
-
     from routes.deps import validate_session_id
     validate_session_id(stream_id)
 

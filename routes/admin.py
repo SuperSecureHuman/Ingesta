@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 import db.crud as crud
 from config import settings
 from routes.auth import pwd_context, _get_client_ip
-from routes.deps import require_role
+from routes.deps import require_role, or_404
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -83,9 +83,7 @@ async def create_user(req: CreateUserRequest, request: Request, payload: dict = 
 @router.patch("/users/{user_id}", dependencies=[_require_admin])
 async def update_user(user_id: str, req: UpdateUserRequest, request: Request, payload: dict = Depends(require_role('admin'))):
     """Update a user's role, password, and/or display name."""
-    user = await crud.get_user(user_id)
-    if not user:
-        raise HTTPException(404, "User not found")
+    user = or_404(await crud.get_user(user_id), "User")
     if req.role is not None:
         if req.role not in VALID_ROLES:
             raise HTTPException(400, "role must be viewer, editor, or admin")
@@ -121,9 +119,7 @@ async def update_user(user_id: str, req: UpdateUserRequest, request: Request, pa
 @router.delete("/users/{user_id}")
 async def delete_user(user_id: str, request: Request, payload: dict = Depends(require_role('admin'))):
     """Delete a user. Cannot delete your own account. Cannot delete the last admin."""
-    user = await crud.get_user(user_id)
-    if not user:
-        raise HTTPException(404, "User not found")
+    user = or_404(await crud.get_user(user_id), "User")
     if user_id == payload.get("user_id"):
         raise HTTPException(400, "Cannot delete your own account")
     # Prevent deleting the last admin
@@ -144,9 +140,7 @@ async def delete_user(user_id: str, request: Request, payload: dict = Depends(re
 @router.patch("/users/{user_id}/status")
 async def set_user_status(user_id: str, req: SetStatusRequest, request: Request, payload: dict = Depends(require_role('admin'))):
     """Suspend or reactivate a user account."""
-    user = await crud.get_user(user_id)
-    if not user:
-        raise HTTPException(404, "User not found")
+    user = or_404(await crud.get_user(user_id), "User")
     await crud.set_user_active(user_id, req.active)
     action = "user.activate" if req.active else "user.suspend"
     await crud.write_audit(
@@ -160,9 +154,7 @@ async def set_user_status(user_id: str, req: SetStatusRequest, request: Request,
 @router.delete("/users/{user_id}/sessions", dependencies=[_require_admin])
 async def force_logout_user(user_id: str, request: Request, payload: dict = Depends(require_role('admin'))):
     """Revoke all sessions for a user (force logout)."""
-    user = await crud.get_user(user_id)
-    if not user:
-        raise HTTPException(404, "User not found")
+    user = or_404(await crud.get_user(user_id), "User")
     count = await crud.revoke_all_sessions(user_id)
     await crud.write_audit(
         payload["user_id"], payload["username"], "session.revoke_all",
@@ -176,9 +168,7 @@ async def force_logout_user(user_id: str, request: Request, payload: dict = Depe
 @router.get("/users/{user_id}/sessions", dependencies=[_require_admin])
 async def get_user_sessions(user_id: str):
     """List active sessions for a user."""
-    user = await crud.get_user(user_id)
-    if not user:
-        raise HTTPException(404, "User not found")
+    or_404(await crud.get_user(user_id), "User")
     sessions = await crud.get_user_sessions(user_id)
     return {"sessions": sessions}
 
@@ -190,9 +180,7 @@ async def get_user_audit(
     offset: int = Query(0, ge=0),
 ):
     """Audit log entries where this user is the actor or target."""
-    user = await crud.get_user(user_id)
-    if not user:
-        raise HTTPException(404, "User not found")
+    or_404(await crud.get_user(user_id), "User")
     entries = await crud.get_audit_log(limit=limit, offset=offset, actor_id=user_id)
     return {"entries": entries, "total": len(entries)}
 
@@ -200,9 +188,7 @@ async def get_user_audit(
 @router.get("/users/{user_id}/permissions", dependencies=[_require_admin])
 async def get_user_permissions(user_id: str):
     """List per-library permission overrides for a user."""
-    user = await crud.get_user(user_id)
-    if not user:
-        raise HTTPException(404, "User not found")
+    or_404(await crud.get_user(user_id), "User")
     perms = await crud.get_library_permissions_for_user(user_id)
     return {"permissions": perms}
 
@@ -212,12 +198,8 @@ async def set_permission(user_id: str, library_id: str, req: SetPermissionReques
     """Set a per-library permission override for a user."""
     if req.role not in VALID_PERM_ROLES:
         raise HTTPException(400, "role must be editor or viewer")
-    user = await crud.get_user(user_id)
-    if not user:
-        raise HTTPException(404, "User not found")
-    library = await crud.get_library(library_id)
-    if not library:
-        raise HTTPException(404, "Library not found")
+    or_404(await crud.get_user(user_id), "User")
+    or_404(await crud.get_library(library_id), "Library")
     await crud.set_library_permission(user_id, library_id, req.role)
     return {"status": "set", "user_id": user_id, "library_id": library_id, "role": req.role}
 
@@ -263,9 +245,7 @@ async def create_invite(req: CreateInviteRequest, request: Request, payload: dic
 @router.delete("/invites/{invite_id}")
 async def delete_invite(invite_id: str, request: Request, payload: dict = Depends(require_role('admin'))):
     """Revoke an unused invite."""
-    invite = await crud.get_invite(invite_id)
-    if not invite:
-        raise HTTPException(404, "Invite not found")
+    invite = or_404(await crud.get_invite(invite_id), "Invite")
     if invite["used_at"]:
         raise HTTPException(400, "Cannot delete an already-used invite")
     await crud.delete_invite(invite_id)

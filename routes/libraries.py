@@ -9,6 +9,8 @@ from urllib.parse import unquote
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from routes.constants import VIDEO_EXTENSIONS
+
 from config import settings
 import db.crud as crud
 from routes.deps import require_auth, require_role, require_library_access
@@ -121,20 +123,7 @@ async def browse_library(
                     "path": str(entry),
                     "relative_path": str(entry.relative_to(root)),
                     "is_dir": entry.is_dir(),
-                    "is_video": entry.suffix.lower()
-                    in {
-                        ".mp4",
-                        ".mkv",
-                        ".avi",
-                        ".mov",
-                        ".m4v",
-                        ".ts",
-                        ".wmv",
-                        ".flv",
-                        ".webm",
-                        ".mpeg",
-                        ".mpg",
-                    },
+                    "is_video": entry.suffix.lower() in VIDEO_EXTENSIONS,
                 }
             )
 

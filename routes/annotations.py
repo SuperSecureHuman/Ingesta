@@ -18,7 +18,7 @@ from pydantic import BaseModel, Field
 
 import db.crud as crud
 from db import get_db
-from routes.deps import require_role, validate_path_boundary
+from routes.deps import require_role, validate_path_boundary, or_404
 
 # ── Routers ───────────────────────────────────────────────────────────────────
 
@@ -116,13 +116,8 @@ async def path_remove_file_tag(
 ):
     validate_path_boundary(path)
     removed = await crud.remove_file_tag(path, tag)
-    if not removed:
-        raise HTTPException(404, "Tag not found on this file")
-    return {"ok": True}
-
-
-# Rating
-@path_router.get("/file/rating")
+    or_404(removed, "Tag")
+    return {"ok": True}.get("/file/rating")
 async def path_get_file_rating(
     path: str = Query(...),
     _auth: dict = Depends(require_role('viewer')),
@@ -173,8 +168,7 @@ async def path_delete_file_comment(
     _auth: dict = Depends(require_role('editor')),
 ):
     removed = await crud.delete_file_comment(comment_id)
-    if not removed:
-        raise HTTPException(404, "Comment not found")
+    or_404(removed, "Comment")
     return {"ok": True}
 
 
@@ -210,14 +204,10 @@ async def path_update_file_marker(
 ):
     validate_path_boundary(path)
     existing_markers = await crud.get_file_markers(path)
-    marker = next((m for m in existing_markers if m["id"] == marker_id), None)
-    if not marker:
-        raise HTTPException(404, "Marker not found")
+    marker = or_404(next((m for m in existing_markers if m["id"] == marker_id), None), "Marker")
     label = req.label.strip() if req.label is not None else marker["label"]
     color = req.color if req.color is not None else marker["color"]
-    updated = await crud.update_file_marker(marker_id, label, color)
-    if not updated:
-        raise HTTPException(404, "Marker not found")
+    updated = or_404(await crud.update_file_marker(marker_id, label, color), "Marker")
     return updated
 
 
@@ -227,8 +217,7 @@ async def path_delete_file_marker(
     _auth: dict = Depends(require_role('editor')),
 ):
     removed = await crud.delete_file_marker(marker_id)
-    if not removed:
-        raise HTTPException(404, "Marker not found")
+    or_404(removed, "Marker")
     return {"ok": True}
 
 
@@ -267,12 +256,8 @@ async def remove_file_tag(
 ):
     path = await _path_for_file_id(file_id)
     removed = await crud.remove_file_tag(path, tag)
-    if not removed:
-        raise HTTPException(404, "Tag not found on this file")
+    or_404(removed, "Tag")
     return {"ok": True}
-
-
-@file_router.put("/{file_id}/rating")
 async def set_file_rating(
     file_id: str,
     req: SetRatingRequest,
@@ -310,8 +295,7 @@ async def delete_file_comment(
     _auth: dict = Depends(require_role('editor')),
 ):
     removed = await crud.delete_file_comment(comment_id)
-    if not removed:
-        raise HTTPException(404, "Comment not found")
+    or_404(removed, "Comment")
     return {"ok": True}
 
 
@@ -342,14 +326,10 @@ async def update_file_marker(
 ):
     path = await _path_for_file_id(file_id)
     existing_markers = await crud.get_file_markers(path)
-    marker = next((m for m in existing_markers if m["id"] == marker_id), None)
-    if not marker:
-        raise HTTPException(404, "Marker not found")
+    marker = or_404(next((m for m in existing_markers if m["id"] == marker_id), None), "Marker")
     label = req.label.strip() if req.label is not None else marker["label"]
     color = req.color if req.color is not None else marker["color"]
-    updated = await crud.update_file_marker(marker_id, label, color)
-    if not updated:
-        raise HTTPException(404, "Marker not found")
+    updated = or_404(await crud.update_file_marker(marker_id, label, color), "Marker")
     return updated
 
 
@@ -359,6 +339,5 @@ async def delete_file_marker(
     _auth: dict = Depends(require_role('editor')),
 ):
     removed = await crud.delete_file_marker(marker_id)
-    if not removed:
-        raise HTTPException(404, "Marker not found")
+    or_404(removed, "Marker")
     return {"ok": True}
