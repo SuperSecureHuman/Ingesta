@@ -12,6 +12,7 @@ import { usePanels } from '@/hooks/usePanels';
 import { useSelection } from '@/context/SelectionContext';
 import PlayerContainer from '@/components/player/PlayerContainer';
 import AddToProjectPanel from '@/components/panels/AddToProjectPanel';
+import { PageSpinner } from '@/components/ui/PageSpinner';
 
 function HomePageInner() {
   const { activePanel, openPanel, closePanel } = usePanels();
@@ -24,11 +25,7 @@ function HomePageInner() {
 
   return (
     <>
-      {!dataReady && (
-        <div className="flex items-center justify-center min-h-screen">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-        </div>
-      )}
+      {!dataReady && <PageSpinner />}
       <div className={dataReady ? '' : 'hidden'}>
         <PanelContextProvider openPanel={openPanel} closePanel={closePanel} activePanel={activePanel}>
           <div className="p-6">
@@ -65,11 +62,7 @@ export default function Home() {
   }, [checkAuth, setCurrentUser]);
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-      </div>
-    );
+    return <PageSpinner />;
   }
 
   if (!currentUser) {

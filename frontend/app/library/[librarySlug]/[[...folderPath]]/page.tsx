@@ -1,9 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import { useAppContext } from '@/context/AppContext';
-import { useAuth } from '@/hooks/useAuth';
+import { useCallback, useState } from 'react';
+import { useParams } from 'next/navigation';
 import { usePanels } from '@/hooks/usePanels';
 import { useSelection } from '@/context/SelectionContext';
 import LibraryView from '@/components/views/LibraryView';
@@ -12,6 +10,8 @@ import { LutContextProvider } from '@/context/LutContext';
 import { PanelContextProvider } from '@/context/PanelContext';
 import PlayerContainer from '@/components/player/PlayerContainer';
 import AddToProjectPanel from '@/components/panels/AddToProjectPanel';
+import { PageSpinner } from '@/components/ui/PageSpinner';
+import { useRequireAuth } from '@/hooks/useRequireAuth';
 
 function LibraryPageInner({ librarySlug, folderPath }: { librarySlug: string; folderPath: string[] }) {
   const { activePanel, openPanel, closePanel } = usePanels();
@@ -29,11 +29,7 @@ function LibraryPageInner({ librarySlug, folderPath }: { librarySlug: string; fo
 
   return (
     <>
-      {!dataReady && (
-        <div className="flex items-center justify-center min-h-screen">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-        </div>
-      )}
+      {!dataReady && <PageSpinner />}
       <div className={dataReady ? '' : 'hidden'}>
         <PanelContextProvider openPanel={openPanel} closePanel={closePanel} activePanel={activePanel}>
           <div className="p-6">
@@ -62,35 +58,13 @@ export default function LibraryPage() {
   const params = useParams();
   const librarySlug = params.librarySlug as string;
   const folderPath = params.folderPath as string[] | undefined;
-  const router = useRouter();
-  const { currentUser, setCurrentUser } = useAppContext();
-  const { checkAuth } = useAuth();
-  const [isLoading, setIsLoading] = useState(currentUser === null);
-
-  useEffect(() => {
-    if (currentUser) return;
-    const initAuth = async () => {
-      const user = await checkAuth();
-      if (user) {
-        setCurrentUser(user);
-      } else {
-        router.replace('/');
-      }
-      setIsLoading(false);
-    };
-    initAuth();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const { user, isLoading } = useRequireAuth();
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-      </div>
-    );
+    return <PageSpinner />;
   }
 
-  if (!currentUser) return null;
+  if (!user) return null;
 
   return (
     <LutContextProvider>

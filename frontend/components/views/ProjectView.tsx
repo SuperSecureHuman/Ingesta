@@ -20,6 +20,7 @@ import TagInput from '@/components/custom/TagInput';
 import StarRating from '@/components/custom/StarRating';
 import { motion } from 'framer-motion';
 import { gridContainer, gridItem } from '@/lib/animations';
+import { EmptyState } from '@/components/ui/EmptyState';
 
 interface ProjectViewProps {
   projectId: string;
@@ -230,15 +231,11 @@ export default function ProjectView({ projectId, onReady }: ProjectViewProps) {
 
       <motion.div key={`files-${files.length}`} className="grid-cards" variants={gridContainer} initial="hidden" animate="show">
         {!loading && files.length === 0 ? (
-          <div className="col-span-full flex flex-col items-center justify-center py-20 gap-3 text-center">
-            <div className="rounded-full bg-zinc-800/50 p-4">
-              <Film className="h-7 w-7 text-muted-foreground" />
-            </div>
-            <div>
-              <p className="text-sm font-medium text-foreground">No files in this project</p>
-              <p className="text-xs text-muted-foreground mt-0.5">Browse a library to add footage</p>
-            </div>
-          </div>
+          <EmptyState
+            icon={<Film className="h-7 w-7 text-muted-foreground" />}
+            title="No files in this project"
+            subtitle="Browse a library to add footage"
+          />
         ) : visibleFiles.length === 0 ? (
           <div className="col-span-full text-center py-12 text-muted-foreground text-sm">
             No files match the current filter.

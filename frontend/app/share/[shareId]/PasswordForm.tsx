@@ -66,10 +66,10 @@ export function PasswordForm({ shareId, onSuccess, onError }: PasswordFormProps)
   );
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
-      <div style={{ textAlign: 'center', maxWidth: '400px' }}>
-        <h1>Shared Footage</h1>
-        <p style={{ color: '#999', marginBottom: '24px' }}>Enter the password to view this share</p>
+    <div className="flex items-center justify-center h-screen">
+      <div className="text-center max-w-[400px] w-full px-4">
+        <h1 className="text-2xl font-bold mb-2">Shared Footage</h1>
+        <p className="text-muted-foreground mb-6">Enter the password to view this share</p>
 
         <form onSubmit={submitPassword}>
           <input
@@ -78,21 +78,11 @@ export function PasswordForm({ shareId, onSuccess, onError }: PasswordFormProps)
             placeholder="Password"
             autoFocus
             disabled={loading}
-            style={{
-              width: '100%',
-              padding: '12px',
-              marginBottom: '12px',
-              background: '#222',
-              border: '1px solid #444',
-              borderRadius: '4px',
-              color: '#fff',
-              fontSize: '16px',
-              boxSizing: 'border-box',
-            }}
+            className="w-full p-3 mb-3 bg-zinc-800 border border-zinc-600 rounded text-white text-base box-border focus:outline-none focus:border-primary disabled:opacity-50"
           />
 
           {passwordError && (
-            <div style={{ color: '#ff6b6b', marginBottom: '12px', fontSize: '14px' }}>
+            <div className="text-destructive mb-3 text-sm">
               {passwordError}
             </div>
           )}
@@ -100,16 +90,7 @@ export function PasswordForm({ shareId, onSuccess, onError }: PasswordFormProps)
           <button
             type="submit"
             disabled={loading}
-            style={{
-              width: '100%',
-              padding: '12px',
-              background: loading ? '#444' : '#e5a00d',
-              color: '#000',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: loading ? 'not-allowed' : 'pointer',
-              fontWeight: 'bold',
-            }}
+            className="w-full p-3 rounded font-bold text-black transition-colors bg-primary hover:bg-primary/90 disabled:bg-zinc-600 disabled:text-zinc-400 disabled:cursor-not-allowed"
           >
             {loading ? 'Checking...' : 'Unlock'}
           </button>

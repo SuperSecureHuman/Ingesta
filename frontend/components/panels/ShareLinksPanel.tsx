@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import PanelShell from './PanelShell';
+import { useClipboardCopy } from '@/hooks/useClipboardCopy';
 
 interface Share {
   id: string;
@@ -28,6 +29,8 @@ export default function ShareLinksPanel({
   const [shares, setShares] = useState<Share[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  const { copy } = useClipboardCopy();
 
   const loadShares = useCallback(async () => {
     if (!currentProjectId) return;
@@ -55,13 +58,8 @@ export default function ShareLinksPanel({
     }
   }, [isOpen, loadShares]);
 
-  const handleCopy = async (url: string) => {
-    try {
-      await navigator.clipboard.writeText(url);
-      toast.success('Link copied to clipboard!');
-    } catch {
-      toast.error('Failed to copy link');
-    }
+  const handleCopy = (url: string) => {
+    copy('link', url);
   };
 
   const handleRevoke = async (shareId: string) => {

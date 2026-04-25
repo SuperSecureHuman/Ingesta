@@ -4,12 +4,13 @@ import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { apiFetch } from '@/lib/api';
 import { toast } from 'sonner';
-import { getStrength, STRENGTH_COLORS, formatExpiry } from '@/lib/utils';
+import { formatExpiry } from '@/lib/utils';
 import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { PasswordStrengthMeter } from '@/components/ui/PasswordStrengthMeter';
 
 export default function InvitePage() {
   const router = useRouter();
@@ -24,8 +25,6 @@ export default function InvitePage() {
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [submitting, setSubmitting] = useState(false);
-
-  const strength = getStrength(password);
 
   useEffect(() => {
     const validate = async () => {
@@ -141,21 +140,7 @@ export default function InvitePage() {
                   className="h-9"
                   autoComplete="new-password"
                 />
-                {password && (
-                  <div className="space-y-1 pt-0.5">
-                    <div className="flex gap-0.5 h-1">
-                      {[1, 2, 3, 4, 5].map((i) => (
-                        <div
-                          key={i}
-                          className={`flex-1 rounded-full transition-colors duration-200 ${
-                            strength.score >= i ? STRENGTH_COLORS[strength.score] : 'bg-zinc-700'
-                          }`}
-                        />
-                      ))}
-                    </div>
-                    <p className="text-[10px] text-muted-foreground">{strength.label}</p>
-                  </div>
-                )}
+                {password && <PasswordStrengthMeter password={password} />}
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Confirm password</Label>

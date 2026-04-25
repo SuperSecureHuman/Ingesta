@@ -22,6 +22,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle,
 } from '@/components/ui/sheet';
+import { useClipboardCopy } from '@/hooks/useClipboardCopy';
 
 function getInviteStatus(invite: Invite): { label: string; classes: string } {
   if (invite.used_at) return { label: 'Used', classes: 'bg-zinc-500/15 text-zinc-400 border-zinc-500/30' };
@@ -36,8 +37,8 @@ export default function SettingsInvitesTab() {
   const [loading, setLoading] = useState(true);
   const [showAllInvites, setShowAllInvites] = useState(false);
   const [showNewPanel, setShowNewPanel] = useState(false);
+  const { copy, copiedId } = useClipboardCopy();
   const [revokeTarget, setRevokeTarget] = useState<string | null>(null);
-  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   // New invite form
   const [newRole, setNewRole] = useState<Role>('viewer');
@@ -65,10 +66,7 @@ export default function SettingsInvitesTab() {
   }, [showAllInvites]);
 
   const handleCopy = (id: string, link: string) => {
-    navigator.clipboard.writeText(link).then(() => {
-      setCopiedId(id);
-      setTimeout(() => setCopiedId(null), 2000);
-    });
+    copy(id, link);
   };
 
   const handleRevoke = async () => {

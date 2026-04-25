@@ -3,11 +3,12 @@
 import { useState } from 'react';
 import { apiFetch } from '@/lib/api';
 import { toast } from 'sonner';
-import { Eye, EyeOff, Loader2 } from 'lucide-react';
+import { Eye, EyeOff, Loader2, Check, Copy } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import PanelShell from './PanelShell';
+import { useClipboardCopy } from '@/hooks/useClipboardCopy';
 
 interface CreateSharePanelProps {
   isOpen: boolean;
@@ -31,6 +32,7 @@ export default function CreateSharePanel({
     url: string;
     expiresAt: string | null;
   } | null>(null);
+  const { copy, copiedId } = useClipboardCopy();
 
   const handleSubmit = async () => {
     if (!password.trim()) {
@@ -77,17 +79,6 @@ export default function CreateSharePanel({
     }
   };
 
-  const handleCopyLink = async () => {
-    if (shareLink) {
-      try {
-        await navigator.clipboard.writeText(shareLink.url);
-        toast.success('Link copied to clipboard!');
-      } catch {
-        toast.error('Failed to copy link');
-      }
-    }
-  };
-
   const handleDone = () => {
     setPassword('');
     setExpiryDays('');
@@ -106,8 +97,9 @@ export default function CreateSharePanel({
             <Input readOnly value={shareLink.url} className="font-mono text-xs text-green-400" />
           </div>
 
-          <Button className="w-full" onClick={handleCopyLink}>
-            Copy Link
+          <Button className="w-full" onClick={() => shareLink && copy('share', shareLink.url)}>
+            {copiedId === 'share' ? <Check className="h-4 w-4 mr-2" /> : <Copy className="h-4 w-4 mr-2" />}
+            {copiedId === 'share' ? 'Copied!' : 'Copy Link'}
           </Button>
 
           <p className="text-xs text-muted-foreground">

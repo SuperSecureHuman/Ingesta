@@ -17,6 +17,7 @@ import CreateLibraryPanel from '@/components/panels/CreateLibraryPanel';
 import CreateProjectPanel from '@/components/panels/CreateProjectPanel';
 import { motion } from 'framer-motion';
 import { gridContainer, gridItem } from '@/lib/animations';
+import { EmptyState } from '@/components/ui/EmptyState';
 
 export default function HomeView({ onReady }: { onReady?: () => void }) {
   const [libraries, setLibraries] = useState<Library[]>([]);
@@ -102,18 +103,12 @@ export default function HomeView({ onReady }: { onReady?: () => void }) {
       </div>
       <motion.div key={`libs-${libraries.length}`} className="grid-cards" variants={gridContainer} initial="hidden" animate="show">
         {!loading && libraries.length === 0 ? (
-          <div className="col-span-full flex flex-col items-center justify-center py-20 gap-3 text-center">
-            <div className="rounded-full bg-zinc-800/50 p-4">
-              <LibraryIcon className="h-7 w-7 text-muted-foreground" />
-            </div>
-            <div>
-              <p className="text-sm font-medium text-foreground">No libraries</p>
-              <p className="text-xs text-muted-foreground mt-0.5">Create a library to start organizing footage</p>
-            </div>
-            {isAdmin() && (
-              <Button size="sm" variant="outline" onClick={() => openPanel('createLibrary')}>+ New Library</Button>
-            )}
-          </div>
+          <EmptyState
+            icon={<LibraryIcon className="h-7 w-7 text-muted-foreground" />}
+            title="No libraries"
+            subtitle="Create a library to start organizing footage"
+            action={isAdmin() && <Button size="sm" variant="outline" onClick={() => openPanel('createLibrary')}>+ New Library</Button>}
+          />
         ) : (
           libraries.map((lib) => (
             <motion.div key={lib.id} variants={gridItem}>
@@ -137,18 +132,12 @@ export default function HomeView({ onReady }: { onReady?: () => void }) {
       </div>
       <motion.div key={`projs-${projects.length}`} className="grid-cards" variants={gridContainer} initial="hidden" animate="show">
         {!loading && projects.length === 0 ? (
-          <div className="col-span-full flex flex-col items-center justify-center py-20 gap-3 text-center">
-            <div className="rounded-full bg-zinc-800/50 p-4">
-              <Clapperboard className="h-7 w-7 text-muted-foreground" />
-            </div>
-            <div>
-              <p className="text-sm font-medium text-foreground">No projects</p>
-              <p className="text-xs text-muted-foreground mt-0.5">Create a project to group files for review</p>
-            </div>
-            {canEdit() && (
-              <Button size="sm" variant="outline" onClick={() => openPanel('createProject')}>+ New Project</Button>
-            )}
-          </div>
+          <EmptyState
+            icon={<Clapperboard className="h-7 w-7 text-muted-foreground" />}
+            title="No projects"
+            subtitle="Create a project to group files for review"
+            action={canEdit() && <Button size="sm" variant="outline" onClick={() => openPanel('createProject')}>+ New Project</Button>}
+          />
         ) : (
           projects.map((proj) => (
             <motion.div key={proj.id} variants={gridItem}>

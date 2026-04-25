@@ -22,6 +22,7 @@ import SelectionToolbar from '@/components/custom/SelectionToolbar';
 import PanelShell from '@/components/panels/PanelShell';
 import { motion } from 'framer-motion';
 import { gridContainer, gridItem } from '@/lib/animations';
+import { EmptyState } from '@/components/ui/EmptyState';
 
 interface LibraryViewProps {
   librarySlug: string;
@@ -402,14 +403,10 @@ export default function LibraryView({
       </div>
       <motion.div key={files?.path ?? 'empty'} className="grid-cards" variants={gridContainer} initial="hidden" animate="show">
         {!loading && files.entries.length === 0 ? (
-          <div className="col-span-full flex flex-col items-center justify-center py-20 gap-3 text-center">
-            <div className="rounded-full bg-zinc-800/50 p-4">
-              <FolderOpen className="h-7 w-7 text-muted-foreground" />
-            </div>
-            <div>
-              <p className="text-sm font-medium text-foreground">This folder is empty</p>
-            </div>
-          </div>
+          <EmptyState
+            icon={<FolderOpen className="h-7 w-7 text-muted-foreground" />}
+            title="This folder is empty"
+          />
         ) : (
           files.entries.filter((e) => e.is_dir || e.is_video).map((entry) => (
             <motion.div key={entry.path} variants={gridItem}>

@@ -4,13 +4,13 @@ import { useState } from 'react';
 import { apiFetch } from '@/lib/api';
 import { toast } from 'sonner';
 import { Role } from '@/lib/types';
-import { getStrength, STRENGTH_COLORS } from '@/lib/utils';
 import { Loader2, Copy, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { PasswordStrengthMeter } from '@/components/ui/PasswordStrengthMeter';
 
 interface Props {
   open: boolean;
@@ -36,8 +36,6 @@ export default function CreateUserModal({ open, onClose, mode, onSuccess }: Prop
   const [generatedLink, setGeneratedLink] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [generating, setGenerating] = useState(false);
-
-  const strength = getStrength(password);
 
   const reset = () => {
     setUsername(''); setDisplayName(''); setPassword(''); setConfirm('');
@@ -208,21 +206,7 @@ export default function CreateUserModal({ open, onClose, mode, onSuccess }: Prop
                 required
                 className="h-9"
               />
-              {password && (
-                <div className="space-y-1 pt-0.5">
-                  <div className="flex gap-0.5 h-1">
-                    {[1, 2, 3, 4, 5].map((i) => (
-                      <div
-                        key={i}
-                        className={`flex-1 rounded-full transition-colors duration-200 ${
-                          strength.score >= i ? STRENGTH_COLORS[strength.score] : 'bg-zinc-700'
-                        }`}
-                      />
-                    ))}
-                  </div>
-                  <p className="text-[10px] text-muted-foreground">{strength.label}</p>
-                </div>
-              )}
+              {password && <PasswordStrengthMeter password={password} />}
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Confirm password</Label>

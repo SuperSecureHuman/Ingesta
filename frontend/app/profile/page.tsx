@@ -7,13 +7,16 @@ import { toast } from 'sonner';
 import { useAppContext } from '@/context/AppContext';
 import { useAuth } from '@/hooks/useAuth';
 import { Session } from '@/lib/types';
-import { getStrength, STRENGTH_COLORS, ROLE_COLORS, formatRelative } from '@/lib/utils';
+import { ROLE_COLORS, formatRelative } from '@/lib/utils';
 import { Loader2, Monitor, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { PageSpinner } from '@/components/ui/PageSpinner';
+import { PasswordStrengthMeter } from '@/components/ui/PasswordStrengthMeter';
+import { useRequireAuth } from '@/hooks/useRequireAuth';
 
 function parseUserAgent(ua: string | null): string {
   if (!ua) return 'Unknown device';
@@ -26,9 +29,9 @@ function parseUserAgent(ua: string | null): string {
 
 export default function ProfilePage() {
   const router = useRouter();
-  const { currentUser, setCurrentUser } = useAppContext();
+  const { setCurrentUser } = useAppContext();
   const { checkAuth } = useAuth();
-  const [isLoading, setIsLoading] = useState(true);
+  const { user, isLoading } = useRequireAuth();
 
   // Identity
   const [displayName, setDisplayName] = useState('');
@@ -39,28 +42,12 @@ export default function ProfilePage() {
   const [newPwd, setNewPwd] = useState('');
   const [confirmPwd, setConfirmPwd] = useState('');
   const [savingPwd, setSavingPwd] = useState(false);
-
-  // Sessions
   const [sessions, setSessions] = useState<Session[]>([]);
   const [sessionsLoading, setSessLoading] = useState(false);
 
-  const strength = getStrength(newPwd);
-
   useEffect(() => {
-    const init = async () => {
-      const user = await checkAuth();
-      if (user) {
-        setCurrentUser(user);
-        setDisplayName(user.display_name ?? '');
-      } else {
-        router.replace('/');
-        return;
-      }
-      setIsLoading(false);
-    };
-    init();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (user) setDisplayName(user.display_name ?? '');
+  }, [user]);
 
   const loadSessions = useCallback(async () => {
     setSessLoading(true);
@@ -143,11 +130,7 @@ export default function ProfilePage() {
   };
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <PageSpinner />;
   }
 
   return (
@@ -178,13 +161,13 @@ export default function ProfilePage() {
           <div className="flex items-center justify-between">
             <div>
               <Label className="text-xs">Username</Label>
-              <p className="text-sm font-mono mt-0.5">{currentUser?.username}</p>
+              <p className="text-sm font-mono mt-0.5">{user?.username}</p>
             </div>
             <div>
               <Label className="text-xs">Role</Label>
               <div className="mt-0.5">
-                <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${currentUser?.role ? ROLE_COLORS[currentUser.role] : ''}`}>
-                  {currentUser?.role}
+                <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${user?.role ? ROLE_COLORS[user.role] : ''}`}>
+                  {user?.role}
                 </Badge>
               </div>
             </div>
@@ -217,21 +200,7 @@ export default function ProfilePage() {
               required
               className="h-9"
             />
-            {newPwd && (
-              <div className="space-y-1 pt-0.5">
-                <div className="flex gap-0.5 h-1">
-                  {[1, 2, 3, 4, 5].map((i) => (
-                    <div
-                      key={i}
-                      className={`flex-1 rounded-full transition-colors duration-200 ${
-                        strength.score >= i ? STRENGTH_COLORS[strength.score] : 'bg-zinc-700'
-                      }`}
-                    />
-                  ))}
-                </div>
-                <p className="text-[10px] text-muted-foreground">{strength.label}</p>
-              </div>
-            )}
+            {newPwd && <PasswordStrengthMeter password={newPwd} />}
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs">Confirm new password</Label>
