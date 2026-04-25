@@ -3,7 +3,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { apiFetch } from '@/lib/api';
 import { toast } from 'sonner';
-import { AdminUser, Session, Library, Role } from '@/lib/types';
+import { AdminUser, Session, Library } from '@/lib/types';
+import { formatRelative } from '@/lib/utils';
 import { Loader2, X, Monitor } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,16 +25,6 @@ interface LibraryPermission {
   library_id: string;
   role: 'editor' | 'viewer';
   created_at: string;
-}
-
-function formatRelative(iso: string | null): string {
-  if (!iso) return 'Never';
-  const diff = Date.now() - new Date(iso).getTime();
-  const days = Math.floor(diff / 86400000);
-  if (days === 0) return 'Today';
-  if (days === 1) return 'Yesterday';
-  if (days < 30) return `${days} days ago`;
-  return new Date(iso).toLocaleDateString();
 }
 
 function parseUserAgent(ua: string | null): string {

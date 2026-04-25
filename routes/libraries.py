@@ -13,7 +13,7 @@ from routes.constants import VIDEO_EXTENSIONS
 
 from config import settings
 import db.crud as crud
-from routes.deps import require_auth, require_role, require_library_access
+from routes.deps import require_auth, require_role, require_library_access, or_404
 from routes.utils import async_iterdir
 
 
@@ -76,9 +76,7 @@ async def get_library(
     _auth: dict = Depends(require_role('viewer')),
 ):
     """Get a single library's details."""
-    library = await crud.get_library(library_id)
-    if not library:
-        raise HTTPException(404, "Library not found")
+    library = or_404(await crud.get_library(library_id), "Library")
     return library
 
 
@@ -88,9 +86,7 @@ async def delete_library(
     _auth: dict = Depends(require_role('admin')),
 ):
     """Delete a library."""
-    library = await crud.get_library(library_id)
-    if not library:
-        raise HTTPException(404, "Library not found")
+    library = or_404(await crud.get_library(library_id), "Library")
 
     await crud.delete_library(library_id)
     return {"status": "deleted"}
@@ -103,9 +99,7 @@ async def browse_library(
     _auth: dict = Depends(require_library_access('viewer')),
 ):
     """Browse files in a library (scoped to library's root_path)."""
-    library = await crud.get_library(library_id)
-    if not library:
-        raise HTTPException(404, "Library not found")
+    library = or_404(await crud.get_library(library_id), "Library")
 
     try:
         path = unquote(path)

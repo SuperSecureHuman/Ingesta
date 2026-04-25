@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 
 from config import settings
 import db.crud as crud
-from routes.deps import require_auth, require_role, MEDIA_ROOT
+from routes.deps import require_auth, require_role, MEDIA_ROOT, or_404
 from routes.constants import VIDEO_EXTENSIONS
 from routes.utils import async_rglob
 
@@ -51,9 +51,7 @@ async def create_project(
     """Create a new project."""
     # If library_id is provided, verify it exists
     if req.library_id:
-        library = await crud.get_library(req.library_id)
-        if not library:
-            raise HTTPException(404, "Library not found")
+        or_404(await crud.get_library(req.library_id), "Library")
 
     project_id = await crud.create_project(name=req.name, library_id=req.library_id)
     await crud.write_audit(
@@ -69,9 +67,7 @@ async def get_project(
     _auth: dict = Depends(require_role('viewer')),
 ):
     """Get project details and file list with metadata."""
-    project = await crud.get_project(project_id)
-    if not project:
-        raise HTTPException(404, "Project not found")
+    project = or_404(await crud.get_project(project_id), "Project")
 
     files = await crud.get_project_files(project_id)
     if files:
@@ -99,9 +95,7 @@ async def add_files_to_project(
     auth: dict = Depends(require_role('editor')),
 ):
     """Add files to a project (paths are marked as pending scan)."""
-    project = await crud.get_project(project_id)
-    if not project:
-        raise HTTPException(404, "Project not found")
+    project = or_404(await crud.get_project(project_id), "Project")
 
     added = 0
     errors = []
@@ -172,9 +166,7 @@ async def remove_files_from_project(
     auth: dict = Depends(require_role('editor')),
 ):
     """Remove files from a project."""
-    project = await crud.get_project(project_id)
-    if not project:
-        raise HTTPException(404, "Project not found")
+    project = or_404(await crud.get_project(project_id), "Project")
 
     removed = 0
     # Fetch all files once before the loop
@@ -218,9 +210,7 @@ async def delete_project(
     auth: dict = Depends(require_role('editor')),
 ):
     """Delete a project and all its files."""
-    project = await crud.get_project(project_id)
-    if not project:
-        raise HTTPException(404, "Project not found")
+    project = or_404(await crud.get_project(project_id), "Project")
 
     await crud.delete_project(project_id)
     await crud.write_audit(
@@ -249,9 +239,7 @@ async def add_folder_to_project(
     _auth: dict = Depends(require_role('editor')),
 ):
     """Add all video files from a folder (recursively) to a project."""
-    project = await crud.get_project(project_id)
-    if not project:
-        raise HTTPException(404, "Project not found")
+    project = or_404(await crud.get_project(project_id), "Project")
 
     folder = Path(req.folder_path).resolve()
 
@@ -314,13 +302,8 @@ async def add_library_to_project(
     _auth: dict = Depends(require_role('editor')),
 ):
     """Add all video files from a library (recursively) to a project."""
-    project = await crud.get_project(project_id)
-    if not project:
-        raise HTTPException(404, "Project not found")
-
-    library = await crud.get_library(req.library_id)
-    if not library:
-        raise HTTPException(404, "Library not found")
+    project = or_404(await crud.get_project(project_id), "Project")
+    library = or_404(await crud.get_library(req.library_id), "Library")
 
     root = Path(library["root_path"]).resolve()
     if not root.exists():

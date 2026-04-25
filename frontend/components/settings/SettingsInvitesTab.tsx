@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { apiFetch } from '@/lib/api';
 import { toast } from 'sonner';
 import { Invite, Role } from '@/lib/types';
+import { ROLE_COLORS, formatExpiry } from '@/lib/utils';
 import { Loader2, Copy, Check, Trash2, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -22,14 +23,6 @@ import {
   Sheet, SheetContent, SheetHeader, SheetTitle,
 } from '@/components/ui/sheet';
 
-function formatExpiry(iso: string): string {
-  const diff = new Date(iso).getTime() - Date.now();
-  if (diff < 0) return 'Expired';
-  const hours = Math.floor(diff / 3600000);
-  if (hours < 24) return `${hours}h`;
-  return `${Math.floor(hours / 24)}d`;
-}
-
 function getInviteStatus(invite: Invite): { label: string; classes: string } {
   if (invite.used_at) return { label: 'Used', classes: 'bg-zinc-500/15 text-zinc-400 border-zinc-500/30' };
   if (new Date(invite.expires_at).getTime() < Date.now()) {
@@ -37,12 +30,6 @@ function getInviteStatus(invite: Invite): { label: string; classes: string } {
   }
   return { label: 'Active', classes: 'bg-green-500/10 text-green-400 border-green-500/30' };
 }
-
-const ROLE_COLORS: Record<string, string> = {
-  admin: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
-  editor: 'bg-blue-500/15 text-blue-400 border-blue-500/30',
-  viewer: 'bg-zinc-500/15 text-zinc-400 border-zinc-500/30',
-};
 
 export default function SettingsInvitesTab() {
   const [invites, setInvites] = useState<Invite[]>([]);

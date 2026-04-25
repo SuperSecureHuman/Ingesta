@@ -4,27 +4,13 @@ import { useState } from 'react';
 import { apiFetch } from '@/lib/api';
 import { toast } from 'sonner';
 import { Role } from '@/lib/types';
+import { getStrength, STRENGTH_COLORS } from '@/lib/utils';
 import { Loader2, Copy, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-
-// Simple client-side password strength meter (no library)
-function getStrength(pwd: string): { score: number; label: string } {
-  if (!pwd) return { score: 0, label: '' };
-  let score = 0;
-  if (pwd.length >= 8) score++;
-  if (pwd.length >= 12) score++;
-  if (/[A-Z]/.test(pwd)) score++;
-  if (/[0-9]/.test(pwd)) score++;
-  if (/[^A-Za-z0-9]/.test(pwd)) score++;
-  const labels = ['', 'Weak', 'Fair', 'Moderate', 'Strong', 'Strong'];
-  return { score, label: labels[Math.min(score, 5)] };
-}
-
-const STRENGTH_COLORS = ['', 'bg-red-500', 'bg-amber-500', 'bg-amber-400', 'bg-green-500', 'bg-green-400'];
 
 interface Props {
   open: boolean;

@@ -6,41 +6,14 @@ import { apiFetch } from '@/lib/api';
 import { toast } from 'sonner';
 import { useAppContext } from '@/context/AppContext';
 import { useAuth } from '@/hooks/useAuth';
-import { Session, Role } from '@/lib/types';
+import { Session } from '@/lib/types';
+import { getStrength, STRENGTH_COLORS, ROLE_COLORS, formatRelative } from '@/lib/utils';
 import { Loader2, Monitor, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-
-// Password strength (same logic as CreateUserModal)
-function getStrength(pwd: string): { score: number; label: string } {
-  if (!pwd) return { score: 0, label: '' };
-  let score = 0;
-  if (pwd.length >= 8) score++;
-  if (pwd.length >= 12) score++;
-  if (/[A-Z]/.test(pwd)) score++;
-  if (/[0-9]/.test(pwd)) score++;
-  if (/[^A-Za-z0-9]/.test(pwd)) score++;
-  return { score, label: ['', 'Weak', 'Fair', 'Moderate', 'Strong', 'Strong'][Math.min(score, 5)] };
-}
-const STRENGTH_COLORS = ['', 'bg-red-500', 'bg-amber-500', 'bg-amber-400', 'bg-green-500', 'bg-green-400'];
-
-const ROLE_COLORS: Record<Role, string> = {
-  admin: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
-  editor: 'bg-blue-500/15 text-blue-400 border-blue-500/30',
-  viewer: 'bg-zinc-500/15 text-zinc-400 border-zinc-500/30',
-};
-
-function formatRelative(iso: string | null): string {
-  if (!iso) return '—';
-  const diff = Date.now() - new Date(iso).getTime();
-  const days = Math.floor(diff / 86400000);
-  if (days === 0) return 'today';
-  if (days === 1) return 'yesterday';
-  return `${days}d ago`;
-}
 
 function parseUserAgent(ua: string | null): string {
   if (!ua) return 'Unknown device';

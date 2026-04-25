@@ -7,7 +7,7 @@ import json
 import shutil
 import asyncio
 from pathlib import Path
-from urllib.parse import quote, unquote
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Query, BackgroundTasks, HTTPException, Request
 from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
@@ -58,10 +58,9 @@ async def probe(path: str = Depends(decoded_path), stream_id: str = Query(None),
 
 
 @router.get("/browse")
-async def browse(path: str = Query("/"), _auth: str = Depends(require_auth)):
+async def browse(path: str = Depends(decoded_path), _auth: str = Depends(require_auth)):
     """List directory contents for file browser."""
     try:
-        path = unquote(path)
         p = validate_path(path)
         if not p.is_dir():
             raise HTTPException(status_code=400, detail="Not a directory")

@@ -6,7 +6,7 @@ Provides password-protected access to projects with scoped streaming.
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
-from urllib.parse import quote, unquote
+from urllib.parse import quote
 
 import asyncio
 import shutil
@@ -17,7 +17,7 @@ from pydantic import BaseModel
 
 from config import settings
 import db.crud as crud
-from routes.deps import require_auth, decoded_path
+from routes.deps import require_auth, decoded_path, or_404
 from routes.luts import _extract_folder
 from routes.auth import pwd_context, hash_password, verify_password, create_jwt, decode_jwt
 from media.playlist import probe_media
@@ -74,9 +74,7 @@ async def create_share(
     _auth: str = Depends(require_auth),
 ):
     """Create a share link for a project (returns plaintext password once)."""
-    project = await crud.get_project(project_id)
-    if not project:
-        raise HTTPException(404, "Project not found")
+    project = or_404(await crud.get_project(project_id), "Project")
 
     password_hash = hash_password(req.password)
     expires_at = None
@@ -103,9 +101,7 @@ async def list_shares(
     _auth: str = Depends(require_auth),
 ):
     """List active shares for a project."""
-    project = await crud.get_project(project_id)
-    if not project:
-        raise HTTPException(404, "Project not found")
+    or_404(await crud.get_project(project_id), "Project")
 
     shares = await crud.get_project_shares(project_id)
 
@@ -135,9 +131,7 @@ async def revoke_share(
     _auth: str = Depends(require_auth),
 ):
     """Revoke a share (mark inactive)."""
-    share = await crud.get_share(share_id)
-    if not share:
-        raise HTTPException(404, "Share not found")
+    share = or_404(await crud.get_share(share_id), "Share")
 
     await crud.revoke_share(share_id)
     return {"status": "revoked"}

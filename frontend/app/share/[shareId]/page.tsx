@@ -3,6 +3,7 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useParams } from 'next/navigation';
 import { motion } from 'framer-motion';
+import { gridContainer, gridItem } from '@/lib/animations';
 import { ShareFile, ShareFilesResponse, LutEntry } from '@/lib/types';
 import { LutContextProvider } from '@/context/LutContext';
 import { PlayerContextProvider, usePlayerContext } from '@/context/PlayerContext';
@@ -10,22 +11,6 @@ import PlayerContainer from '@/components/player/PlayerContainer';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import ShareFileCard from './ShareFileCard';
-
-// ── Grid stagger variants (match ProjectView pattern) ─────────────────────────
-const gridContainer = {
-  hidden: {},
-  show: { transition: { staggerChildren: 0.04 } },
-};
-
-const gridItem = {
-  hidden: { opacity: 0, y: 16, scale: 0.97 },
-  show: {
-    opacity: 1,
-    y: 0,
-    scale: 1,
-    transition: { duration: 0.22, ease: [0.25, 0.1, 0.25, 1] as [number, number, number, number] },
-  },
-};
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 

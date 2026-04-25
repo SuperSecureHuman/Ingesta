@@ -2,14 +2,13 @@
 
 import React, { useState } from 'react';
 import { BrowseEntry } from '@/lib/types';
+import { FALLBACK_THUMB_SVG } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
 import { Folder, Tag, Play } from 'lucide-react';
 import TagInput from '@/components/custom/TagInput';
 import StarRating from '@/components/custom/StarRating';
-
-const FALLBACK_SVG = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="120"><rect fill="%2318181b" width="200" height="120"/></svg>';
 
 interface FileCardProps {
   entry: BrowseEntry;
@@ -121,7 +120,7 @@ function FileCard({
             className={`w-full h-full object-cover transition-[transform,opacity] duration-300 group-hover:scale-[1.04] ${imgLoaded ? 'opacity-100' : 'opacity-0'}`}
             alt={entry.name}
             onLoad={() => setImgLoaded(true)}
-            onError={(e) => { (e.target as HTMLImageElement).src = FALLBACK_SVG; setImgLoaded(true); }}
+            onError={(e) => { (e.target as HTMLImageElement).src = FALLBACK_THUMB_SVG; setImgLoaded(true); }}
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center">
             <div className="rounded-full bg-black/50 backdrop-blur-sm p-2.5">

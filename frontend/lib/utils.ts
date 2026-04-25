@@ -1,9 +1,56 @@
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
+import type { Role } from '@/lib/types';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
+
+export function getStrength(pwd: string): { score: number; label: string } {
+  if (!pwd) return { score: 0, label: '' };
+  let score = 0;
+  if (pwd.length >= 8) score++;
+  if (pwd.length >= 12) score++;
+  if (/[A-Z]/.test(pwd)) score++;
+  if (/[0-9]/.test(pwd)) score++;
+  if (/[^A-Za-z0-9]/.test(pwd)) score++;
+  return { score, label: ['', 'Weak', 'Fair', 'Moderate', 'Strong', 'Strong'][Math.min(score, 5)] };
+}
+
+export const STRENGTH_COLORS = ['', 'bg-red-500', 'bg-amber-500', 'bg-amber-400', 'bg-green-500', 'bg-green-400'];
+
+export const ROLE_COLORS: Record<Role, string> = {
+  admin: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
+  editor: 'bg-blue-500/15 text-blue-400 border-blue-500/30',
+  viewer: 'bg-zinc-500/15 text-zinc-400 border-zinc-500/30',
+};
+
+export function formatRelative(iso: string | null): string {
+  if (!iso) return '—';
+  const diff = Date.now() - new Date(iso).getTime();
+  const secs = Math.floor(diff / 1000);
+  if (secs < 60) return 'just now';
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days === 1) return 'yesterday';
+  if (days < 30) return `${days}d ago`;
+  return new Date(iso).toLocaleDateString();
+}
+
+export function formatExpiry(iso: string): string {
+  const diff = new Date(iso).getTime() - Date.now();
+  if (diff <= 0) return 'Expired';
+  const hours = Math.floor(diff / 3600000);
+  if (hours < 1) return 'Less than 1 hour';
+  if (hours < 24) return `${hours} hours`;
+  return `${Math.floor(hours / 24)} days`;
+}
+
+export const FALLBACK_THUMB_SVG =
+  'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="120"><rect fill="%2318181b" width="200" height="120"/></svg>';
 
 export const VIDEO_EXTENSIONS = [
   '.mp4',

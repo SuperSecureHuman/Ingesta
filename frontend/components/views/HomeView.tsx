@@ -16,19 +16,7 @@ import { Button } from '@/components/ui/button';
 import CreateLibraryPanel from '@/components/panels/CreateLibraryPanel';
 import CreateProjectPanel from '@/components/panels/CreateProjectPanel';
 import { motion } from 'framer-motion';
-
-const gridContainer = {
-  hidden: {},
-  show: { transition: { staggerChildren: 0.04 } },
-};
-
-const gridItem = {
-  hidden: { opacity: 0, y: 16, scale: 0.97 },
-  show: {
-    opacity: 1, y: 0, scale: 1,
-    transition: { duration: 0.22, ease: [0.25, 0.1, 0.25, 1] as [number, number, number, number] },
-  },
-};
+import { gridContainer, gridItem } from '@/lib/animations';
 
 export default function HomeView({ onReady }: { onReady?: () => void }) {
   const [libraries, setLibraries] = useState<Library[]>([]);

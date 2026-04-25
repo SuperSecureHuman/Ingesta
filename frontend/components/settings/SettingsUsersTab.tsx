@@ -4,7 +4,8 @@ import { useEffect, useState, useCallback } from 'react';
 import { apiFetch } from '@/lib/api';
 import { toast } from 'sonner';
 import { useAppContext } from '@/context/AppContext';
-import { AdminUser, Role } from '@/lib/types';
+import { AdminUser } from '@/lib/types';
+import { formatRelative, ROLE_COLORS } from '@/lib/utils';
 import {
   Loader2, Search, ChevronDown, Edit2, PowerOff, Power, LogOut, Trash2, UserPlus
 } from 'lucide-react';
@@ -23,22 +24,6 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import UserDetailDrawer from './UserDetailDrawer';
 import CreateUserModal from './CreateUserModal';
-
-function formatRelative(iso: string | null): string {
-  if (!iso) return '—';
-  const diff = Date.now() - new Date(iso).getTime();
-  const days = Math.floor(diff / 86400000);
-  if (days === 0) return 'today';
-  if (days === 1) return 'yesterday';
-  if (days < 30) return `${days}d ago`;
-  return new Date(iso).toLocaleDateString();
-}
-
-const ROLE_COLORS: Record<Role, string> = {
-  admin: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
-  editor: 'bg-blue-500/15 text-blue-400 border-blue-500/30',
-  viewer: 'bg-zinc-500/15 text-zinc-400 border-zinc-500/30',
-};
 
 export default function SettingsUsersTab() {
   const { currentUser } = useAppContext();

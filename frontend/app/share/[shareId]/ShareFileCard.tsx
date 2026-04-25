@@ -3,10 +3,8 @@
 import React, { useState } from 'react';
 import { Play } from 'lucide-react';
 import { ShareFile } from '@/lib/types';
-import { formatTime, getFileName, getResolutionLabel } from '@/lib/utils';
+import { formatTime, getFileName, getResolutionLabel, FALLBACK_THUMB_SVG } from '@/lib/utils';
 import StarRating from '@/components/custom/StarRating';
-
-const FALLBACK_SVG = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="120"><rect fill="%2318181b" width="200" height="120"/></svg>';
 
 interface ShareFileCardProps {
   file: ShareFile;
@@ -58,7 +56,7 @@ export default function ShareFileCard({ file, shareId, jwt, onPlay }: ShareFileC
           loading="lazy"
           className={`w-full h-full object-cover transition-[transform,opacity] duration-300 group-hover:scale-[1.04] ${imgLoaded ? 'opacity-100' : 'opacity-0'}`}
           onLoad={() => setImgLoaded(true)}
-          onError={(e) => { (e.target as HTMLImageElement).src = FALLBACK_SVG; setImgLoaded(true); }}
+          onError={(e) => { (e.target as HTMLImageElement).src = FALLBACK_THUMB_SVG; setImgLoaded(true); }}
         />
 
         {/* Play overlay */}

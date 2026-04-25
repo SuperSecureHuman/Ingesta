@@ -4,33 +4,12 @@ import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { apiFetch } from '@/lib/api';
 import { toast } from 'sonner';
+import { getStrength, STRENGTH_COLORS, formatExpiry } from '@/lib/utils';
 import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-
-// Strength meter (same logic)
-function getStrength(pwd: string): { score: number; label: string } {
-  if (!pwd) return { score: 0, label: '' };
-  let score = 0;
-  if (pwd.length >= 8) score++;
-  if (pwd.length >= 12) score++;
-  if (/[A-Z]/.test(pwd)) score++;
-  if (/[0-9]/.test(pwd)) score++;
-  if (/[^A-Za-z0-9]/.test(pwd)) score++;
-  return { score, label: ['', 'Weak', 'Fair', 'Moderate', 'Strong', 'Strong'][Math.min(score, 5)] };
-}
-const STRENGTH_COLORS = ['', 'bg-red-500', 'bg-amber-500', 'bg-amber-400', 'bg-green-500', 'bg-green-400'];
-
-function formatExpiry(iso: string): string {
-  const diff = new Date(iso).getTime() - Date.now();
-  if (diff < 0) return 'Expired';
-  const hours = Math.floor(diff / 3600000);
-  if (hours < 1) return 'Less than 1 hour';
-  if (hours < 24) return `${hours} hours`;
-  return `${Math.floor(hours / 24)} days`;
-}
 
 export default function InvitePage() {
   const router = useRouter();
