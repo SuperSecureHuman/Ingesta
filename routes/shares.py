@@ -182,17 +182,21 @@ async def authenticate_share(share_id: str, req: AuthRequest):
 # ============================================================================
 
 
-async def get_token_payload(authorization: Optional[str] = Header(None)) -> dict:
-    """Extract and verify JWT token from Authorization header."""
-    if not authorization:
-        raise HTTPException(401, "Missing authorization header")
+async def get_token_payload(
+    authorization: Optional[str] = Header(None),
+    token: Optional[str] = Query(None),
+) -> dict:
+    """Extract and verify JWT token from Authorization header or ?token query param."""
+    if authorization:
+        parts = authorization.split()
+        if len(parts) != 2 or parts[0].lower() != "bearer":
+            raise HTTPException(401, "Invalid authorization header")
+        return await verify_token_full(parts[1])
 
-    parts = authorization.split()
-    if len(parts) != 2 or parts[0].lower() != "bearer":
-        raise HTTPException(401, "Invalid authorization header")
+    if token:
+        return await verify_token_full(token)
 
-    token = parts[1]
-    return await verify_token_full(token)
+    raise HTTPException(401, "Missing authorization")
 
 
 def require_share_match(
