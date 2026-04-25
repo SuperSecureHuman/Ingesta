@@ -64,11 +64,10 @@ export function PlayerContextProvider({
   const pingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const transcodeStatsIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const qualityRef = useRef('source');
-  const lutIdRef = useRef<string | null>(null);
   const probedFilePathRef = useRef<string | null>(null);
   const playbackStartTimeRef = useRef<number | null>(null);
 
-  const { lutMode, activeLutId, lutStrength, setFileLutPref } = useLutContext();
+  const { activeLutId, lutStrength, setFileLutPref } = useLutContext();
 
   // Annotation injection for read-only contexts (share page)
   const annotationsRef = useRef(initialAnnotations ?? {});
@@ -84,7 +83,7 @@ export function PlayerContextProvider({
     activeLutId,
     lutStrength,
     fetchLutFile: (id) => fetch(`/api/luts/${id}/file`).then((r) => r.text()),
-    enabled: lutMode === 'client' && !!activeLutId,
+    enabled: !!activeLutId,
   });
 
   // Fetch lut-pref by path whenever the active file changes (skip for share)
@@ -167,17 +166,14 @@ export function PlayerContextProvider({
         probedFilePathRef.current = newFilePath;
       }
 
-      // Determine if using client or server LUT
-      const useServerLut = lutMode === 'server' && activeLutId;
-
       // Adaptive segment length
-      const isTranscoding = useServerLut || qualityRef.current !== 'source';
+      const isTranscoding = qualityRef.current !== 'source';
       const segmentLength = isTranscoding ? 1 : 4;
 
       // Build playlist URL
       const playlistUrl = `${apiBase}/playlist/${sid}/main.m3u8?path=${encodeURIComponent(
         newFilePath
-      )}&quality=${qualityRef.current}&segment_length=${segmentLength}${useServerLut ? `&lut_id=${activeLutId}` : ''}`;
+      )}&quality=${qualityRef.current}&segment_length=${segmentLength}`;
 
       // Clean up old HLS
       if (hlsRef.current) {
@@ -250,8 +246,8 @@ export function PlayerContextProvider({
         );
       }, 10000);
 
-      // Transcode stats (only for server-side LUT or non-source quality, logged-in only)
-      if (apiBase === '/api' && (useServerLut || qualityRef.current !== 'source')) {
+      // Transcode stats (only for non-source quality, logged-in only)
+      if (apiBase === '/api' && qualityRef.current !== 'source') {
         if (transcodeStatsIntervalRef.current)
           clearInterval(transcodeStatsIntervalRef.current);
 
@@ -351,44 +347,9 @@ export function PlayerContextProvider({
     }
   };
 
-  // Change LUT
-  const changeLut = async (newLutId: string | null) => {
-    const video = videoRef.current;
-    if (!video || !filePath) return;
-
-    if (lutMode === 'client') {
-      // Client-side LUT: hook handles texture swap reactively via activeLutId change
-      return;
-    } else {
-      // Server-side LUT: full HLS restart
-      if (pingIntervalRef.current) {
-        clearInterval(pingIntervalRef.current);
-        pingIntervalRef.current = null;
-      }
-      if (transcodeStatsIntervalRef.current) {
-        clearInterval(transcodeStatsIntervalRef.current);
-        transcodeStatsIntervalRef.current = null;
-      }
-      if (hlsRef.current) {
-        hlsRef.current.destroy();
-        hlsRef.current = null;
-      }
-
-      video.pause();
-      video.src = '';
-
-      if (sessionIdRef.current) {
-        try {
-          await fetchFn(`${apiBase}/stop/${sessionIdRef.current}`, { method: 'POST' });
-        } catch (e) {
-          console.warn(e);
-        }
-      }
-
-      lutIdRef.current = newLutId;
-      const seekTime = video.currentTime;
-      await startPlayback(filePath, seekTime);
-    }
+  // Change LUT — client-side WebGL only; activeLutId change is picked up reactively
+  const changeLut = async (_newLutId: string | null) => {
+    return;
   };
 
   // beforeunload handler

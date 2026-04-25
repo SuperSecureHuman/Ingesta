@@ -72,7 +72,7 @@ export default function PlayerContainer() {
     videoRef, canvasRef, stopPlayback, changeQuality, changeLut, readOnly, getInitialAnnotations,
   } = usePlayerContext();
 
-  const { availableLuts, activeLutId, lutMode, setLutMode, lutStrength, setLutStrength, applyLut, clearLut, fileLutPref } = useLutContext();
+  const { availableLuts, activeLutId, lutStrength, setLutStrength, applyLut, clearLut, fileLutPref } = useLutContext();
   const { canEdit } = useAuth();
 
   // ── State ──────────────────────────────────────────────────────────────────
@@ -573,10 +573,10 @@ export default function PlayerContainer() {
       style={{ pointerEvents: isVisible ? 'auto' : 'none', willChange: 'transform, opacity' }}
     >
       <div id="videoViewport" ref={viewportRef} className="relative flex-1 bg-black overflow-hidden">
-        <video ref={videoRef} className="w-full h-full object-contain" style={{ visibility: lutMode === 'client' && activeLutId ? 'hidden' : 'visible' }} />
+        <video ref={videoRef} className="w-full h-full object-contain" style={{ visibility: activeLutId ? 'hidden' : 'visible' }} />
 
         {/* WebGL canvas */}
-        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: lutMode === 'client' && activeLutId ? 'flex' : 'none', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: activeLutId ? 'flex' : 'none', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
           <canvas ref={canvasRef} style={{ maxWidth: '100%', maxHeight: '100%', width: 'auto', height: 'auto', pointerEvents: 'none' }} />
         </div>
 
@@ -991,20 +991,8 @@ export default function PlayerContainer() {
                 {lutDropdownOpen && (
                   <div className="absolute bottom-full right-0 mb-2 bg-zinc-950 border border-zinc-800 rounded-lg overflow-hidden z-50 min-w-max shadow-2xl">
                     <div className="max-h-72 overflow-y-auto [&::-webkit-scrollbar]:w-[3px] [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-zinc-700 [&::-webkit-scrollbar-thumb]:rounded-full">
-                    {/* Mode pills */}
-                    <div className="flex gap-1 p-2 border-b border-zinc-800">
-                      {(['client', 'server'] as const).map((mode) => (
-                        <button
-                          key={mode}
-                          onClick={() => { setLutMode(mode); if (activeLutId) changeLut(activeLutId); }}
-                          className={`px-2.5 py-1 text-xs rounded capitalize transition-colors ${lutMode === mode ? 'bg-amber-400/20 text-amber-300 border border-amber-400/40' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}
-                        >
-                          {mode}
-                        </button>
-                      ))}
-                    </div>
                     {/* Strength */}
-                    {lutMode === 'client' && activeLutId && (
+                    {activeLutId && (
                       <div className="px-3 py-2 border-b border-zinc-800 flex items-center gap-2">
                         <label className="text-xs text-zinc-400 whitespace-nowrap">Strength</label>
                         <input
