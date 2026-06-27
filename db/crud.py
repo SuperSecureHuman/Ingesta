@@ -586,6 +586,36 @@ async def get_folder_shares(folder_path: str) -> List[Dict[str, Any]]:
     ]
 
 
+async def get_all_shares() -> List[Dict[str, Any]]:
+    """Get all shares (active and inactive) with enriched scope name via JOIN."""
+    db = get_db()
+    rows = await db.fetch(
+        """
+        SELECT s.id, s.share_type, s.project_id, s.library_id, s.folder_path,
+               s.created_at, s.expires_at, s.active,
+               p.name AS project_name, l.name AS library_name
+        FROM shares s
+        LEFT JOIN projects p ON p.id = s.project_id AND s.share_type = 'project'
+        LEFT JOIN libraries l ON l.id = s.library_id AND s.share_type = 'library'
+        ORDER BY s.created_at DESC
+        """
+    )
+    return [
+        {
+            "id": r[0],
+            "share_type": r[1] or "project",
+            "project_id": r[2],
+            "library_id": r[3],
+            "folder_path": r[4],
+            "created_at": r[5],
+            "expires_at": r[6],
+            "active": bool(r[7]),
+            "scope_name": r[8] or r[9] or r[4] or "",
+        }
+        for r in rows
+    ]
+
+
 async def revoke_share(share_id: str) -> bool:
     """Revoke a share (mark inactive)."""
     db = get_db()

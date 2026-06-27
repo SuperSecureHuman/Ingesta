@@ -90,7 +90,7 @@ async def probe_media(path: str) -> MediaInfo:
     log_profile = ""
 
     for stream in data.get("streams", []):
-        if stream["codec_type"] == "video":
+        if stream["codec_type"] == "video" and not video_codec:
             width = stream.get("width", 1920)
             height = stream.get("height", 1080)
             video_codec = stream.get("codec_name", "")

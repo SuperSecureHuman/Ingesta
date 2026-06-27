@@ -252,6 +252,25 @@ async def delete_invite(invite_id: str, request: Request, payload: dict = Depend
     return {"status": "deleted"}
 
 
+# ── Shares management ─────────────────────────────────────────────────────────
+
+@router.get("/shares", dependencies=[_require_admin])
+async def list_all_shares():
+    """List all shares (active + inactive) with scope name."""
+    shares = await crud.get_all_shares()
+    return {"shares": shares}
+
+
+@router.delete("/shares/{share_id}", dependencies=[_require_admin])
+async def delete_share(share_id: str):
+    """Revoke (deactivate) a share link."""
+    share = await crud.get_share(share_id)
+    if not share:
+        raise HTTPException(status_code=404, detail="Share not found")
+    await crud.revoke_share(share_id)
+    return {"ok": True}
+
+
 # ── Audit log ─────────────────────────────────────────────────────────────────
 
 @router.get("/audit", dependencies=[_require_admin])
