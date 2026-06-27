@@ -81,17 +81,6 @@ export function generateUUID(): string {
   });
 }
 
-export function escapeHtml(text: string): string {
-  const map: Record<string, string> = {
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    '"': '&quot;',
-    "'": '&#039;',
-  };
-  return text.replace(/[&<>"']/g, (m) => map[m]);
-}
-
 export function formatTime(seconds: number): string {
   if (!isFinite(seconds)) return '0:00';
   const hours = Math.floor(seconds / 3600);

@@ -4,7 +4,7 @@ import React, { createContext, useContext, useState, useRef, useEffect, useMemo,
 import Hls from 'hls.js';
 import { ProbeData, Capabilities, TranscodeStats, FileComment, FileMarker } from '@/lib/types';
 import { generateUUID } from '@/lib/utils';
-import { apiFetch, fetchCapabilities } from '@/lib/api';
+import { apiFetch } from '@/lib/api';
 import { useWebGLLut } from '@/hooks/useWebGLLut';
 import { useLutContext } from './LutContext';
 

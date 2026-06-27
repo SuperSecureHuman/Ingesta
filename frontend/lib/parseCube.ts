@@ -39,8 +39,3 @@ export function parseCubeText(text: string): CubeData {
 
   return { size, data: new Float32Array(floats) };
 }
-
-export async function parseCube(url: string): Promise<CubeData> {
-  const text = await fetch(url).then((r) => r.text());
-  return parseCubeText(text);
-}

@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Optional
 from urllib.parse import quote
 
-import asyncio
 import shutil
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Header, Request
@@ -86,6 +85,11 @@ def _compute_expires(expires_in_days: Optional[int]) -> Optional[str]:
     return (datetime.now(timezone.utc) + timedelta(days=expires_in_days)).isoformat()
 
 
+def _filter_active(shares: list) -> list:
+    now = datetime.now(timezone.utc)
+    return [s for s in shares if not s["expires_at"] or datetime.fromisoformat(s["expires_at"]) >= now]
+
+
 @router.post("/library/{library_id}/share")
 async def create_library_share(
     library_id: str,
@@ -113,13 +117,7 @@ async def list_library_shares(
 ):
     """List active shares for a library."""
     or_404(await crud.get_library(library_id), "Library")
-    shares = await crud.get_library_shares(library_id)
-    now = datetime.now(timezone.utc)
-    result = [
-        s for s in shares
-        if not s["expires_at"] or datetime.fromisoformat(s["expires_at"]) >= now
-    ]
-    return {"shares": result}
+    return {"shares": _filter_active(await crud.get_library_shares(library_id))}
 
 
 @router.post("/folder/share")
@@ -151,13 +149,7 @@ async def list_folder_shares(
 ):
     """List active shares for a folder."""
     resolved = validate_path_boundary(folder_path)
-    shares = await crud.get_folder_shares(resolved)
-    now = datetime.now(timezone.utc)
-    result = [
-        s for s in shares
-        if not s["expires_at"] or datetime.fromisoformat(s["expires_at"]) >= now
-    ]
-    return {"shares": result}
+    return {"shares": _filter_active(await crud.get_folder_shares(resolved))}
 
 
 # ============================================================================
@@ -304,18 +296,6 @@ def require_share_match(
     if token["share_id"] != share_id:
         raise HTTPException(status_code=403, detail="Token mismatch")
     return token
-
-
-async def validate_file_in_project(project_id: str, file_path: str) -> str:
-    """
-    Validate that a file path belongs to the given project.
-    Returns the absolute file path if valid.
-    """
-    file_record = await crud.get_project_file_by_path(project_id, file_path)
-    if file_record:
-        return file_path
-
-    raise HTTPException(403, "File not in project")
 
 
 async def _validate_share_file(share: dict, file_path: str) -> str:

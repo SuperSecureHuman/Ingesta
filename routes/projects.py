@@ -232,6 +232,33 @@ class BulkAddLibraryRequest(BaseModel):
     library_id: str
 
 
+async def _bulk_add_videos(project_id: str, root: Path) -> dict:
+    """Walk root recursively, add all video files to project. Returns {added, errors}."""
+    added = 0
+    errors = []
+    seen: set[str] = set()
+    for file_path in await async_rglob(root, "*"):
+        if not file_path.is_file() or file_path.suffix.lower() not in VIDEO_EXTENSIONS:
+            continue
+        resolved_path = str(file_path.resolve())
+        if resolved_path in seen:
+            continue
+        seen.add(resolved_path)
+        try:
+            stat = file_path.stat()
+            result = await crud.add_project_file(
+                project_id=project_id,
+                file_path=resolved_path,
+                file_size=stat.st_size,
+                mtime=stat.st_mtime,
+            )
+            if result is not None:
+                added += 1
+        except Exception as e:
+            errors.append({"path": resolved_path, "error": str(e)})
+    return {"added": added, "errors": errors}
+
+
 @router.post("/{project_id}/files/folder")
 async def add_folder_to_project(
     project_id: str,
@@ -239,60 +266,17 @@ async def add_folder_to_project(
     _auth: dict = Depends(require_role('editor')),
 ):
     """Add all video files from a folder (recursively) to a project."""
-    project = or_404(await crud.get_project(project_id), "Project")
-
+    or_404(await crud.get_project(project_id), "Project")
     folder = Path(req.folder_path).resolve()
-
-    # Validate path is within MEDIA_ROOT
     media_root_str = str(MEDIA_ROOT)
     folder_str = str(folder)
     if folder_str != media_root_str and not folder_str.startswith(media_root_str + "/"):
         raise HTTPException(403, "Folder path outside MEDIA_ROOT")
-
     if not folder.exists():
         raise HTTPException(400, "Folder does not exist")
     if not folder.is_dir():
         raise HTTPException(400, "Path is not a directory")
-
-    added = 0
-    errors = []
-    seen = set()  # Track resolved paths in this request to avoid duplicates
-
-    # Walk the folder recursively (async)
-    file_paths = await async_rglob(folder, "*")
-    for file_path in file_paths:
-        if not file_path.is_file():
-            continue
-        if file_path.suffix.lower() not in VIDEO_EXTENSIONS:
-            continue
-
-        resolved_path = str(file_path.resolve())
-
-        # Skip if we've already seen this path in this request
-        if resolved_path in seen:
-            continue
-        seen.add(resolved_path)
-
-        try:
-            stat = file_path.stat()
-            file_size = stat.st_size
-            mtime = stat.st_mtime
-
-            result = await crud.add_project_file(
-                project_id=project_id,
-                file_path=resolved_path,
-                file_size=file_size,
-                mtime=mtime,
-            )
-            if result is not None:
-                added += 1
-        except Exception as e:
-            errors.append({"path": resolved_path, "error": str(e)})
-
-    return {
-        "added": added,
-        "errors": errors,
-    }
+    return await _bulk_add_videos(project_id, folder)
 
 
 @router.post("/{project_id}/files/library")
@@ -302,49 +286,9 @@ async def add_library_to_project(
     _auth: dict = Depends(require_role('editor')),
 ):
     """Add all video files from a library (recursively) to a project."""
-    project = or_404(await crud.get_project(project_id), "Project")
+    or_404(await crud.get_project(project_id), "Project")
     library = or_404(await crud.get_library(req.library_id), "Library")
-
     root = Path(library["root_path"]).resolve()
     if not root.exists():
         raise HTTPException(400, "Library root path does not exist")
-
-    added = 0
-    errors = []
-    seen = set()  # Track resolved paths in this request to avoid duplicates
-
-    # Walk the library root recursively (async)
-    file_paths = await async_rglob(root, "*")
-    for file_path in file_paths:
-        if not file_path.is_file():
-            continue
-        if file_path.suffix.lower() not in VIDEO_EXTENSIONS:
-            continue
-
-        resolved_path = str(file_path.resolve())
-
-        # Skip if we've already seen this path in this request
-        if resolved_path in seen:
-            continue
-        seen.add(resolved_path)
-
-        try:
-            stat = file_path.stat()
-            file_size = stat.st_size
-            mtime = stat.st_mtime
-
-            result = await crud.add_project_file(
-                project_id=project_id,
-                file_path=resolved_path,
-                file_size=file_size,
-                mtime=mtime,
-            )
-            if result is not None:
-                added += 1
-        except Exception as e:
-            errors.append({"path": resolved_path, "error": str(e)})
-
-    return {
-        "added": added,
-        "errors": errors,
-    }
+    return await _bulk_add_videos(project_id, root)
