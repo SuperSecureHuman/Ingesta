@@ -10,6 +10,8 @@ import { LutContextProvider } from '@/context/LutContext';
 import { PanelContextProvider } from '@/context/PanelContext';
 import PlayerContainer from '@/components/player/PlayerContainer';
 import AddToProjectPanel from '@/components/panels/AddToProjectPanel';
+import CreateSharePanel from '@/components/panels/CreateSharePanel';
+import ShareLinksPanel from '@/components/panels/ShareLinksPanel';
 import { PageSpinner } from '@/components/ui/PageSpinner';
 import { useRequireAuth } from '@/hooks/useRequireAuth';
 
@@ -18,6 +20,7 @@ function LibraryPageInner({ librarySlug, folderPath }: { librarySlug: string; fo
   const { selectedItems, clearSelection } = useSelection();
   const [resolvedLibraryId, setResolvedLibraryId] = useState<string | undefined>(undefined);
   const [dataReady, setDataReady] = useState(false);
+  const [shareScope, setShareScope] = useState<{ libraryId: string; folderPath: string | null } | null>(null);
 
   const handleLibraryResolved = (id: string) => {
     setResolvedLibraryId(id);
@@ -26,6 +29,10 @@ function LibraryPageInner({ librarySlug, folderPath }: { librarySlug: string; fo
   const handleAddSuccess = useCallback(() => {
     clearSelection();
   }, [clearSelection]);
+
+  const handleShareScope = useCallback((scope: { libraryId: string; folderPath: string | null }) => {
+    setShareScope(scope);
+  }, []);
 
   return (
     <>
@@ -38,6 +45,7 @@ function LibraryPageInner({ librarySlug, folderPath }: { librarySlug: string; fo
               folderPath={folderPath}
               onLibraryResolved={handleLibraryResolved}
               onReady={() => setDataReady(true)}
+              onShareScope={handleShareScope}
             />
           </div>
           <AddToProjectPanel
@@ -46,6 +54,19 @@ function LibraryPageInner({ librarySlug, folderPath }: { librarySlug: string; fo
             onSuccess={handleAddSuccess}
             selectedItems={selectedItems}
             currentLibraryId={resolvedLibraryId ?? null}
+          />
+          <CreateSharePanel
+            isOpen={activePanel === 'createShare'}
+            onClose={closePanel}
+            onOpenShareLinks={() => openPanel('shareLinks')}
+            currentLibraryId={shareScope?.folderPath ? null : (shareScope?.libraryId ?? null)}
+            currentFolderPath={shareScope?.folderPath ?? null}
+          />
+          <ShareLinksPanel
+            isOpen={activePanel === 'shareLinks'}
+            onClose={closePanel}
+            currentLibraryId={shareScope?.folderPath ? null : (shareScope?.libraryId ?? null)}
+            currentFolderPath={shareScope?.folderPath ?? null}
           />
           <PlayerContainer />
         </PanelContextProvider>

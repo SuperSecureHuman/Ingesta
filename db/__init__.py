@@ -21,14 +21,6 @@ class Database:
     """
 
     def __init__(self, database_url: str):
-        """
-        Initialize database with connection string.
-
-        Args:
-            database_url: Connection string
-                - SQLite: sqlite+aio:///./data/hls_realtime.db
-                - PostgreSQL: postgresql+asyncpg://user:password@localhost/dbname
-        """
         self.database_url = database_url
         self.driver = self._detect_driver(database_url)
         self.connection = None
@@ -45,7 +37,6 @@ class Database:
 
     def _get_sqlite_path(self) -> str:
         """Extract file path from SQLite URL."""
-        # sqlite+aio:///./data/hls_realtime.db -> ./data/hls_realtime.db
         match = re.match(r"sqlite\+aio:///?(.+)$", self.database_url)
         if not match:
             raise ValueError(f"Invalid SQLite URL: {self.database_url}")
@@ -58,15 +49,11 @@ class Database:
         """Connect to database."""
         if self.driver == "sqlite":
             db_path = self._get_sqlite_path()
-            # Create parent directories if needed
             db_file = Path(db_path)
             db_file.parent.mkdir(parents=True, exist_ok=True)
             self.connection = await aiosqlite.connect(db_path)
-            # Enable foreign keys for SQLite
             await self.connection.execute("PRAGMA foreign_keys = ON")
         elif self.driver == "postgres":
-            # Extract connection params from URL
-            # postgresql+asyncpg://user:password@host:port/dbname
             match = re.match(
                 r"postgresql\+asyncpg://(?:([^:]+)(?::([^@]+))?@)?([^:/?]+)(?::(\d+))?/(.+)$",
                 self.database_url,
@@ -88,10 +75,7 @@ class Database:
     async def disconnect(self) -> None:
         """Disconnect from database."""
         if self.connection:
-            if self.driver == "sqlite":
-                await self.connection.close()
-            elif self.driver == "postgres":
-                await self.connection.close()
+            await self.connection.close()
             self.connection = None
 
     async def execute(
@@ -145,7 +129,6 @@ class Database:
         if self.driver == "sqlite":
             await self.connection.executescript(script)
         elif self.driver == "postgres":
-            # For PostgreSQL, split and execute each statement
             statements = [s.strip() for s in script.split(";") if s.strip()]
             for statement in statements:
                 await self.connection.execute(statement)
@@ -262,6 +245,48 @@ async def run_migrations(db: Database) -> None:
         except Exception as e:
             if "duplicate column" not in str(e).lower() and "already exists" not in str(e).lower():
                 raise
+
+    # Migration 006: add share_type, library_id, folder_path to shares
+    for col_def in [
+        "share_type TEXT NOT NULL DEFAULT 'project'",
+        "library_id TEXT",
+        "folder_path TEXT",
+    ]:
+        try:
+            await db.execute(f"ALTER TABLE shares ADD COLUMN {col_def}")
+        except Exception as e:
+            if "duplicate column" not in str(e).lower() and "already exists" not in str(e).lower():
+                raise
+
+    # Migration 007: drop FK constraint on shares.project_id so library/folder shares
+    # can use '' as a sentinel. SQLite requires table recreation to drop a constraint.
+    try:
+        cols = await db.fetch("PRAGMA table_info(shares)")
+        # Check if old FK exists by inspecting the CREATE TABLE statement
+        fk_rows = await db.fetch("PRAGMA foreign_key_list(shares)")
+        has_project_fk = any(r[2] == "projects" for r in fk_rows)
+        if has_project_fk:
+            await db.executescript("""
+                CREATE TABLE IF NOT EXISTS shares_new (
+                    id TEXT PRIMARY KEY,
+                    project_id TEXT NOT NULL DEFAULT '',
+                    password_hash TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    expires_at TEXT,
+                    active BOOLEAN DEFAULT 1,
+                    share_type TEXT NOT NULL DEFAULT 'project',
+                    library_id TEXT,
+                    folder_path TEXT
+                );
+                INSERT INTO shares_new
+                    SELECT id, project_id, password_hash, created_at, expires_at, active,
+                           share_type, library_id, folder_path FROM shares;
+                DROP TABLE shares;
+                ALTER TABLE shares_new RENAME TO shares
+            """)
+    except Exception as e:
+        if "already exists" not in str(e).lower():
+            raise
 
 
 async def close_db() -> None:

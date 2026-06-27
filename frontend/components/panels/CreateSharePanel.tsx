@@ -13,14 +13,19 @@ import { useClipboardCopy } from '@/hooks/useClipboardCopy';
 interface CreateSharePanelProps {
   isOpen: boolean;
   onClose: () => void;
-  currentProjectId: string | null;
   onOpenShareLinks: () => void;
+  // Exactly one of these should be set:
+  currentProjectId?: string | null;
+  currentLibraryId?: string | null;
+  currentFolderPath?: string | null;
 }
 
 export default function CreateSharePanel({
   isOpen,
   onClose,
   currentProjectId,
+  currentLibraryId,
+  currentFolderPath,
   onOpenShareLinks,
 }: CreateSharePanelProps) {
   const [password, setPassword] = useState('');
@@ -34,14 +39,21 @@ export default function CreateSharePanel({
   } | null>(null);
   const { copy, copiedId } = useClipboardCopy();
 
+  const panelTitle = currentLibraryId
+    ? 'Share Library'
+    : currentFolderPath
+    ? 'Share Folder'
+    : 'Create Share Link';
+
   const handleSubmit = async () => {
     if (!password.trim()) {
       setError('Password is required');
       return;
     }
 
-    if (!currentProjectId) {
-      setError('No project selected');
+    const hasScope = currentProjectId || currentLibraryId || currentFolderPath;
+    if (!hasScope) {
+      setError('No scope selected');
       return;
     }
 
@@ -49,13 +61,23 @@ export default function CreateSharePanel({
       setLoading(true);
       setError('');
 
-      const body: Record<string, string | number> = { password };
+      const expires_in_days = expiryDays ? parseInt(expiryDays, 10) : undefined;
 
-      if (expiryDays && expiryDays !== '') {
-        body.expires_in_days = parseInt(expiryDays, 10);
+      let url: string;
+      let body: Record<string, unknown>;
+
+      if (currentProjectId) {
+        url = `/api/share/${currentProjectId}/share`;
+        body = { password, ...(expires_in_days && { expires_in_days }) };
+      } else if (currentLibraryId) {
+        url = `/api/share/library/${currentLibraryId}/share`;
+        body = { password, ...(expires_in_days && { expires_in_days }) };
+      } else {
+        url = `/api/share/folder/share`;
+        body = { password, folder_path: currentFolderPath!, ...(expires_in_days && { expires_in_days }) };
       }
 
-      const res = await apiFetch(`/api/share/${currentProjectId}/share`, {
+      const res = await apiFetch(url, {
         method: 'POST',
         body: JSON.stringify(body),
       });
@@ -67,7 +89,6 @@ export default function CreateSharePanel({
 
       const data = await res.json();
       const shareUrl = `${window.location.origin}/share/${data.share_id}`;
-
       setShareLink({ url: shareUrl, expiresAt: data.expires_at });
       toast.success('Share link created!');
     } catch (e) {
@@ -119,7 +140,7 @@ export default function CreateSharePanel({
   return (
     <PanelShell
       isOpen={isOpen}
-      title="Create Share Link"
+      title={panelTitle}
       onClose={onClose}
       error={error}
       footer={

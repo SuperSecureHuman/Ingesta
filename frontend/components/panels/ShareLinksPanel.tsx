@@ -10,7 +10,6 @@ import { useClipboardCopy } from '@/hooks/useClipboardCopy';
 
 interface Share {
   id: string;
-  project_id: string;
   created_at: string;
   expires_at: string | null;
 }
@@ -18,13 +17,18 @@ interface Share {
 interface ShareLinksPanelProps {
   isOpen: boolean;
   onClose: () => void;
-  currentProjectId: string | null;
+  // Exactly one of these should be set:
+  currentProjectId?: string | null;
+  currentLibraryId?: string | null;
+  currentFolderPath?: string | null;
 }
 
 export default function ShareLinksPanel({
   isOpen,
   onClose,
   currentProjectId,
+  currentLibraryId,
+  currentFolderPath,
 }: ShareLinksPanelProps) {
   const [shares, setShares] = useState<Share[]>([]);
   const [loading, setLoading] = useState(false);
@@ -32,16 +36,21 @@ export default function ShareLinksPanel({
 
   const { copy } = useClipboardCopy();
 
-  const loadShares = useCallback(async () => {
-    if (!currentProjectId) return;
+  const listUrl = currentProjectId
+    ? `/api/share/${currentProjectId}/shares`
+    : currentLibraryId
+    ? `/api/share/library/${currentLibraryId}/shares`
+    : currentFolderPath
+    ? `/api/share/folder/shares?folder_path=${encodeURIComponent(currentFolderPath)}`
+    : null;
 
+  const loadShares = useCallback(async () => {
+    if (!listUrl) return;
     try {
       setLoading(true);
       setError('');
-
-      const res = await apiFetch(`/api/share/${currentProjectId}/shares`);
+      const res = await apiFetch(listUrl);
       if (!res.ok) throw new Error('Failed to load shares');
-
       const data = await res.json();
       setShares(data.shares || []);
     } catch (e) {
@@ -50,17 +59,11 @@ export default function ShareLinksPanel({
     } finally {
       setLoading(false);
     }
-  }, [currentProjectId]);
+  }, [listUrl]);
 
   useEffect(() => {
-    if (isOpen) {
-      loadShares();
-    }
+    if (isOpen) loadShares();
   }, [isOpen, loadShares]);
-
-  const handleCopy = (url: string) => {
-    copy('link', url);
-  };
 
   const handleRevoke = async (shareId: string) => {
     try {
@@ -102,7 +105,7 @@ export default function ShareLinksPanel({
                 <div className="text-xs text-muted-foreground">{expiryText}</div>
                 <Input readOnly value={shareUrl} className="font-mono text-xs text-green-400 h-8" />
                 <div className="flex gap-2">
-                  <Button variant="outline" size="sm" className="flex-1" onClick={() => handleCopy(shareUrl)}>
+                  <Button variant="outline" size="sm" className="flex-1" onClick={() => copy('link', shareUrl)}>
                     Copy
                   </Button>
                   <Button variant="destructive" size="sm" onClick={() => handleRevoke(share.id)}>

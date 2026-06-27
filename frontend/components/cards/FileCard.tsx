@@ -19,6 +19,7 @@ interface FileCardProps {
   camera?: string | null;
   lens?: string | null;
   onTagClick?: (path: string) => void;
+  thumbUrlOverride?: string;
   // Annotation props (optional — only provided when caller manages annotation state)
   tags?: string[];
   rating?: number | null;
@@ -38,6 +39,7 @@ function FileCard({
   camera,
   lens,
   onTagClick,
+  thumbUrlOverride,
   tags,
   rating,
   allDistinctTags = [],
@@ -116,7 +118,7 @@ function FileCard({
           {!imgLoaded && <div className="card-image-skeleton" />}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={`/api/thumb?path=${encodeURIComponent(entry.path)}&w=200`}
+            src={thumbUrlOverride ?? `/api/thumb?path=${encodeURIComponent(entry.path)}&w=200`}
             className={`w-full h-full object-cover transition-[transform,opacity] duration-300 group-hover:scale-[1.04] ${imgLoaded ? 'opacity-100' : 'opacity-0'}`}
             alt={entry.name}
             onLoad={() => setImgLoaded(true)}

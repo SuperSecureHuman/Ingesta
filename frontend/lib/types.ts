@@ -178,6 +178,7 @@ export interface SelectionItem {
 export interface ShareFile {
   id: number;
   file_path: string;
+  relative_path?: string;
   file_size: number;
   duration_seconds: number | null;
   width: number;
@@ -192,7 +193,8 @@ export interface ShareFile {
 }
 
 export interface ShareFilesResponse {
-  project_name: string | null;
+  share_name: string | null;
+  project_name?: string | null;  // legacy field, kept for backwards compat
   expires_at: string | null;
   files: ShareFile[];
 }

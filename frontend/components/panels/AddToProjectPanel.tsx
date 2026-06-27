@@ -108,7 +108,11 @@ export default function AddToProjectPanel({
       <div className="space-y-4">
         <div className="space-y-1.5">
           <Label>Select Project</Label>
-          <Select value={targetProjectId} onValueChange={(v) => { setTargetProjectId(v ?? ''); setError(''); }}>
+          <Select
+            value={targetProjectId}
+            onValueChange={(v) => { setTargetProjectId(v ?? ''); setError(''); }}
+            items={projects.map((p) => ({ value: p.id, label: p.name }))}
+          >
             <SelectTrigger>
               <SelectValue placeholder="Choose project…" />
             </SelectTrigger>

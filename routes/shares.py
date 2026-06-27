@@ -17,9 +17,10 @@ from pydantic import BaseModel
 
 from config import settings
 import db.crud as crud
-from routes.deps import require_auth, decoded_path, or_404
+from routes.deps import require_auth, decoded_path, or_404, validate_path_boundary
 from routes.luts import _extract_folder
 from routes.auth import pwd_context, hash_password, verify_password, create_jwt, decode_jwt
+from routes.constants import VIDEO_EXTENSIONS
 from media.playlist import probe_media
 from media.transcoder import TICKS_PER_SECOND, BITRATE_TIERS
 from media.thumbs import get_or_generate_thumb
@@ -33,10 +34,16 @@ TOKEN_EXPIRE_HOURS = 24
 
 
 
-def create_access_token(share_id: str, project_id: str) -> str:
-    """Create a JWT access token."""
+def create_access_token(share: dict) -> str:
+    """Create a JWT access token embedding share scope."""
     return create_jwt(
-        {"share_id": share_id, "project_id": project_id},
+        {
+            "share_id": share["id"],
+            "share_type": share.get("share_type", "project"),
+            "project_id": share.get("project_id", ""),
+            "library_id": share.get("library_id"),
+            "folder_path": share.get("folder_path"),
+        },
         timedelta(hours=TOKEN_EXPIRE_HOURS),
     )
 
@@ -56,15 +63,106 @@ async def verify_token_full(token: str) -> dict:
 
 
 # ============================================================================
-# SHARE CREATION (requires authenticated session)
+# LIBRARY + FOLDER SHARE CREATION (must be registered BEFORE /{project_id}/share)
 # ============================================================================
 
 
 class CreateShareRequest(BaseModel):
     """Request to create a share link."""
-
     password: str
     expires_in_days: Optional[int] = None
+
+
+class CreateFolderShareRequest(BaseModel):
+    """Request to create a folder share link."""
+    password: str
+    folder_path: str
+    expires_in_days: Optional[int] = None
+
+
+def _compute_expires(expires_in_days: Optional[int]) -> Optional[str]:
+    if not expires_in_days:
+        return None
+    return (datetime.now(timezone.utc) + timedelta(days=expires_in_days)).isoformat()
+
+
+@router.post("/library/{library_id}/share")
+async def create_library_share(
+    library_id: str,
+    req: CreateShareRequest,
+    _auth: str = Depends(require_auth),
+):
+    """Create a share link for an entire library."""
+    or_404(await crud.get_library(library_id), "Library")
+    password_hash = hash_password(req.password)
+    expires_at = _compute_expires(req.expires_in_days)
+    share_id = await crud.create_share(
+        project_id='',
+        password_hash=password_hash,
+        expires_at=expires_at,
+        share_type='library',
+        library_id=library_id,
+    )
+    return {"share_id": share_id, "expires_at": expires_at}
+
+
+@router.get("/library/{library_id}/shares")
+async def list_library_shares(
+    library_id: str,
+    _auth: str = Depends(require_auth),
+):
+    """List active shares for a library."""
+    or_404(await crud.get_library(library_id), "Library")
+    shares = await crud.get_library_shares(library_id)
+    now = datetime.now(timezone.utc)
+    result = [
+        s for s in shares
+        if not s["expires_at"] or datetime.fromisoformat(s["expires_at"]) >= now
+    ]
+    return {"shares": result}
+
+
+@router.post("/folder/share")
+async def create_folder_share(
+    req: CreateFolderShareRequest,
+    _auth: str = Depends(require_auth),
+):
+    """Create a share link for a folder (must be within MEDIA_ROOT)."""
+    folder_path = validate_path_boundary(req.folder_path)
+    p = Path(folder_path)
+    if not p.exists() or not p.is_dir():
+        raise HTTPException(400, "Folder does not exist")
+    password_hash = hash_password(req.password)
+    expires_at = _compute_expires(req.expires_in_days)
+    share_id = await crud.create_share(
+        project_id='',
+        password_hash=password_hash,
+        expires_at=expires_at,
+        share_type='folder',
+        folder_path=folder_path,
+    )
+    return {"share_id": share_id, "expires_at": expires_at}
+
+
+@router.get("/folder/shares")
+async def list_folder_shares(
+    folder_path: str = Query(...),
+    _auth: str = Depends(require_auth),
+):
+    """List active shares for a folder."""
+    resolved = validate_path_boundary(folder_path)
+    shares = await crud.get_folder_shares(resolved)
+    now = datetime.now(timezone.utc)
+    result = [
+        s for s in shares
+        if not s["expires_at"] or datetime.fromisoformat(s["expires_at"]) >= now
+    ]
+    return {"shares": result}
+
+
+# ============================================================================
+# SHARE CREATION (requires authenticated session)
+# ============================================================================
 
 
 @router.post("/{project_id}/share")
@@ -105,7 +203,6 @@ async def list_shares(
 
     shares = await crud.get_project_shares(project_id)
 
-    # Filter out password hashes and check expiry
     now = datetime.now(timezone.utc)
     result = []
     for share in shares:
@@ -170,7 +267,7 @@ async def authenticate_share(share_id: str, req: AuthRequest):
         raise HTTPException(401, "Incorrect password")
 
     # Generate token
-    token = create_access_token(share_id, share["project_id"])
+    token = create_access_token(share)
     return {
         "token": token,
         "expires_in_hours": TOKEN_EXPIRE_HOURS,
@@ -221,50 +318,158 @@ async def validate_file_in_project(project_id: str, file_path: str) -> str:
     raise HTTPException(403, "File not in project")
 
 
+async def _validate_share_file(share: dict, file_path: str) -> str:
+    """Validate file_path is within the share's scope. Returns resolved path."""
+    share_type = share.get("share_type", "project")
+    p = Path(file_path).resolve()
+
+    if share_type == "project":
+        record = await crud.get_project_file_by_path(share["project_id"], file_path)
+        if not record:
+            raise HTTPException(403, "File not in share")
+        return file_path
+
+    elif share_type == "library":
+        library = await crud.get_library(share["library_id"])
+        if not library:
+            raise HTTPException(404, "Library not found")
+        root = Path(library["root_path"]).resolve()
+        if not str(p).startswith(str(root) + "/") and p != root:
+            raise HTTPException(403, "File not in library")
+        return file_path
+
+    elif share_type == "folder":
+        root = Path(share["folder_path"]).resolve()
+        if not str(p).startswith(str(root) + "/") and p != root:
+            raise HTTPException(403, "File not in folder")
+        return file_path
+
+    raise HTTPException(403, "Unknown share type")
+
+
+def _paths_to_share_files(file_paths: list, root_path: str) -> list:
+    """Build share file list from filesystem paths (for library/folder shares)."""
+    files = []
+    root = Path(root_path).resolve()
+    for p in file_paths:
+        try:
+            stat = p.stat()
+            try:
+                rel = str(p.resolve().relative_to(root))
+            except ValueError:
+                rel = p.name
+            files.append({
+                "id": str(p),  # no DB id for these files
+                "file_path": str(p.resolve()),
+                "relative_path": rel,
+                "file_size": stat.st_size,
+                "duration_seconds": None,
+                "width": None,
+                "height": None,
+                "bitrate": None,
+                "video_codec": None,
+                "scan_status": "pending",
+                "tags": [],
+                "rating": None,
+                "comments": [],
+                "markers": [],
+            })
+        except OSError:
+            continue
+    return files
+
+
 @router.get("/{share_id}/files")
 async def list_share_files(
     share_id: str,
     token: dict = Depends(require_share_match),
 ):
-    """List all files in the shared project, including annotations."""
-    # Load project, share metadata, and files concurrently
-    project, share, files = await asyncio.gather(
-        crud.get_project(token["project_id"]),
-        crud.get_share(share_id),
-        crud.get_project_files(token["project_id"]),
-    )
+    """List all files in the shared scope, including annotations."""
+    share = await crud.get_share(share_id)
+    if not share:
+        raise HTTPException(404, "Share not found")
 
-    # Batch-load annotations for all files
-    file_paths = [f["file_path"] for f in files]
-    annotations = await crud.get_annotations_for_paths(file_paths)
+    share_type = share.get("share_type", "project")
 
-    file_list = []
-    for f in files:
-        ann = annotations.get(f["file_path"], {})
-        try:
-            rel = str(Path(f["file_path"]).relative_to(Path(settings.media_root).resolve()))
-        except ValueError:
-            rel = Path(f["file_path"]).name
-        file_list.append({
-            "id": f["id"],
-            "file_path": f["file_path"],
-            "relative_path": rel,
-            "file_size": f["file_size"],
-            "duration_seconds": f["duration_seconds"],
-            "width": f["width"],
-            "height": f["height"],
-            "bitrate": f["bitrate"],
-            "video_codec": f["video_codec"],
-            "scan_status": f["scan_status"],
-            "tags": ann.get("tags", []),
-            "rating": ann.get("rating"),
-            "comments": ann.get("comments", []),
-            "markers": ann.get("markers", []),
-        })
+    if share_type == "project":
+        project, files_raw = await asyncio.gather(
+            crud.get_project(token["project_id"]),
+            crud.get_project_files(token["project_id"]),
+        )
+        file_paths = [f["file_path"] for f in files_raw]
+        annotations = await crud.get_annotations_for_paths(file_paths)
+
+        file_list = []
+        for f in files_raw:
+            ann = annotations.get(f["file_path"], {})
+            try:
+                rel = str(Path(f["file_path"]).relative_to(Path(settings.media_root).resolve()))
+            except ValueError:
+                rel = Path(f["file_path"]).name
+            file_list.append({
+                "id": f["id"],
+                "file_path": f["file_path"],
+                "relative_path": rel,
+                "file_size": f["file_size"],
+                "duration_seconds": f["duration_seconds"],
+                "width": f["width"],
+                "height": f["height"],
+                "bitrate": f["bitrate"],
+                "video_codec": f["video_codec"],
+                "scan_status": f["scan_status"],
+                "tags": ann.get("tags", []),
+                "rating": ann.get("rating"),
+                "comments": ann.get("comments", []),
+                "markers": ann.get("markers", []),
+            })
+
+        share_name = project["name"] if project else None
+
+    elif share_type == "library":
+        library = await crud.get_library(share["library_id"])
+        if not library:
+            raise HTTPException(404, "Library not found")
+        root = Path(library["root_path"])
+        video_paths = [p for p in root.rglob("*") if p.suffix.lower() in VIDEO_EXTENSIONS and p.is_file()]
+        video_paths.sort(key=lambda p: str(p))
+        file_list_raw = _paths_to_share_files(video_paths, library["root_path"])
+
+        all_paths = [f["file_path"] for f in file_list_raw]
+        annotations = await crud.get_annotations_for_paths(all_paths)
+        for f in file_list_raw:
+            ann = annotations.get(f["file_path"], {})
+            f["tags"] = ann.get("tags", [])
+            f["rating"] = ann.get("rating")
+            f["comments"] = ann.get("comments", [])
+            f["markers"] = ann.get("markers", [])
+        file_list = file_list_raw
+        share_name = library["name"]
+
+    elif share_type == "folder":
+        folder = Path(share["folder_path"])
+        if not folder.exists():
+            raise HTTPException(404, "Folder not found")
+        video_paths = [p for p in folder.rglob("*") if p.suffix.lower() in VIDEO_EXTENSIONS and p.is_file()]
+        video_paths.sort(key=lambda p: str(p))
+        file_list_raw = _paths_to_share_files(video_paths, share["folder_path"])
+
+        all_paths = [f["file_path"] for f in file_list_raw]
+        annotations = await crud.get_annotations_for_paths(all_paths)
+        for f in file_list_raw:
+            ann = annotations.get(f["file_path"], {})
+            f["tags"] = ann.get("tags", [])
+            f["rating"] = ann.get("rating")
+            f["comments"] = ann.get("comments", [])
+            f["markers"] = ann.get("markers", [])
+        file_list = file_list_raw
+        share_name = folder.name
+
+    else:
+        raise HTTPException(400, "Unknown share type")
 
     return {
-        "project_name": project["name"] if project else None,
-        "expires_at": share["expires_at"] if share else None,
+        "share_name": share_name,
+        "expires_at": share["expires_at"],
         "files": file_list,
     }
 
@@ -275,31 +480,30 @@ async def share_probe(
     path: str = Depends(decoded_path),
     token: dict = Depends(require_share_match),
 ):
-    """Probe file in shared project."""
+    """Probe file in shared scope."""
     try:
-        file_record = await crud.get_project_file_by_path(token["project_id"], path)
-        if not file_record:
-            raise HTTPException(403, "File not in project")
+        share = await crud.get_share(share_id)
+        await _validate_share_file(share, path)
 
-        # Try to use cached probe results from DB if scan is done
-        if file_record["scan_status"] == "done" and all(
-            file_record.get(k) is not None
-            for k in ["duration_seconds", "width", "height", "bitrate", "video_codec"]
-        ):
-            # Use cached probe data
-            return {
-                "duration_seconds": file_record["duration_seconds"],
-                "duration_ticks": int(file_record["duration_seconds"] * 10_000_000),
-                "width": file_record["width"],
-                "height": file_record["height"],
-                "bitrate": file_record["bitrate"],
-                "video_codec": file_record["video_codec"],
-                "pix_fmt": None,
-                "bit_depth": None,
-                "audio_codec": None,
-            }
+        # Try cached probe results for project shares
+        if share.get("share_type", "project") == "project":
+            file_record = await crud.get_project_file_by_path(token["project_id"], path)
+            if file_record and file_record["scan_status"] == "done" and all(
+                file_record.get(k) is not None
+                for k in ["duration_seconds", "width", "height", "bitrate", "video_codec"]
+            ):
+                return {
+                    "duration_seconds": file_record["duration_seconds"],
+                    "duration_ticks": int(file_record["duration_seconds"] * 10_000_000),
+                    "width": file_record["width"],
+                    "height": file_record["height"],
+                    "bitrate": file_record["bitrate"],
+                    "video_codec": file_record["video_codec"],
+                    "pix_fmt": None,
+                    "bit_depth": None,
+                    "audio_codec": None,
+                }
 
-        # Fall back to live probe
         info = await probe_media(path)
         return {
             "duration_seconds": info.duration_seconds,
@@ -327,11 +531,10 @@ async def share_playlist(
     segment_length: int = Query(6, ge=1, le=60),
     token: dict = Depends(require_share_match),
 ):
-    """Generate HLS playlist for shared project file."""
+    """Generate HLS playlist for shared scope file."""
     try:
-        file_record = await crud.get_project_file_by_path(token["project_id"], path)
-        if not file_record:
-            raise HTTPException(403, "File not in project")
+        share = await crud.get_share(share_id)
+        await _validate_share_file(share, path)
 
         # Import here to avoid circular dependency
         from media.transcoder import get_bitrate_preset
@@ -344,15 +547,18 @@ async def share_playlist(
             except ValueError:
                 raise ValueError(f"Unknown quality: {quality}")
 
-        # Try to use cached probe results from DB if scan is done
-        if file_record["scan_status"] == "done" and file_record.get("duration_seconds"):
-            duration_seconds = file_record["duration_seconds"]
-            duration_ticks = int(duration_seconds * 10_000_000)
-        else:
-            # Fall back to live probe
+        # Try cached probe for project shares
+        duration_seconds = None
+        if share.get("share_type", "project") == "project":
+            file_record = await crud.get_project_file_by_path(token["project_id"], path)
+            if file_record and file_record["scan_status"] == "done" and file_record.get("duration_seconds"):
+                duration_seconds = file_record["duration_seconds"]
+
+        if duration_seconds is None:
             info = await probe_media(path)
             duration_seconds = info.duration_seconds
-            duration_ticks = info.duration_ticks
+
+        duration_ticks = int(duration_seconds * 10_000_000)
 
         # Compute segments
         segments = compute_equal_length_segments(duration_ticks, segment_length)
@@ -386,11 +592,12 @@ async def share_segment(
     token: dict = Depends(require_share_match),
 ):
     """
-    Stream segment for shared project file.
+    Stream segment for shared scope file.
     Reuses transcoding infrastructure from main endpoints.
     """
     try:
-        await validate_file_in_project(token["project_id"], path)
+        share = await crud.get_share(share_id)
+        await _validate_share_file(share, path)
 
         # Delegate to main segment endpoint with same logic
         # Import manager here to avoid circular dependency
@@ -529,9 +736,10 @@ async def share_thumb(
     w: int = Query(320, ge=1, le=1920),
     token: dict = Depends(require_share_match),
 ):
-    """Get thumbnail for shared project file."""
+    """Get thumbnail for shared scope file."""
     try:
-        await validate_file_in_project(token["project_id"], path)
+        share = await crud.get_share(share_id)
+        await _validate_share_file(share, path)
 
         thumb_path = await get_or_generate_thumb(path, t, w)
         if not thumb_path:
@@ -554,20 +762,22 @@ async def share_download(
     path: str = Depends(decoded_path),
     token: dict = Depends(require_share_match),
 ):
-    """Download original file from shared project."""
+    """Download original file from shared scope."""
     try:
-        file_record = await crud.get_project_file_by_path(token["project_id"], path)
-        if not file_record:
-            raise HTTPException(403, "File not in project")
+        share = await crud.get_share(share_id)
+        await _validate_share_file(share, path)
 
         p = Path(path).resolve()
         if not p.exists() or not p.is_file():
             raise HTTPException(404, "File not found")
 
-        # Symlink traversal guard: resolved request path must match DB-recorded path
-        recorded = Path(file_record["file_path"]).resolve()
-        if p != recorded:
-            raise HTTPException(403, "Path mismatch")
+        # For project shares, enforce DB-recorded path matches to guard against symlink traversal
+        if share.get("share_type", "project") == "project":
+            file_record = await crud.get_project_file_by_path(share["project_id"], path)
+            if file_record:
+                recorded = Path(file_record["file_path"]).resolve()
+                if p != recorded:
+                    raise HTTPException(403, "Path mismatch")
 
         filename = p.name
         return FileResponse(

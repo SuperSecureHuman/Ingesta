@@ -29,6 +29,7 @@ interface LibraryViewProps {
   folderPath: string[];
   onLibraryResolved?: (libraryId: string, libraryName: string) => void;
   onReady?: () => void;
+  onShareScope?: (scope: { libraryId: string; folderPath: string | null }) => void;
 }
 
 function toUrlSegments(absolutePath: string, rootPath: string): string[] {
@@ -114,6 +115,7 @@ export default function LibraryView({
   folderPath,
   onLibraryResolved,
   onReady,
+  onShareScope,
 }: LibraryViewProps) {
   const router = useRouter();
   const { startPlayback } = usePlayerContext();
@@ -368,7 +370,21 @@ export default function LibraryView({
 
   const handleAddEntireLibrary = () => {
     clearSelection();
+    // Select the current folder so AddToProjectPanel uses the folder API
+    // (scoped to the folder being viewed, not the whole library root)
+    if (files?.path) {
+      updateSelection({ type: 'folder', path: files.path }, true);
+    }
     openPanel('addToProject');
+  };
+
+  const handleShareClick = () => {
+    if (!library) return;
+    const scope = folderPath.length > 0 && files?.path
+      ? { libraryId: library.id, folderPath: files.path }
+      : { libraryId: library.id, folderPath: null };
+    onShareScope?.(scope);
+    openPanel('createShare');
   };
 
   const handleFilePlay = useCallback((path: string, rect?: DOMRect) => {
@@ -396,9 +412,14 @@ export default function LibraryView({
           <h2 className="text-lg font-semibold">Library Files</h2>
         </div>
         {canEdit() && (
-          <Button size="sm" onClick={handleAddEntireLibrary}>
-            Add Entire Library to Project
-          </Button>
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" onClick={handleShareClick}>
+              {folderPath.length > 0 ? 'Share Folder' : 'Share Library'}
+            </Button>
+            <Button size="sm" onClick={handleAddEntireLibrary}>
+              {folderPath.length > 0 ? 'Add Folder to Project' : 'Add Entire Library to Project'}
+            </Button>
+          </div>
         )}
       </div>
       <motion.div key={files?.path ?? 'empty'} className="grid-cards" variants={gridContainer} initial="hidden" animate="show">

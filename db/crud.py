@@ -487,18 +487,23 @@ async def create_share(
     project_id: str,
     password_hash: str,
     expires_at: Optional[str] = None,
+    share_type: str = 'project',
+    library_id: Optional[str] = None,
+    folder_path: Optional[str] = None,
 ) -> str:
-    """Create a share link for a project. Returns the share ID."""
+    """Create a share link. Returns the share ID."""
     share_id = _new_uuid()
     created_at = _now_iso()
 
     db = get_db()
     await db.execute(
         """
-        INSERT INTO shares (id, project_id, password_hash, created_at, expires_at, active)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO shares (id, project_id, password_hash, created_at, expires_at, active,
+                            share_type, library_id, folder_path)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (share_id, project_id, password_hash, created_at, expires_at, True),
+        (share_id, project_id, password_hash, created_at, expires_at, True,
+         share_type, library_id, folder_path),
     )
     return share_id
 
@@ -508,7 +513,8 @@ async def get_share(share_id: str) -> Optional[Dict[str, Any]]:
     db = get_db()
     row = await db.fetchone(
         """
-        SELECT id, project_id, password_hash, created_at, expires_at, active
+        SELECT id, project_id, password_hash, created_at, expires_at, active,
+               share_type, library_id, folder_path
         FROM shares WHERE id = ?
         """,
         (share_id,),
@@ -523,6 +529,9 @@ async def get_share(share_id: str) -> Optional[Dict[str, Any]]:
         "created_at": row[3],
         "expires_at": row[4],
         "active": bool(row[5]),
+        "share_type": row[6] if row[6] else "project",
+        "library_id": row[7],
+        "folder_path": row[8],
     }
 
 
@@ -531,22 +540,49 @@ async def get_project_shares(project_id: str) -> List[Dict[str, Any]]:
     db = get_db()
     rows = await db.fetch(
         """
-        SELECT id, project_id, password_hash, created_at, expires_at, active
-        FROM shares WHERE project_id = ? AND active = 1 ORDER BY created_at DESC
+        SELECT id, project_id, created_at, expires_at
+        FROM shares WHERE project_id = ? AND share_type = 'project' AND active = 1
+        ORDER BY created_at DESC
         """,
         (project_id,),
     )
-
     return [
-        {
-            "id": row[0],
-            "project_id": row[1],
-            "password_hash": row[2],
-            "created_at": row[3],
-            "expires_at": row[4],
-            "active": bool(row[5]),
-        }
-        for row in rows
+        {"id": r[0], "project_id": r[1], "created_at": r[2], "expires_at": r[3]}
+        for r in rows
+    ]
+
+
+async def get_library_shares(library_id: str) -> List[Dict[str, Any]]:
+    """Get all active shares for a library."""
+    db = get_db()
+    rows = await db.fetch(
+        """
+        SELECT id, library_id, created_at, expires_at
+        FROM shares WHERE library_id = ? AND share_type = 'library' AND active = 1
+        ORDER BY created_at DESC
+        """,
+        (library_id,),
+    )
+    return [
+        {"id": r[0], "library_id": r[1], "created_at": r[2], "expires_at": r[3]}
+        for r in rows
+    ]
+
+
+async def get_folder_shares(folder_path: str) -> List[Dict[str, Any]]:
+    """Get all active shares for a folder."""
+    db = get_db()
+    rows = await db.fetch(
+        """
+        SELECT id, folder_path, created_at, expires_at
+        FROM shares WHERE folder_path = ? AND share_type = 'folder' AND active = 1
+        ORDER BY created_at DESC
+        """,
+        (folder_path,),
+    )
+    return [
+        {"id": r[0], "folder_path": r[1], "created_at": r[2], "expires_at": r[3]}
+        for r in rows
     ]
 
 

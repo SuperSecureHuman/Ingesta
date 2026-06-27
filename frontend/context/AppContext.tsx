@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useMemo } from 'react';
+import React, { createContext, useContext, useState } from 'react';
 import { Project, User } from '@/lib/types';
 
 interface AppContextType {
@@ -16,12 +16,12 @@ export function AppContextProvider({ children }: { children: React.ReactNode }) 
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
 
-  const value: AppContextType = useMemo(() => ({
+  const value: AppContextType = {
     currentUser,
     setCurrentUser,
     projects,
     setProjects,
-  }), [currentUser, projects]);
+  };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

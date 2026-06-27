@@ -46,16 +46,17 @@ CREATE TABLE IF NOT EXISTS project_files (
     FOREIGN KEY (project_id) REFERENCES projects (id)
 );
 
--- Shares: password-protected access tokens for projects
+-- Shares: password-protected access tokens for projects, libraries, or folders
 CREATE TABLE IF NOT EXISTS shares (
     id TEXT PRIMARY KEY,
-    project_id TEXT NOT NULL,
+    project_id TEXT NOT NULL DEFAULT '',
     password_hash TEXT NOT NULL,
     created_at TEXT NOT NULL,
     expires_at TEXT,
     active BOOLEAN DEFAULT 1,
-
-    FOREIGN KEY (project_id) REFERENCES projects (id)
+    share_type TEXT NOT NULL DEFAULT 'project',
+    library_id TEXT,
+    folder_path TEXT
 );
 
 -- Users: admin accounts for login

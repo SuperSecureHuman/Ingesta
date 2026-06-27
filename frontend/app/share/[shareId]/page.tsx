@@ -4,13 +4,13 @@ import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useParams } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { gridContainer, gridItem } from '@/lib/animations';
-import { ShareFile, ShareFilesResponse, LutEntry } from '@/lib/types';
+import { ShareFile, ShareFilesResponse, LutEntry, BrowseEntry } from '@/lib/types';
 import { LutContextProvider } from '@/context/LutContext';
 import { PlayerContextProvider, usePlayerContext } from '@/context/PlayerContext';
 import PlayerContainer from '@/components/player/PlayerContainer';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import ShareFileCard from './ShareFileCard';
+import FileCard from '@/components/cards/FileCard';
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
@@ -77,7 +77,7 @@ export default function ShareViewerPage() {
       const caps = capsRes.ok ? await capsRes.json() : null;
 
       setFiles(filesData.files ?? []);
-      setProjectName(filesData.project_name ?? null);
+      setProjectName(filesData.share_name ?? filesData.project_name ?? null);
       setExpiresAt(filesData.expires_at ?? null);
       setLuts(caps?.luts ?? []);
       setView('loaded');
@@ -191,6 +191,36 @@ export default function ShareViewerPage() {
 
 // ── Share Main ────────────────────────────────────────────────────────────────
 
+// Build a tree: given all files and a current path prefix, return
+// immediate child folders and files at that level.
+function browseLevel(files: ShareFile[], currentPath: string): {
+  folders: string[];   // immediate child folder names
+  files: ShareFile[];  // files directly in currentPath
+} {
+  const prefix = currentPath ? currentPath + '/' : '';
+  const subFolders = new Set<string>();
+  const levelFiles: ShareFile[] = [];
+
+  for (const file of files) {
+    const rel = file.relative_path ?? '';
+    if (!rel.startsWith(prefix)) continue;
+    const rest = rel.slice(prefix.length);
+    const slashIdx = rest.indexOf('/');
+    if (slashIdx === -1) {
+      // file directly in this folder
+      levelFiles.push(file);
+    } else {
+      // file is deeper — record the immediate child folder
+      subFolders.add(rest.slice(0, slashIdx));
+    }
+  }
+
+  return {
+    folders: Array.from(subFolders).sort(),
+    files: levelFiles,
+  };
+}
+
 function ShareMain({
   shareId,
   files,
@@ -207,15 +237,23 @@ function ShareMain({
   onLogout: () => void;
 }) {
   const { startPlayback, isVisible } = usePlayerContext();
+  const [currentPath, setCurrentPath] = useState('');
 
-  const handleCardClick = (file: ShareFile, sourceRect: DOMRect) => {
-    if (file.scan_status === 'pending') return;
-    startPlayback(file.file_path, 0, undefined, sourceRect);
+  const hasFolderStructure = files.some(f => (f.relative_path ?? '').includes('/'));
+
+  const { folders, files: levelFiles } = hasFolderStructure
+    ? browseLevel(files, currentPath)
+    : { folders: [], files };
+
+  const handlePlay = (path: string, sourceRect?: DOMRect) => {
+    startPlayback(path, 0, undefined, sourceRect);
   };
+
+  const noop = () => {};
+  const pathParts = currentPath ? currentPath.split('/') : [];
 
   return (
     <div className="flex flex-col h-screen bg-background">
-      {/* Header — hidden while player is open */}
       <header className={`flex items-center justify-between px-6 py-4 border-b border-border shrink-0 bg-card${isVisible ? ' hidden' : ''}`}>
         <div>
           <h1 className="text-base font-semibold text-foreground">
@@ -226,40 +264,79 @@ function ShareMain({
             {expiresAt && ` · Expires ${new Date(expiresAt).toLocaleDateString()}`}
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={onLogout}>
-          Logout
-        </Button>
+        <Button variant="outline" size="sm" onClick={onLogout}>Logout</Button>
       </header>
 
-      {/* File grid — hidden while player is open */}
       <div className={`flex-1 overflow-y-auto px-6 py-6${isVisible ? ' hidden' : ''}`}>
-        <motion.div
-          key={`files-${files.length}`}
-          className="grid-cards"
-          variants={gridContainer}
-          initial="hidden"
-          animate="show"
-        >
-          {files.length === 0 ? (
-            <div className="col-span-full text-center py-20 text-muted-foreground">
-              No files in this share
-            </div>
-          ) : (
-            files.map((file) => (
-              <motion.div key={file.id} variants={gridItem}>
-                <ShareFileCard
-                  file={file}
-                  shareId={shareId}
-                  jwt={jwt}
-                  onPlay={handleCardClick}
-                />
-              </motion.div>
-            ))
-          )}
-        </motion.div>
+        {hasFolderStructure && (
+          <div className="flex items-center gap-1.5 mb-5 text-sm">
+            <button onClick={() => setCurrentPath('')} className="text-muted-foreground hover:text-foreground transition-colors">
+              {projectName ?? 'Root'}
+            </button>
+            {pathParts.map((part, i) => (
+              <React.Fragment key={i}>
+                <span className="text-muted-foreground/40">/</span>
+                <button
+                  onClick={() => setCurrentPath(pathParts.slice(0, i + 1).join('/'))}
+                  className={i === pathParts.length - 1 ? 'text-foreground font-medium' : 'text-muted-foreground hover:text-foreground transition-colors'}
+                >
+                  {part}
+                </button>
+              </React.Fragment>
+            ))}
+          </div>
+        )}
+
+        {files.length === 0 ? (
+          <div className="text-center py-20 text-muted-foreground">No files in this share</div>
+        ) : (
+          <motion.div key={currentPath} className="grid-cards" variants={gridContainer} initial="hidden" animate="show">
+            {folders.map((folder) => {
+              const folderEntry: BrowseEntry = {
+                name: folder,
+                path: currentPath ? `${currentPath}/${folder}` : folder,
+                is_dir: true,
+                is_video: false,
+              };
+              return (
+                <motion.div key={`folder-${folder}`} variants={gridItem}>
+                  <FileCard
+                    entry={folderEntry}
+                    isSelected={false}
+                    onPlay={noop}
+                    onSelectionChange={noop}
+                    onFolderOpen={(p) => setCurrentPath(p)}
+                  />
+                </motion.div>
+              );
+            })}
+            {levelFiles.map((file) => {
+              const fileEntry: BrowseEntry = {
+                name: file.relative_path?.split('/').pop() ?? file.file_path.split('/').pop() ?? '',
+                path: file.file_path,
+                is_dir: false,
+                is_video: true,
+              };
+              const thumbUrl = `/api/share/${shareId}/thumb?path=${encodeURIComponent(file.file_path)}&t=0&token=${encodeURIComponent(jwt || '')}`;
+              return (
+                <motion.div key={file.id} variants={gridItem}>
+                  <FileCard
+                    entry={fileEntry}
+                    isSelected={false}
+                    onPlay={handlePlay}
+                    onSelectionChange={noop}
+                    thumbUrlOverride={thumbUrl}
+                    tags={file.tags}
+                    rating={file.rating}
+                    canEditAnnotations={false}
+                  />
+                </motion.div>
+              );
+            })}
+          </motion.div>
+        )}
       </div>
 
-      {/* Player — always mounted so PlayerContext manages its own visibility */}
       <PlayerContainer />
     </div>
   );
